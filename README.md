@@ -12,10 +12,10 @@ Core launchers:
 
 | Script | Purpose |
 |---|---|
-| `train_slotmem_stage1.sh` | stage-1 SlotMem training |
-| `train_slotmem_stage2.sh` | stage-2 SlotMem training |
-| `test_slotmem_stage1.sh` | stage-1 inference |
-| `test_slotmem_stage2.sh` | stage-2 inference |
+| [`train_slotmem_stage1.sh`](train_slotmem_stage1.sh) | stage-1 SlotMem training |
+| [`train_slotmem_stage2.sh`](train_slotmem_stage2.sh) | stage-2 SlotMem training |
+| [`test_slotmem_stage1.sh`](test_slotmem_stage1.sh) | stage-1 inference |
+| [`test_slotmem_stage2.sh`](test_slotmem_stage2.sh) | stage-2 inference |
 
 ## Setup
 
@@ -28,7 +28,7 @@ pip install -e .
 pip install -r requirements_slotmem.txt
 ```
 
-Optional packages for data curation and Streamlit interfaces are listed in `requirements_optional.txt`.
+Optional packages for data curation and Streamlit interfaces are listed in [`requirements_optional.txt`](requirements_optional.txt).
 
 ## Checkpoints
 
@@ -109,7 +109,7 @@ Use `test_slotmem_stage2.sh` with the corresponding stage-2 checkpoints for the 
 ## Benchmarks
 
 Benchmark helpers operate on already generated SlotMem inference output folders.
-Install each external benchmark by following its original GitHub repository. See `bench/README.md` for the expected checkout layout.
+Install each external benchmark by following its original GitHub repository. See [`bench/README.md`](bench/README.md) for the expected checkout layout.
 
 ```bash
 OPENAI_API_KEY=... \
@@ -137,8 +137,12 @@ ViStoryBench reference images are not auto-collected. Prepare character referenc
 
 ## Data Curation
 
-Data curation uses TransNetV2 for shot detection. See `data_curation/README.md` for the required checkout, weights layout, and generated data format.
+Data curation uses TransNetV2 for shot detection. See [`data_curation/README.md`](data_curation/README.md) for the required checkout, weights layout, and generated data format.
+
+## Acknowledgements
+
+SlotMem builds on the open-source Wan2.2 and DiffSynth ecosystem. We also thank the VBench, ViStoryBench, IAMFlow, and TransNetV2 authors for releasing their code and resources to the community.
 
 ## License
 
-This release is distributed under Apache-2.0. See `LICENSE` and `NOTICE`.
+This release is distributed under Apache-2.0. See [`LICENSE`](LICENSE).
