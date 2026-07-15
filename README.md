@@ -108,8 +108,7 @@ Use `test_slotmem_stage2.sh` with the corresponding stage-2 checkpoints for the 
 
 ## Benchmarks
 
-Benchmark helpers operate on already generated SlotMem inference output folders.
-Install each external benchmark by following its original GitHub repository. See [`bench/README.md`](bench/README.md) for the expected checkout layout.
+We provide wrappers for evaluating generated SlotMem videos with [VBench](https://github.com/Vchitect/VBench), [NarraStream-Bench](https://github.com/Eddie0521/NarraStream-Bench), and [ViStoryBench](https://github.com/ViStoryBench/vistorybench). Thanks to these projects for their contributions to the community.
 
 ```bash
 OPENAI_API_KEY=... \
@@ -117,23 +116,7 @@ NARRASTREAM_API_BASE_URL=https://api.openai.com/v1 \
 bash bench/run_slotmem_benchmarks_api.sh /path/to/inference_output
 ```
 
-For the full helper, provide the benchmark checkouts and their Python environments explicitly:
-
-```bash
-mkdir -p bench
-git clone https://github.com/Vchitect/VBench.git bench/VBench
-git clone <NarraStream-Bench repository URL> bench/NarraStream-Bench
-
-NARRASTREAM_REPO=./bench/NarraStream-Bench \
-VBENCH_PYTHON=/path/to/vbench/python \
-NARRASTREAM_API_PYTHON=/path/to/narrastream-api/python \
-QWEN35_PYTHON=/path/to/qwen35/python \
-OPENAI_COMPAT_API_KEY=... \
-OPENAI_COMPAT_BASE_URL=https://api.openai.com/v1 \
-bash bench/run_slotmem_benchmarks_gpt41_qwen35.sh /path/to/inference_output
-```
-
-ViStoryBench reference images are not auto-collected. Prepare character reference images manually before enabling that benchmark.
+See [`bench/README.md`](bench/README.md) for benchmark repository checkouts and environment setup.
 
 ## Data Curation
 
@@ -141,7 +124,7 @@ Data curation uses TransNetV2 for shot detection. See [`data_curation/README.md`
 
 ## Acknowledgements
 
-SlotMem builds on the open-source Wan2.2 and DiffSynth ecosystem. We also thank the VBench, ViStoryBench, IAMFlow, and TransNetV2 authors for releasing their code and resources to the community.
+SlotMem builds on the open-source Wan2.2 and DiffSynth ecosystem. We also thank the TransNetV2 authors for releasing their shot-detection code and resources.
 
 ## License
 
