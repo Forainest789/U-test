@@ -116,7 +116,7 @@ NARRASTREAM_API_BASE_URL=https://api.openai.com/v1 \
 bash bench/run_slotmem_benchmarks_api.sh /path/to/inference_output
 ```
 
-See [`bench/README.md`](bench/README.md) for benchmark repository checkouts and environment setup.
+Detailed benchmark usage, repository checkouts, and environment setup are provided in [`bench/README.md`](bench/README.md).
 
 ## Data Curation
 
@@ -124,7 +124,7 @@ Data curation uses TransNetV2 for shot detection. See [`data_curation/README.md`
 
 ## Acknowledgements
 
-SlotMem builds on the open-source Wan2.2 and DiffSynth ecosystem. We also thank the TransNetV2 authors for releasing their shot-detection code and resources.
+Big thanks to [Wan2.2](https://github.com/Wan-Video/Wan2.2) and [Stable-Video-Infinity](https://github.com/vita-epfl/Stable-Video-Infinity) for their inspiring open-source work.
 
 ## License
 
