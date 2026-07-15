@@ -1,0 +1,2076 @@
+{
+  "video_id": "Top001",
+  "shots": [
+    {
+      "group_index": 16,
+      "group_caption": "man in cap: An older Black man wearing a dark jacket, striped shirt, and a grey cap. bald man: A large, bald man wearing a light-colored shirt and dark pants, often seen sitting. smoking man: A man with a grey cap, wearing a light shirt, sitting on a bench and smoking. The whole scene takes place in an outdoor prison yard with large brick buildings. The visual style is realistic and cinematic, featuring natural lighting and a gritty atmosphere.",
+      "clips": [
+        {
+          "clip_index": 1,
+          "caption": "man in cap looks forward with a neutral expression, then walks up stairs, holding a railing, and later stands with his back to the camera. bald man stands on a landing looking away, and later sits on a railing with his back to the camera. The outdoor prison yard features large brick buildings. The camera first captures a low-angle view of them on stairs, then a medium shot on man in cap, and finally follows them from behind.",
+          "error": "",
+          "characters": [
+            "man in cap",
+            "bald man"
+          ],
+          "overlapping_clip_indices": [
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "clip_index": 2,
+          "caption": "The man in cap walks away from the camera, his back to the viewer, through an outdoor prison yard. In the mid-ground, smoking man sits on a bench, looking slightly left while smoking a cigarette, next to bald man who is also sitting and looking right. Numerous other prisoners mill about in the background, surrounded by large brick buildings under a cloudy sky. The camera is static, capturing a medium shot of the scene.",
+          "error": "",
+          "characters": [
+            "man in cap",
+            "bald man",
+            "smoking man"
+          ],
+          "overlapping_clip_indices": [
+            1,
+            3,
+            4
+          ]
+        },
+        {
+          "clip_index": 3,
+          "caption": "man in cap stands in the foreground, looking down; smoking man sits on a bench, looking up at him while smoking a cigarette; bald man sits beside him, facing away from the camera. Numerous other prisoners mill about in the outdoor prison yard with large brick buildings. The camera is static in a medium shot.",
+          "error": "",
+          "characters": [
+            "man in cap",
+            "bald man",
+            "smoking man"
+          ],
+          "overlapping_clip_indices": [
+            1,
+            2,
+            4
+          ]
+        },
+        {
+          "clip_index": 4,
+          "caption": "smoking man sits on a bench, looking down and smoking. man in cap stands nearby, then turns his back to the camera. bald man sits on the bench, then stands up, also with his back to the camera. Numerous other prisoners mill about in the outdoor prison yard, surrounded by large brick buildings. The camera maintains a medium shot, with a slight pan to the right.",
+          "error": "",
+          "characters": [
+            "man in cap",
+            "bald man",
+            "smoking man"
+          ],
+          "overlapping_clip_indices": [
+            1,
+            2,
+            3
+          ]
+        }
+      ],
+      "characters": [
+        "man in cap",
+        "bald man",
+        "smoking man"
+      ],
+      "candidate_clips": [
+        1,
+        2,
+        3,
+        4
+      ]
+    },
+    {
+      "group_index": 17,
+      "group_caption": "Grey-capped man: An older Black man in a grey cap, dark jacket, and light shirt with a number. Light-capped man: A shorter, older white man in a light cap, denim jacket, and light pants. The scene shows many men in uniform walking in a crowded outdoor prison yard. The visual style is realistic and cinematic, typical of a drama film.",
+      "clips": [
+        {
+          "clip_index": 1,
+          "caption": "Grey-capped man looks down, talking to Light-capped man, who gestures while looking up at him. They walk through a crowded outdoor prison yard, surrounded by many other men in uniform. The camera tracks them from a medium shot, following their conversation as they move through the bustling yard with a large stone building in the background.",
+          "error": "",
+          "characters": [
+            "grey-capped man",
+            "light-capped man"
+          ],
+          "overlapping_clip_indices": [
+            2,
+            3,
+            4,
+            5
+          ]
+        },
+        {
+          "clip_index": 2,
+          "caption": "Grey-capped man and Light-capped man walk through a crowded outdoor prison yard, surrounded by many other men in uniform. The Grey-capped man walks slightly ahead of the Light-capped man, both looking forward. The camera tracks them from a medium shot as they move through the yard, with the stone prison building visible in the background.",
+          "error": "",
+          "characters": [
+            "grey-capped man",
+            "light-capped man"
+          ],
+          "overlapping_clip_indices": [
+            1,
+            3,
+            4,
+            5
+          ]
+        },
+        {
+          "clip_index": 3,
+          "caption": "Grey-capped man and Light-capped man walk through a crowded outdoor prison yard, looking forward as they move. Many other men in uniform are also walking around them. The camera slowly tracks forward, keeping the Grey-capped man and Light-capped man centered as they approach, with a stone building wall visible in the background.",
+          "error": "",
+          "characters": [
+            "grey-capped man",
+            "light-capped man"
+          ],
+          "overlapping_clip_indices": [
+            1,
+            2,
+            4,
+            5
+          ]
+        },
+        {
+          "clip_index": 4,
+          "caption": "The Grey-capped man and Light-capped man walk through a crowded outdoor prison yard, both looking forward with neutral expressions amidst many other men in uniform. The background features a stone wall. The camera tracks forward in a medium shot, following the men as they move through the bustling yard.",
+          "error": "",
+          "characters": [
+            "grey-capped man",
+            "light-capped man"
+          ],
+          "overlapping_clip_indices": [
+            1,
+            2,
+            3,
+            5
+          ]
+        },
+        {
+          "clip_index": 5,
+          "caption": "Grey-capped man and Light-capped man walk towards the camera with neutral expressions, surrounded by many other men in uniform also walking. The crowded outdoor prison yard features a stone building in the background. The camera tracks the two main subjects in a medium shot as they move forward.",
+          "error": "",
+          "characters": [
+            "grey-capped man",
+            "light-capped man"
+          ],
+          "overlapping_clip_indices": [
+            1,
+            2,
+            3,
+            4
+          ]
+        }
+      ],
+      "characters": [
+        "grey-capped man",
+        "light-capped man"
+      ],
+      "candidate_clips": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ]
+    },
+    {
+      "group_index": 22,
+      "group_caption": "tall guard: A tall, stern guard in a dark blue uniform and cap, overseeing prisoner transfer; prisoner: A man in a flat cap and maroon jacket, with a serious expression exiting the bus; prison bus: A light grey, old-fashioned transport bus with barred windows, marked \"SHAWSHANK STATE PRISON\". The scene takes place outside a large, imposing prison gate where prisoners are being unloaded. The visual style is a realistic drama, featuring cinematic lighting and a gritty, historical aesthetic.",
+      "clips": [
+        {
+          "clip_index": 1,
+          "caption": "The tall guard, with a focused expression, reaches to open the door of the prison bus, which is parked outside a large, imposing prison gate. Other guards stand behind him, observing. Inside the light grey prison bus, several prisoners look out through the barred windows. The camera captures the scene in a medium shot, showing the tall guard interacting with the bus.",
+          "error": "",
+          "characters": [
+            "tall guard",
+            "prisoner",
+            "prison bus"
+          ],
+          "overlapping_clip_indices": [
+            2,
+            3,
+            4,
+            5
+          ]
+        },
+        {
+          "clip_index": 2,
+          "caption": "The tall guard stands in profile, looking towards the prison bus, which is parked before a large, imposing prison gate. A bus guard exits the prison bus, holding a rifle, and looks towards the tall guard. The camera maintains a steady medium shot, capturing the scene with a gritty, historical aesthetic.",
+          "error": "",
+          "characters": [
+            "tall guard",
+            "prison bus"
+          ],
+          "overlapping_clip_indices": [
+            1,
+            3,
+            4,
+            5
+          ]
+        },
+        {
+          "clip_index": 3,
+          "caption": "The `tall guard` stands sternly, looking right, while `other guards` stand watch, one holding a shotgun. The `prison bus` is parked with its door open. The `tall guard` then reaches out, pulling the `prisoner` from the `prison bus`, who exits with a serious expression. A `large, imposing prison gate` looms in the background. The camera remains static in a medium shot.",
+          "error": "",
+          "characters": [
+            "tall guard",
+            "prisoner",
+            "prison bus"
+          ],
+          "overlapping_clip_indices": [
+            1,
+            2,
+            4,
+            5
+          ]
+        },
+        {
+          "clip_index": 4,
+          "caption": "The prisoner, with a serious expression, stands facing slightly towards the camera, being held by the tall guard who looks down at him. The prison bus door is open beside them. Other guards are visible in the background near the imposing prison gate. The camera is in a medium shot, focusing on the interaction.",
+          "error": "",
+          "characters": [
+            "tall guard",
+            "prisoner",
+            "prison bus"
+          ],
+          "overlapping_clip_indices": [
+            1,
+            2,
+            3,
+            5
+          ]
+        },
+        {
+          "clip_index": 5,
+          "caption": "The prisoner, with a serious expression, stands near the open door of the prison bus. A tall guard and another guard stand sternly, overseeing the transfer. The scene unfolds outside a large, imposing prison gate. The camera, in a medium shot, first captures the prisoner facing forward, then pans to the tall guard and the other guard, who are looking left as the prisoner walks past them.",
+          "error": "",
+          "characters": [
+            "tall guard",
+            "prisoner",
+            "prison bus"
+          ],
+          "overlapping_clip_indices": [
+            1,
+            2,
+            3,
+            4
+          ]
+        }
+      ],
+      "characters": [
+        "tall guard",
+        "prisoner",
+        "prison bus"
+      ],
+      "candidate_clips": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ]
+    },
+    {
+      "group_index": 38,
+      "group_caption": "dark-haired man: A man with short, dark blonde hair and blue eyes, wearing a light-colored striped shirt; blonde man: A man with wavy blonde hair and blue eyes, wearing a light-colored striped shirt. The whole scene takes place in an indoor institutional setting with many men. The visual style is realistic and cinematic, featuring natural lighting and a somewhat muted color palette.",
+      "clips": [
+        {
+          "clip_index": 1,
+          "caption": "The dark-haired man looks concerned, his mouth slightly open as if speaking. The blonde man appears serious and attentive, looking slightly off-camera. Both are seated in an indoor institutional setting, with several other men in striped shirts visible in the blurred background. The camera alternates between close-up shots of the dark-haired man and the blonde man, capturing their expressions with natural lighting and a muted color palette.",
+          "error": "",
+          "characters": [
+            "dark-haired man",
+            "blonde man"
+          ],
+          "overlapping_clip_indices": [
+            2
+          ]
+        },
+        {
+          "clip_index": 2,
+          "caption": "blonde man looks directly towards the camera with an attentive expression, his mouth slightly open. Behind him, a dark-haired man looks to his left, while other seated men are blurred in the background of the indoor institutional setting. The camera holds a static medium close-up on the blonde man, who is facing the camera, with a shallow depth of field.",
+          "error": "",
+          "characters": [
+            "dark-haired man",
+            "blonde man"
+          ],
+          "overlapping_clip_indices": [
+            1
+          ]
+        }
+      ],
+      "characters": [
+        "dark-haired man",
+        "blonde man"
+      ],
+      "candidate_clips": [
+        1,
+        2
+      ]
+    },
+    {
+      "group_index": 51,
+      "group_caption": "man in cap: An older Black man wearing a grey flat cap and a striped prison uniform shirt, speaking to another man; curly-haired man: A younger white man with curly brown hair, wearing a striped prison uniform shirt, listening intently. The whole scene takes place in a crowded outdoor prison yard with a large brick building. The visual style is a realistic drama, featuring naturalistic lighting and cinematic framing.",
+      "clips": [
+        {
+          "clip_index": 1,
+          "caption": "man in cap speaks animatedly, looking forward, while curly-haired man listens intently, partially visible. The camera, in a medium close-up on man in cap, briefly tracks him as he moves, then returns to focus on him speaking. The crowded outdoor prison yard with a large brick building forms the background, with other inmates milling around.",
+          "error": "",
+          "characters": [
+            "man in cap",
+            "curly-haired man"
+          ],
+          "overlapping_clip_indices": [
+            3,
+            4
+          ]
+        },
+        {
+          "clip_index": 3,
+          "caption": "The `man in cap` is speaking and smiling, looking towards the `curly-haired man`, who is listening intently with his back mostly to the camera. The camera captures them in a medium close-up, with the `man in cap` facing the camera in profile. They stand in a crowded outdoor prison yard, with a large brick building and other prisoners blurred in the background.",
+          "error": "",
+          "characters": [
+            "man in cap",
+            "curly-haired man"
+          ],
+          "overlapping_clip_indices": [
+            1,
+            4
+          ]
+        },
+        {
+          "clip_index": 4,
+          "caption": "The camera is in a medium shot, initially framing man in cap angled towards the camera as he speaks with a thoughtful expression. It then shifts to his profile as he looks up and gestures while holding a brown object, with curly-haired man listening intently beside him. The crowded outdoor prison yard with a large brick building is visible in the background.",
+          "error": "",
+          "characters": [
+            "man in cap",
+            "curly-haired man"
+          ],
+          "overlapping_clip_indices": [
+            1,
+            3
+          ]
+        }
+      ],
+      "characters": [
+        "man in cap",
+        "curly-haired man"
+      ],
+      "candidate_clips": [
+        1,
+        3,
+        4
+      ]
+    },
+    {
+      "group_index": 53,
+      "group_caption": "man with cap: An older Black man wearing a grey cap and a striped shirt over a white undershirt.young man: A young white man with light brown hair, wearing a light-colored striped button-up shirt. The scene takes place in a crowded outdoor prison yard with many men in uniform-like attire. The visual style is realistic and cinematic, characteristic of a live-action drama film.",
+      "clips": [
+        {
+          "clip_index": 1,
+          "caption": "young man looks intently at man with cap, who is partially visible. The camera then cuts to man with cap, who smiles and talks to young man, whose back is to the camera. They are in a crowded outdoor prison yard with many other men and prison buildings in the background. The camera alternates between over-the-shoulder medium shots.",
+          "error": "",
+          "characters": [
+            "man with cap",
+            "young man"
+          ],
+          "overlapping_clip_indices": [
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "clip_index": 2,
+          "caption": "man with cap faces the camera with a gentle smile, looking towards young man, whose back is to the camera. They stand in a crowded outdoor prison yard with many men in uniform-like attire and brick buildings in the background. The camera is static, capturing a medium shot of man with cap, with young man partially in the foreground.",
+          "error": "",
+          "characters": [
+            "man with cap",
+            "young man"
+          ],
+          "overlapping_clip_indices": [
+            1,
+            3,
+            4
+          ]
+        },
+        {
+          "clip_index": 3,
+          "caption": "The man with cap looks towards the young man with a serious expression, then turns his head to the left. The young man stands with his back to the camera, facing the man with cap. They are in a crowded outdoor prison yard with many other men in uniform-like attire. The camera maintains a medium shot on the two subjects, with the man with cap initially facing the camera more directly.",
+          "error": "",
+          "characters": [
+            "man with cap",
+            "young man"
+          ],
+          "overlapping_clip_indices": [
+            1,
+            2,
+            4
+          ]
+        },
+        {
+          "clip_index": 4,
+          "caption": "The `young man` stands with his back to the camera, partially obscuring `man with cap`. `man with cap` looks to his left with a slight smile. The camera slowly moves right, revealing `man with cap` more clearly in a medium shot. The background is a crowded outdoor prison yard with many other men and a brick building under a bright sky.",
+          "error": "",
+          "characters": [
+            "man with cap",
+            "young man"
+          ],
+          "overlapping_clip_indices": [
+            1,
+            2,
+            3
+          ]
+        }
+      ],
+      "characters": [
+        "man with cap",
+        "young man"
+      ],
+      "candidate_clips": [
+        1,
+        2,
+        3,
+        4
+      ]
+    },
+    {
+      "group_index": 58,
+      "group_caption": "older man: An older Black man with a kind face, wearing a striped prison shirt with a number tag; small tool: A small, hammer-like tool with a wooden handle and a metal head. The whole scene takes place inside a prison cell or dormitory. The visual style is realistic and cinematic, featuring natural lighting and close-up shots.",
+      "clips": [
+        {
+          "clip_index": 1,
+          "caption": "The older man looks intently at the camera with a serious expression, positioned within a prison dormitory featuring metal bunk beds with folded blankets. Later, the older man is seen in silhouette, looking out a barred window at another building. The camera utilizes close-up and medium shots, capturing the older man's focused gaze and then his contemplative posture.",
+          "error": "",
+          "characters": [
+            "older man"
+          ],
+          "overlapping_clip_indices": [
+            2,
+            4,
+            5
+          ]
+        },
+        {
+          "clip_index": 2,
+          "caption": "The older man leans over a striped mattress, carefully folding and arranging a blanket or clothing item with his hands. His actions convey a gentle demeanor. The scene takes place inside a prison cell, with bars visible in the background. The camera employs close-up shots, focusing on the older man's meticulous actions, under natural, dim lighting.",
+          "error": "",
+          "characters": [
+            "older man"
+          ],
+          "overlapping_clip_indices": [
+            1,
+            4,
+            5
+          ]
+        },
+        {
+          "clip_index": 4,
+          "caption": "The older man intently looks down, carefully handling a piece of paper on a striped bed. He appears focused and contemplative. The background reveals dark prison bars and a wall, consistent with a prison cell. The camera holds a static close-up shot on the older man, capturing his upper body and hands as he works.",
+          "error": "",
+          "characters": [
+            "older man"
+          ],
+          "overlapping_clip_indices": [
+            1,
+            2,
+            5
+          ]
+        },
+        {
+          "clip_index": 5,
+          "caption": "The older man looks down intently at the small tool he holds in his hands, examining it over a brown paper bag. His expression shifts from focused to a subtle, thoughtful smile as he continues to inspect the tool. The scene takes place inside a dimly lit prison cell, with bars visible in the background. The camera maintains a close-up shot on the older man, who is facing slightly away from the camera, capturing his detailed interaction with the small tool.",
+          "error": "",
+          "characters": [
+            "older man",
+            "small tool"
+          ],
+          "overlapping_clip_indices": [
+            1,
+            2,
+            4
+          ]
+        }
+      ],
+      "characters": [
+        "older man",
+        "small tool"
+      ],
+      "candidate_clips": [
+        1,
+        2,
+        4,
+        5
+      ]
+    },
+    {
+      "group_index": 65,
+      "group_caption": "laborers: A large group of men wearing grey striped shirts, flat caps, and work pants, engaged in manual labor.officers: Several men in dark blue police uniforms with hats, supervising the laborers on the rooftop.black bucket: A dark metal bucket filled with a thick, black liquid, being lowered by a rope.The whole scene depicts laborers working on a prison rooftop and in its yard, supervised by officers. The visual style is realistic and cinematic, featuring clear imagery and naturalistic representation.",
+      "clips": [
+        {
+          "clip_index": 1,
+          "caption": "A large group of laborers stands in a prison yard, some looking towards the camera with neutral expressions, others looking around. The camera captures them in a medium shot. Subsequently, a black bucket filled with liquid is lowered by a rope into the prison yard, viewed from a high-angle perspective. The scene depicts work within the prison grounds.",
+          "error": "",
+          "characters": [
+            "laborers",
+            "black bucket"
+          ],
+          "overlapping_clip_indices": [
+            2,
+            4,
+            5
+          ]
+        },
+        {
+          "clip_index": 2,
+          "caption": "A laborer's arm holds a rope, lowering the black bucket filled with liquid. The black bucket descends towards a prison rooftop, with the vast prison yard and prison buildings visible under a bright sky. The camera looks down from above, following the bucket's descent.",
+          "error": "",
+          "characters": [
+            "black bucket"
+          ],
+          "overlapping_clip_indices": [
+            1,
+            5
+          ]
+        },
+        {
+          "clip_index": 4,
+          "caption": "laborers are engaged in manual labor on a prison rooftop, bending over and working, while officers supervise them, standing and observing. The background features green trees and distant buildings under a clear sky. The camera is positioned behind a laborer, looking over their shoulder, capturing the scene in a medium shot.",
+          "error": "",
+          "characters": [
+            "laborers",
+            "officers"
+          ],
+          "overlapping_clip_indices": [
+            1,
+            5
+          ]
+        },
+        {
+          "clip_index": 5,
+          "caption": "An officer in the center converses with another officer on the left, both facing each other, while a third officer stands with his back to the camera. In the background, laborers are actively working on the prison rooftop, some carrying black buckets. The scene is set against a backdrop of distant trees and buildings. The camera maintains a steady medium shot, capturing the interaction and ongoing work.",
+          "error": "",
+          "characters": [
+            "laborers",
+            "black bucket"
+          ],
+          "overlapping_clip_indices": [
+            1,
+            2,
+            4
+          ]
+        }
+      ],
+      "characters": [
+        "laborers",
+        "officers",
+        "black bucket"
+      ],
+      "candidate_clips": [
+        1,
+        2,
+        4,
+        5
+      ]
+    },
+    {
+      "group_index": 67,
+      "group_caption": "Prisoners: Men wearing grey work uniforms and matching caps, engaged in manual labor outdoors; Police officers: Men in dark blue police uniforms with gold badges and peaked caps. The scene alternates between prisoners working outdoors and police officers conversing on a rooftop. The visual style is realistic and cinematic, typical of a drama film.",
+      "clips": [
+        {
+          "clip_index": 1,
+          "caption": "The video alternates between scenes. Several `Prisoners` are engaged in manual labor outdoors, leaning over an edge with green hills and distant buildings in the background. The camera captures them in medium shots, sometimes from behind, then showing their focused expressions. Subsequently, `Police officers` converse against a red brick wall, with one `Police officer` facing the camera and speaking seriously while others listen. The camera maintains medium shots.",
+          "error": "",
+          "characters": [
+            "prisoners",
+            "police officers"
+          ],
+          "overlapping_clip_indices": [
+            3
+          ]
+        },
+        {
+          "clip_index": 2,
+          "caption": "A Police officer stands on the left, arms crossed, looking right in profile; another Police officer in the middle looks towards him with a slight smile, while a third Police officer is seen from behind on the right. They are conversing against a red brick wall background. The camera captures them in a medium shot.",
+          "error": "",
+          "characters": [],
+          "overlapping_clip_indices": []
+        },
+        {
+          "clip_index": 3,
+          "caption": "Police officers converse on a rooftop against a brick wall. One Police officer, in profile with arms crossed, listens intently. Another Police officer, partially facing the camera, appears to be speaking or listening, while a third Police officer has his back to the camera, engaged in the conversation. A fourth Police officer stands in the background, holding a baton. The camera maintains a medium shot, focusing on the group's interaction.",
+          "error": "",
+          "characters": [
+            "police officers"
+          ],
+          "overlapping_clip_indices": [
+            1
+          ]
+        },
+        {
+          "clip_index": 4,
+          "caption": "A Police officer stands in profile, arms crossed, looking intently to the right; another Police officer is partially visible behind him on the left, while a third stands further back, holding a baton. None of the officers are facing the camera. They are on a rooftop with a brick wall to the left, overlooking distant buildings under a clear sky. The camera holds a static medium shot on the closest Police officer.",
+          "error": "",
+          "characters": [],
+          "overlapping_clip_indices": []
+        },
+        {
+          "clip_index": 5,
+          "caption": "A Police officer, facing slightly towards the camera with arms crossed, appears to be conversing with another Police officer, whose face is partially visible on the right. In the background, a third Police officer stands holding a rifle. They are on a rooftop under a clear blue sky, with distant structures visible. The camera is static, capturing a medium shot focused on the central officer.",
+          "error": "",
+          "characters": [],
+          "overlapping_clip_indices": []
+        }
+      ],
+      "characters": [
+        "prisoners",
+        "police officers"
+      ],
+      "candidate_clips": [
+        1,
+        3
+      ]
+    },
+    {
+      "group_index": 85,
+      "group_caption": "distressed man: A distressed man with reddish-brown hair, wearing a dark jacket, is seen crying behind metal bars. The whole scene takes place inside a large, multi-level building with metal walkways and bars. The visual style is a realistic drama, featuring natural lighting and a gritty, intense atmosphere.",
+      "clips": [
+        {
+          "clip_index": 1,
+          "caption": "The distressed man cries intensely, gripping metal bars and facing the camera, with tears and a bloodied lip. Earlier, he leans over a metal walkway, then lies down, looking into the depths of the large, multi-level building with metal structures. The camera transitions from a medium shot, looking down the walkway, to a close-up on the distressed man's face as he cries.",
+          "error": "",
+          "characters": [
+            "distressed man"
+          ],
+          "overlapping_clip_indices": [
+            2
+          ]
+        },
+        {
+          "clip_index": 2,
+          "caption": "The distressed man is seen crying intensely, his face contorted in anguish with eyes closed, as he grips the metal bars in front of him. The background is dark and indistinct, suggesting the interior of a large building. The camera holds a close-up shot on the distressed man, who is facing the camera, emphasizing his raw emotion.",
+          "error": "",
+          "characters": [
+            "distressed man"
+          ],
+          "overlapping_clip_indices": [
+            1
+          ]
+        }
+      ],
+      "characters": [
+        "distressed man"
+      ],
+      "candidate_clips": [
+        1,
+        2
+      ]
+    },
+    {
+      "group_index": 86,
+      "group_caption": "man in wheelchair: A man with reddish-brown hair, seen from behind, strapped into a wooden wheelchair.medical attendant: A man in a white uniform, including a jacket, dark tie, and cap, standing by the ambulance.prison guard: A man in a dark blue uniform with a cap and badge, standing formally beside the ambulance.white ambulance: A vintage white ambulance with \"AMBULANCE\" and a red cross on its rear.The video transitions from an empty, dark industrial walkway to an outdoor scene where a patient is being transferred into an ambulance. The visual style is realistic and cinematic, featuring a somber atmosphere and period-appropriate details.",
+      "clips": [
+        {
+          "clip_index": 1,
+          "caption": "The video transitions from an empty, dark industrial walkway to an outdoor scene. The medical attendant and prison guard stand formally beside the white ambulance, both looking towards the camera. The man in wheelchair is seen from behind, positioned in the foreground, facing the white ambulance. The background features a stone wall and a chain-link fence. The camera is positioned behind the man in wheelchair, looking forward.",
+          "error": "",
+          "characters": [
+            "man in wheelchair",
+            "medical attendant",
+            "prison guard",
+            "white ambulance"
+          ],
+          "overlapping_clip_indices": [
+            2
+          ]
+        },
+        {
+          "clip_index": 2,
+          "caption": "The prison guard stands formally, observing as a medical attendant pushes the man in wheelchair towards the open rear of the white ambulance. Another medical attendant stands by the ambulance's open doors. The scene unfolds in a somber, industrial prison setting with a fence. The camera maintains a medium shot, focusing on the transfer.",
+          "error": "",
+          "characters": [
+            "man in wheelchair",
+            "medical attendant",
+            "prison guard",
+            "white ambulance"
+          ],
+          "overlapping_clip_indices": [
+            1
+          ]
+        }
+      ],
+      "characters": [
+        "man in wheelchair",
+        "medical attendant",
+        "prison guard",
+        "white ambulance"
+      ],
+      "candidate_clips": [
+        1,
+        2
+      ]
+    },
+    {
+      "group_index": 93,
+      "group_caption": "suit man: A middle-aged man with slicked-back hair and glasses, wearing a dark suit and a striped tie.police officers: Several officers in dark blue uniforms and hats, escorting the suit man through the prison.Holy Bible: A black book with \"Holy Bible\" printed in gold, held open by hands in a denim jacket.The video transitions between a prison corridor and a close-up of a person holding a Bible. The visual style is a realistic drama, featuring clear imagery and naturalistic lighting.",
+      "clips": [
+        {
+          "clip_index": 1,
+          "caption": "The video transitions between two scenes. In the first, the `suit man` walks forward with a neutral expression, escorted by `police officers` through a multi-level prison corridor. The camera tracks the `suit man` in a medium shot. The second scene shows a close-up of the `Holy Bible` being held open by hands in a denim jacket.",
+          "error": "",
+          "characters": [
+            "suit man",
+            "police officers",
+            "holy bible"
+          ],
+          "overlapping_clip_indices": []
+        }
+      ],
+      "characters": [
+        "suit man",
+        "police officers",
+        "holy bible"
+      ],
+      "candidate_clips": [
+        1
+      ]
+    },
+    {
+      "group_index": 94,
+      "group_caption": "Prisoner: A man with short brown hair, wearing a light blue denim shirt, looking up from behind bars.Warden: A stern man with glasses, wearing a dark suit, white shirt, and patterned tie.Officer: A uniformed officer in a dark blue uniform with gold buttons and a peaked cap.Striped dummy: A large, striped fabric dummy or pillow, resembling a body, found in a cell.The video depicts a tense search within a dimly lit prison cell and interactions between inmates and officials. The visual style is a realistic drama, featuring cinematic lighting and a serious tone.",
+      "clips": [
+        {
+          "clip_index": 1,
+          "caption": "The Warden stands with crossed arms, looking sternly towards the camera. An Officer pulls the Striped dummy from a dark cell corner. The Prisoner looks up from behind bars, partially obscured by two Officers in the foreground. The camera alternates between a medium shot of the Warden and close-ups of the search in the dimly lit prison cell.",
+          "error": "",
+          "characters": [
+            "prisoner",
+            "warden",
+            "officer",
+            "striped dummy"
+          ],
+          "overlapping_clip_indices": [
+            2,
+            3
+          ]
+        },
+        {
+          "clip_index": 2,
+          "caption": "The Officer is actively searching a dimly lit prison cell, bending down to move a chair and investigate a corner. The Striped dummy is partially visible in the background, lying on the floor. The camera is positioned in a medium shot, looking down at the Officer as he conducts the search, with the plain cell walls forming the background.",
+          "error": "",
+          "characters": [
+            "officer",
+            "striped dummy"
+          ],
+          "overlapping_clip_indices": [
+            1,
+            3
+          ]
+        },
+        {
+          "clip_index": 3,
+          "caption": "An Officer searches a dimly lit prison cell, handling a Striped dummy near a toilet. Another Officer stands nearby, looking down with a serious expression. The cell features rough walls and a barred window. The camera uses close-up and medium shots, focusing on the officers' actions within the tense, dimly lit environment.",
+          "error": "",
+          "characters": [
+            "officer",
+            "striped dummy"
+          ],
+          "overlapping_clip_indices": [
+            1,
+            2
+          ]
+        }
+      ],
+      "characters": [
+        "prisoner",
+        "warden",
+        "officer",
+        "striped dummy"
+      ],
+      "candidate_clips": [
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "group_index": 105,
+      "group_caption": "prisoner: A man with short brown hair wears a light-colored uniform shirt with a number and dark pants.standing officer: A stern-faced officer in a dark uniform and cap stands in the doorway.approaching officer: An officer in a dark uniform and cap walks forward, looking directly ahead.The scene takes place in a dimly lit, old, and somewhat run-down room with brick walls. The visual style is realistic and cinematic, featuring dramatic lighting and a gritty atmosphere.",
+      "clips": [
+        {
+          "clip_index": 1,
+          "caption": "The prisoner walks forward, looking directly ahead, then stands still. The camera then cuts to show the standing officer and approaching officer standing in the doorway, both looking towards the camera. The scene takes place in a dimly lit, old, run-down room with brick walls, shelves, and furniture, maintaining a gritty atmosphere.",
+          "error": "",
+          "characters": [
+            "prisoner",
+            "standing officer",
+            "approaching officer"
+          ],
+          "overlapping_clip_indices": [
+            2
+          ]
+        },
+        {
+          "clip_index": 2,
+          "caption": "The prisoner stands with his back to the camera, looking into a doorway. The standing officer initially stands in the doorway, looking at the prisoner, while the approaching officer stands beside him, facing away. The approaching officer then walks forward through the doorway, looking directly ahead, followed by the standing officer. The dimly lit, run-down room has brick walls. The camera is positioned behind the prisoner, looking over his shoulder.",
+          "error": "",
+          "characters": [
+            "prisoner",
+            "standing officer",
+            "approaching officer"
+          ],
+          "overlapping_clip_indices": [
+            1
+          ]
+        }
+      ],
+      "characters": [
+        "prisoner",
+        "standing officer",
+        "approaching officer"
+      ],
+      "candidate_clips": [
+        1,
+        2
+      ]
+    },
+    {
+      "group_index": 106,
+      "group_caption": "police officer: A middle-aged man in a dark police uniform and cap, with a serious expression. young man: A young man with wavy brown hair, wearing a light-colored striped button-up shirt, looking intently forward. older man: An older man with white hair and a weathered face, wearing a dark shirt, visible in the background. The scene takes place indoors, likely within an old, dimly lit building with brick walls. The visual style is realistic and cinematic, featuring naturalistic lighting and detailed imagery.",
+      "clips": [
+        {
+          "clip_index": 1,
+          "caption": "The police officer looks seriously towards the camera in a close-up shot, standing in a dimly lit, old building with brick walls. The scene then cuts to a medium shot of the young man, who looks intently forward, with the older man visible in the background. Both shots are static.",
+          "error": "",
+          "characters": [
+            "police officer",
+            "young man",
+            "older man"
+          ],
+          "overlapping_clip_indices": [
+            2,
+            3
+          ]
+        },
+        {
+          "clip_index": 2,
+          "caption": "The young man looks intently forward with a serious expression, while the older man stands behind him, also looking forward. The scene is set indoors within a dimly lit building with brick walls and some wooden structures. The camera holds a static medium close-up on the young man, with the older man visible in the softly blurred background.",
+          "error": "",
+          "characters": [
+            "young man",
+            "older man"
+          ],
+          "overlapping_clip_indices": [
+            1,
+            3
+          ]
+        },
+        {
+          "clip_index": 3,
+          "caption": "The young man looks intently forward with a serious, contemplative expression, facing the camera in a medium shot. The older man is visible in the background, slightly out of focus, observing the scene. The setting is an old, dimly lit building with brick walls, featuring naturalistic lighting.",
+          "error": "",
+          "characters": [
+            "young man",
+            "older man"
+          ],
+          "overlapping_clip_indices": [
+            1,
+            2
+          ]
+        }
+      ],
+      "characters": [
+        "police officer",
+        "young man",
+        "older man"
+      ],
+      "candidate_clips": [
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "group_index": 119,
+      "group_caption": "numbered man: A man with dark hair, wearing a striped shirt with a number tag, displaying intense emotions. elderly man: An older man with grey hair, wearing a striped shirt, holding a sharp object to another man's neck. background man: A man with light brown hair, wearing a striped shirt, observing the scene from the background. The scene takes place in an institutional setting, possibly a prison, with a desk area and a room. The visual style is realistic, reminiscent of a dramatic film, featuring natural lighting and close-up shots.",
+      "clips": [
+        {
+          "clip_index": 1,
+          "caption": "The numbered man grimaces in distress as the elderly man holds a sharp object to his neck in a close-up shot, set against shelves of papers. The scene then shifts to the numbered man facing the camera, gesturing and speaking intensely, with the background man observing behind him. This medium close-up reveals a distressed wall and doorway in an institutional setting.",
+          "error": "",
+          "characters": [
+            "numbered man",
+            "elderly man",
+            "background man"
+          ],
+          "overlapping_clip_indices": [
+            2
+          ]
+        },
+        {
+          "clip_index": 2,
+          "caption": "numbered man displays intense distress, eyes closed and mouth open, gripping his shirt, while elderly man grimaces, holding a sharp object to his neck with arms wrapped around him. The institutional background features shelves filled with papers. The camera captures a close-up of the two men, with numbered man facing the camera.",
+          "error": "",
+          "characters": [
+            "numbered man",
+            "elderly man"
+          ],
+          "overlapping_clip_indices": [
+            1
+          ]
+        }
+      ],
+      "characters": [
+        "numbered man",
+        "elderly man",
+        "background man"
+      ],
+      "candidate_clips": [
+        1,
+        2
+      ]
+    },
+    {
+      "group_index": 122,
+      "group_caption": "blonde prisoner: A serious-looking man with reddish-blonde hair, wearing a striped shirt, suspenders, and a grey flat cap; talking prisoner: An older Black man with a grey flat cap, wearing a striped shirt with a number tag, actively speaking; listening prisoner: A white man with short brown hair, wearing a striped shirt with a number tag, sitting and observing. The whole scene takes place in a prison yard with inmates in uniform. The visual style is realistic and cinematic, characteristic of a drama film with natural lighting.",
+      "clips": [
+        {
+          "clip_index": 1,
+          "caption": "blonde prisoner stares intently at the camera with a serious, unyielding expression. Behind him, a large brick prison building stands, and several other inmates are scattered across the prison yard. The camera remains static, capturing the blonde prisoner in a medium shot, with the background slightly out of focus.",
+          "error": "",
+          "characters": [
+            "blonde prisoner"
+          ],
+          "overlapping_clip_indices": []
+        },
+        {
+          "clip_index": 2,
+          "caption": "talking prisoner looks intently to the right, hands clasped, appearing thoughtful. Behind him, listening prisoner sits, observing with a hand near his mouth, appearing contemplative. They are seated in a prison yard, with metal railings and a stone building visible in the background. The camera captures them in a medium shot, focusing on their engaged expressions.",
+          "error": "",
+          "characters": [
+            "talking prisoner",
+            "listening prisoner"
+          ],
+          "overlapping_clip_indices": [
+            3,
+            4,
+            5
+          ]
+        },
+        {
+          "clip_index": 3,
+          "caption": "The talking prisoner actively speaks, looking towards the camera with an engaged expression, gesturing with his hands. Behind him, the listening prisoner sits, looking and pointing to the left. The scene is set in a prison yard with stone buildings and metal fences in the background, where other inmates are visible. The camera holds a medium shot on the talking prisoner, who is facing the camera.",
+          "error": "",
+          "characters": [
+            "talking prisoner",
+            "listening prisoner"
+          ],
+          "overlapping_clip_indices": [
+            2,
+            4,
+            5
+          ]
+        },
+        {
+          "clip_index": 4,
+          "caption": "talking prisoner looks up and speaks earnestly, his hands resting together, while listening prisoner sits behind him, observing with a serious expression. The scene is a prison yard with stone buildings and metal fences in the background, with other inmates visible in the distance. The camera is in a medium shot, focusing on the talking prisoner who faces the camera.",
+          "error": "",
+          "characters": [
+            "talking prisoner",
+            "listening prisoner"
+          ],
+          "overlapping_clip_indices": [
+            2,
+            3,
+            5
+          ]
+        },
+        {
+          "clip_index": 5,
+          "caption": "The talking prisoner actively speaks, gesturing slightly, while the listening prisoner sits behind him, observing intently with a serious expression. The scene is set in a prison yard, featuring stone buildings and metal railings in the background. The camera is static, positioned to the right of the talking prisoner, capturing him in the foreground as he faces right, with the listening prisoner looking towards him.",
+          "error": "",
+          "characters": [
+            "talking prisoner",
+            "listening prisoner"
+          ],
+          "overlapping_clip_indices": [
+            2,
+            3,
+            4
+          ]
+        }
+      ],
+      "characters": [
+        "blonde prisoner",
+        "talking prisoner",
+        "listening prisoner"
+      ],
+      "candidate_clips": [
+        2,
+        3,
+        4,
+        5
+      ]
+    },
+    {
+      "group_index": 125,
+      "group_caption": "old man: An elderly man with a brown fedora, grey suit, white shirt, and tie, looking pensive; bus: An old-fashioned public bus with green seats and large windows, carrying several passengers. The video depicts an elderly man being released from a prison and then riding a public bus. The visual style is realistic and cinematic, featuring a somber and reflective tone.",
+      "clips": [
+        {
+          "clip_index": 1,
+          "caption": "old man stands outside a large metal prison gate, looking pensive and glancing around. Behind the gate, several walking guards move away. The background features a somber prison building with barbed wire. The camera remains static in a medium shot, keeping the old man centered as he stands.",
+          "error": "",
+          "characters": [
+            "old man"
+          ],
+          "overlapping_clip_indices": [
+            2
+          ]
+        },
+        {
+          "clip_index": 2,
+          "caption": "The old man sits on the bus, facing the camera with a pensive expression, gripping the seat in front of him. Several other passengers are visible behind him, some looking out the large windows at the blurred green landscape. The camera holds a steady medium shot on the old man, emphasizing his somber demeanor within the moving bus.",
+          "error": "",
+          "characters": [
+            "old man",
+            "bus"
+          ],
+          "overlapping_clip_indices": [
+            1
+          ]
+        }
+      ],
+      "characters": [
+        "old man",
+        "bus"
+      ],
+      "candidate_clips": [
+        1,
+        2
+      ]
+    },
+    {
+      "group_index": 127,
+      "group_caption": "Fedora man: An elderly man with white hair, wearing a dark suit, tie, and a brown fedora, carrying a briefcase; Elderly woman: An older woman with grey curly hair, wearing a patterned blouse and a light green cardigan; Black car: A vintage black coupe with white-walled tires, parked on a city street. The video depicts an elderly man walking through a city street with vintage cars, then interacting with an elderly woman indoors. The visual style is a realistic drama, featuring natural lighting and a classic cinematic feel.",
+      "clips": [
+        {
+          "clip_index": 1,
+          "caption": "Fedora man walks away from the camera, carrying his briefcase, along a city street lined with old, multi-story buildings. A Black car is parked prominently on the right, with other vintage cars visible further down the street. The camera follows Fedora man from behind in a medium shot.",
+          "error": "",
+          "characters": [
+            "fedora man",
+            "black car"
+          ],
+          "overlapping_clip_indices": [
+            2,
+            3
+          ]
+        },
+        {
+          "clip_index": 2,
+          "caption": "Fedora man stands in a dimly lit doorway, looking towards the Elderly woman. The Elderly woman faces him, looking back with a gentle expression and making a slight gesture with her hand. They are engaged in a quiet interaction indoors, framed by dark wooden door frames. The camera captures a steady medium shot of their conversation.",
+          "error": "",
+          "characters": [
+            "fedora man",
+            "elderly woman"
+          ],
+          "overlapping_clip_indices": [
+            1,
+            3
+          ]
+        },
+        {
+          "clip_index": 3,
+          "caption": "Fedora man stands in a dimly lit doorway, looking directly at the camera with a surprised expression, his mouth slightly open; Elderly woman is partially visible behind him, looking away. The background reveals an indoor hallway with a door. The camera holds a static medium shot, centered on the Fedora man.",
+          "error": "",
+          "characters": [
+            "fedora man",
+            "elderly woman"
+          ],
+          "overlapping_clip_indices": [
+            1,
+            2
+          ]
+        }
+      ],
+      "characters": [
+        "fedora man",
+        "elderly woman",
+        "black car"
+      ],
+      "candidate_clips": [
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "group_index": 142,
+      "group_caption": "striped shirt man: A man with light brown hair and a number tag, wearing a striped button-up shirt; record box: A wooden box filled with various old records or books, some with colorful covers. The whole scene takes place indoors, where a man is looking through old records. The visual style is realistic and cinematic, featuring natural lighting and close-up shots.",
+      "clips": [
+        {
+          "clip_index": 1,
+          "caption": "striped shirt man looks slightly to the right of the camera with a subtle, thoughtful expression, his mouth slightly open. The background shows a dimly lit indoor hallway with dark wooden doors and a staircase, blurred by shallow depth of field. The camera holds a static close-up shot on the striped shirt man.",
+          "error": "",
+          "characters": [
+            "striped shirt man"
+          ],
+          "overlapping_clip_indices": [
+            2,
+            3,
+            5
+          ]
+        },
+        {
+          "clip_index": 2,
+          "caption": "The hands of striped shirt man are seen from above, carefully sifting through the contents of the record box, which is filled with various old records and books. The background reveals a patterned floor in an indoor setting. The camera maintains a close-up, top-down perspective on the hands and the box, with very subtle movement.",
+          "error": "",
+          "characters": [
+            "striped shirt man",
+            "record box"
+          ],
+          "overlapping_clip_indices": [
+            1,
+            3,
+            5
+          ]
+        },
+        {
+          "clip_index": 3,
+          "caption": "The `striped shirt man`'s hands carefully sift through the records in the `record box`, then pull out a black record. The `record box` is full of colorful old records. A blurry indoor background with a wooden chair is visible. The camera is in a close-up shot, looking down into the box, then slightly pans up to follow the man's hands.",
+          "error": "",
+          "characters": [
+            "striped shirt man",
+            "record box"
+          ],
+          "overlapping_clip_indices": [
+            1,
+            2,
+            5
+          ]
+        },
+        {
+          "clip_index": 5,
+          "caption": "striped shirt man looks down intently at a colorful record or book, his expression shifting from focused curiosity to a subtle smile. In the background, a bulletin board with papers is visible on the left, and a dark wooden wall on the right. The camera maintains a close-up shot on the striped shirt man, with a slight, subtle zoom or pan as his expression changes.",
+          "error": "",
+          "characters": [
+            "striped shirt man"
+          ],
+          "overlapping_clip_indices": [
+            1,
+            2,
+            3
+          ]
+        }
+      ],
+      "characters": [
+        "striped shirt man",
+        "record box"
+      ],
+      "candidate_clips": [
+        1,
+        2,
+        3,
+        5
+      ]
+    },
+    {
+      "group_index": 145,
+      "group_caption": "prisoner: A man in a striped uniform shirt with a number tag, looking intently and interacting with a desk.wooden desk: A vintage wooden roll-top desk with a microphone, papers, and multiple small drawers.The scene takes place indoors, likely in an office within a correctional facility. The visual style is realistic and cinematic, featuring dramatic lighting and close-up shots.",
+      "clips": [
+        {
+          "clip_index": 1,
+          "caption": "The prisoner stands in a doorway, looking intently to his right. He then reaches out to operate a metal latch on a dark wooden door. The scene is an indoor office within a correctional facility, featuring dramatic lighting. The camera transitions from a medium shot of the prisoner to close-ups on his hand and the latch.",
+          "error": "",
+          "characters": [
+            "prisoner"
+          ],
+          "overlapping_clip_indices": [
+            2,
+            3
+          ]
+        },
+        {
+          "clip_index": 2,
+          "caption": "The `prisoner`'s arm reaches down towards the `wooden desk`, which is covered with papers, a microphone, and multiple small drawers. The indoor office setting features dramatic lighting, with a fan visible in the background. The camera maintains a close-up shot, focusing on the `prisoner`'s interaction with the desk.",
+          "error": "",
+          "characters": [
+            "prisoner",
+            "wooden desk"
+          ],
+          "overlapping_clip_indices": [
+            1,
+            3
+          ]
+        },
+        {
+          "clip_index": 3,
+          "caption": "The prisoner initially looks intently towards the camera, then slowly shifts his gaze downwards, appearing focused as he leans forward, likely interacting with a desk. The background is dark, with a vintage fan visible on the right. The camera maintains a close-up shot on the prisoner, capturing his subtle head movement and intense expression.",
+          "error": "",
+          "characters": [
+            "prisoner"
+          ],
+          "overlapping_clip_indices": [
+            1,
+            2
+          ]
+        }
+      ],
+      "characters": [
+        "prisoner",
+        "wooden desk"
+      ],
+      "candidate_clips": [
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "group_index": 150,
+      "group_caption": "striped shirt man: A man with brown hair and a striped shirt relaxes, seemingly unbothered by his surroundings; pointing supervisor: An older man with glasses and a tie points sternly through a glass door; vintage record player: A vintage portable record player with a spinning vinyl record sits on a wooden desk. The video depicts a tense confrontation in an office setting, where one man is relaxing while another points angrily. The visual style is realistic, characteristic of a classic drama film, with natural lighting and clear imagery.",
+      "clips": [
+        {
+          "clip_index": 1,
+          "caption": "striped shirt man relaxes with his hands behind his head, then clasps them, maintaining an unbothered expression against window blinds. The camera then cuts to the pointing supervisor, who points sternly through a glass door with \"SUPERVISOR\" text, his mouth open in an angry expression. Both subjects face the camera in medium shots.",
+          "error": "",
+          "characters": [
+            "striped shirt man",
+            "pointing supervisor"
+          ],
+          "overlapping_clip_indices": [
+            2
+          ]
+        },
+        {
+          "clip_index": 2,
+          "caption": "striped shirt man relaxes in a chair, looking forward calmly with one leg propped up, as a vintage record player with a spinning record sits on the desk before him. The background features an office setting with blinds and curtains. The camera holds a static medium shot, focusing on the striped shirt man facing forward.",
+          "error": "",
+          "characters": [
+            "striped shirt man",
+            "vintage record player"
+          ],
+          "overlapping_clip_indices": [
+            1
+          ]
+        }
+      ],
+      "characters": [
+        "striped shirt man",
+        "pointing supervisor",
+        "vintage record player"
+      ],
+      "candidate_clips": [
+        1,
+        2
+      ]
+    },
+    {
+      "group_index": 157,
+      "group_caption": "Older man: An older African American man with a serious expression, wearing a light grey striped shirt; Young man: A young Caucasian man with messy brown hair, wearing a similar light grey striped shirt. The scene takes place in a dimly lit institutional setting, likely a prison mess hall, with many men in uniform. The visual style is realistic and cinematic, featuring natural lighting and close-up shots.",
+      "clips": [
+        {
+          "clip_index": 1,
+          "caption": "The Older man, with a serious expression, looks slightly off-camera, leaning forward. The Young man, appearing concerned, also looks slightly off-camera. Both are situated in a dimly lit institutional setting, with other blurry men in uniform visible in the background. The camera captures close-up shots, alternating focus between the Older man and the Young man, emphasizing their expressions.",
+          "error": "",
+          "characters": [
+            "older man",
+            "young man"
+          ],
+          "overlapping_clip_indices": [
+            2,
+            3
+          ]
+        },
+        {
+          "clip_index": 2,
+          "caption": "Older man looks directly at the camera with a serious expression, leaning forward slightly. The dimly lit background shows several blurry figures of other men in uniform, consistent with a prison mess hall. The camera captures the Older man in a static close-up shot, with him facing the camera.",
+          "error": "",
+          "characters": [
+            "older man"
+          ],
+          "overlapping_clip_indices": [
+            1,
+            3
+          ]
+        },
+        {
+          "clip_index": 3,
+          "caption": "The Older man sits, initially looking off-camera with a serious, contemplative expression. He then turns slightly towards the camera, his mouth opening as if speaking. Other men in uniform are blurred in the dimly lit institutional background. The camera maintains a close-up on the Older man, capturing his subtle shift in focus and expression.",
+          "error": "",
+          "characters": [
+            "older man"
+          ],
+          "overlapping_clip_indices": [
+            1,
+            2
+          ]
+        }
+      ],
+      "characters": [
+        "older man",
+        "young man"
+      ],
+      "candidate_clips": [
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "group_index": 165,
+      "group_caption": "man with glasses: A middle-aged man with short brown hair and glasses, wearing a grey cardigan over a light shirt.older man: An older Black man with grey hair, wearing a striped shirt with suspenders and a number tag.The whole scene takes place in an indoor workshop or storage area. The visual style is realistic and cinematic, featuring natural lighting and detailed close-ups.",
+      "clips": [
+        {
+          "clip_index": 1,
+          "caption": "The `man with glasses` looks intently, his mouth slightly open as if speaking. The camera then cuts to the `older man`, who also appears to be speaking with a serious expression. Both are in close-up shots, facing the camera. The background is a softly blurred indoor workshop or storage area, featuring shelves and cardboard boxes.",
+          "error": "",
+          "characters": [
+            "man with glasses",
+            "older man"
+          ],
+          "overlapping_clip_indices": [
+            2
+          ]
+        },
+        {
+          "clip_index": 2,
+          "caption": "older man intently carves letters into a wooden board with a chisel and mallet, his expression focused. The camera is in a close-up shot, positioned slightly to his left, capturing his profile and hands. In the blurred background, other workers are visible in the indoor workshop, which features natural lighting.",
+          "error": "",
+          "characters": [
+            "older man"
+          ],
+          "overlapping_clip_indices": [
+            1
+          ]
+        }
+      ],
+      "characters": [
+        "man with glasses",
+        "older man"
+      ],
+      "candidate_clips": [
+        1,
+        2
+      ]
+    },
+    {
+      "group_index": 167,
+      "group_caption": "singing prisoner: A middle-aged man in a light blue prison uniform with headphones, holding a record album and singing.photographers: Several men in suits are holding various cameras, capturing an event from a crowd's perspective.speaker: A man in a dark suit and tie stands behind a wooden podium, addressing an unseen audience.The video transitions from an indoor prison library to an outdoor press conference or public address. The visual style is realistic and cinematic, featuring clear imagery and naturalistic representation.",
+      "clips": [
+        {
+          "clip_index": 1,
+          "caption": "The singing prisoner sits at a table, holding a record album and singing with a focused expression, looking directly at the camera. Several other prisoners are seated at tables in the background, engaged in reading or writing within the prison library, which features numerous bookshelves. The camera maintains a static medium shot, centered on the singing prisoner.",
+          "error": "",
+          "characters": [
+            "singing prisoner"
+          ],
+          "overlapping_clip_indices": []
+        },
+        {
+          "clip_index": 2,
+          "caption": "photographers are immersed in a dense outdoor crowd, one diligently writing in a notebook, while another holds a camera on his shoulder, seemingly capturing the event. Other attendees stand closely around them. The camera is positioned high above, looking directly down on the gathering, providing an overhead view of the scene.",
+          "error": "",
+          "characters": [
+            "photographers"
+          ],
+          "overlapping_clip_indices": [
+            3,
+            4
+          ]
+        },
+        {
+          "clip_index": 3,
+          "caption": "photographers are densely packed, holding various cameras and pointing them forward, actively capturing an event. Other attendees are interspersed within the crowd. The scene is an outdoor press conference or public address. The camera is positioned high above, providing an overhead view of the bustling crowd.",
+          "error": "",
+          "characters": [
+            "photographers"
+          ],
+          "overlapping_clip_indices": [
+            2,
+            4
+          ]
+        },
+        {
+          "clip_index": 4,
+          "caption": "photographers are actively holding various cameras, aiming them upwards to capture an event. In the background, several police officers stand observing. The scene is an outdoor public gathering. The camera is positioned directly overhead, looking down at the photographers from above.",
+          "error": "",
+          "characters": [
+            "photographers"
+          ],
+          "overlapping_clip_indices": [
+            2,
+            3
+          ]
+        },
+        {
+          "clip_index": 5,
+          "caption": "The speaker stands behind a wooden podium, resting his hands on it, addressing an unseen audience. Police officers are partially visible in the foreground and background. The scene is outdoors, with a stone building forming the backdrop. The camera captures the speaker in a medium shot, revealing his upper body and the podium.",
+          "error": "",
+          "characters": [
+            "speaker"
+          ],
+          "overlapping_clip_indices": []
+        }
+      ],
+      "characters": [
+        "singing prisoner",
+        "photographers",
+        "speaker"
+      ],
+      "candidate_clips": [
+        2,
+        3,
+        4
+      ]
+    },
+    {
+      "group_index": 171,
+      "group_caption": "Suit man: A man with short grey hair and glasses, wearing a dark suit, white shirt, and tie; Writing inmate: A man with glasses and dark hair, wearing a light blue shirt with a number, writing at a desk. The whole scene transitions between an outdoor wooded area and an indoor office. The visual style is realistic, reminiscent of a drama film.",
+      "clips": [
+        {
+          "clip_index": 1,
+          "caption": "Suit man smiles, looking at a man in a plaid shirt and hat, whose back is mostly to the camera. The background is a dense outdoor wooded area with green foliage. The camera uses close-up shots, first focusing on Suit man as he faces the camera, then cutting to the profile of the man in plaid shirt as he looks off-screen.",
+          "error": "",
+          "characters": [
+            "suit man"
+          ],
+          "overlapping_clip_indices": [
+            3,
+            4
+          ]
+        },
+        {
+          "clip_index": 2,
+          "caption": "Writing inmate is intently focused, writing on papers spread across a wooden desk. A vintage desk lamp illuminates his work, with a classic telephone and blurred bookshelves visible in the dimly lit background. The camera captures a medium close-up shot of the Writing inmate from behind, emphasizing his concentration.",
+          "error": "",
+          "characters": [
+            "writing inmate"
+          ],
+          "overlapping_clip_indices": [
+            3,
+            4
+          ]
+        },
+        {
+          "clip_index": 3,
+          "caption": "The Writing inmate is focused, writing at a desk in a dimly lit office. The camera slowly dollies out from a medium shot of the Writing inmate, who is seen in profile, to reveal the Suit man standing in a doorway behind him. The Suit man observes, holding a pink box. The indoor office features a vintage telephone and papers on the desk.",
+          "error": "",
+          "characters": [
+            "suit man",
+            "writing inmate"
+          ],
+          "overlapping_clip_indices": [
+            1,
+            2,
+            4
+          ]
+        },
+        {
+          "clip_index": 4,
+          "caption": "The Suit man stands, looking down at the Writing inmate and reaching for a paper. The Writing inmate sits at a desk, extending the paper towards him. The scene is an indoor office with warm lighting, featuring a doorway and a coat rack in the background. The camera maintains a medium shot, focusing on the interaction between the two men.",
+          "error": "",
+          "characters": [
+            "suit man",
+            "writing inmate"
+          ],
+          "overlapping_clip_indices": [
+            1,
+            2,
+            3
+          ]
+        }
+      ],
+      "characters": [
+        "suit man",
+        "writing inmate"
+      ],
+      "candidate_clips": [
+        1,
+        2,
+        3,
+        4
+      ]
+    },
+    {
+      "group_index": 175,
+      "group_caption": "Older man: An older Black man with short grey hair, wearing a light blue collared shirt, gesturing from behind a bookshelf; Younger man: A younger white man with short hair, wearing a light blue shirt with a prisoner number tag. The whole scene takes place in a library or a room filled with bookshelves. The visual style is realistic and cinematic, typical of a drama film.",
+      "clips": [
+        {
+          "clip_index": 1,
+          "caption": "The Older man looks towards the camera, smiling and gesturing emphatically with his index finger as he speaks from behind a bookshelf. The Younger man's blurred shoulder is visible in the foreground, facing away from the camera. The scene takes place in a library or room filled with bookshelves. The camera remains static, framing the Older man through the bookshelf.",
+          "error": "",
+          "characters": [
+            "older man",
+            "younger man"
+          ],
+          "overlapping_clip_indices": [
+            2
+          ]
+        },
+        {
+          "clip_index": 2,
+          "caption": "Younger man looks directly towards the camera with a neutral expression, positioned behind a bookshelf filled with books. The Older man is partially visible in the foreground, out of focus, looking down. The camera is positioned behind a bookshelf, looking past the Older man towards the Younger man, capturing the library setting.",
+          "error": "",
+          "characters": [
+            "older man",
+            "younger man"
+          ],
+          "overlapping_clip_indices": [
+            1
+          ]
+        }
+      ],
+      "characters": [
+        "older man",
+        "younger man"
+      ],
+      "candidate_clips": [
+        1,
+        2
+      ]
+    },
+    {
+      "group_index": 200,
+      "group_caption": "older prisoner: An older Black man with grey hair, wearing a light blue uniform shirt with number 3026 and suspenders; younger prisoner: A younger white man with light hair, wearing a light blue uniform shirt with number 379; dark-haired man: A man with dark curly hair, seen from behind, wearing a light blue collared shirt. The scene takes place in a room with bookshelves, likely within a prison or institutional setting. The visual style is realistic live-action cinema, featuring clear imagery and naturalistic lighting.",
+      "clips": [
+        {
+          "clip_index": 1,
+          "caption": "The dark-haired man is seen from behind in the foreground. Behind him, the younger prisoner stands with arms crossed, looking forward intently, while the older prisoner stands to his right, looking off to the left with a serious expression. The scene is set in a room with bookshelves lining the lower walls and barred windows in the background. The camera is static, capturing a medium shot from behind the dark-haired man.",
+          "error": "",
+          "characters": [
+            "older prisoner",
+            "younger prisoner",
+            "dark-haired man"
+          ],
+          "overlapping_clip_indices": []
+        }
+      ],
+      "characters": [
+        "older prisoner",
+        "younger prisoner",
+        "dark-haired man"
+      ],
+      "candidate_clips": [
+        1
+      ]
+    },
+    {
+      "group_index": 208,
+      "group_caption": "numbered man: A young man with dark hair and sideburns, wearing a light blue shirt with the number \"464\" on it; suited man: An older man with short grey hair and glasses, wearing a brown suit jacket and a tie. The scene takes place at night in an outdoor, dimly lit area with overhead lights. The visual style is a realistic drama, featuring naturalistic lighting and close-up shots.",
+      "clips": [
+        {
+          "clip_index": 1,
+          "caption": "The suited man looks intently at the numbered man, who is partially visible on the left, as the camera holds a close-up on the suited man. The video then cuts to a close-up of the numbered man, who looks down, handling a small red packet, with the suited man's back visible on the right. The dimly lit outdoor area at night features overhead lights and a fence in the background.",
+          "error": "",
+          "characters": [
+            "numbered man",
+            "suited man"
+          ],
+          "overlapping_clip_indices": [
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "clip_index": 2,
+          "caption": "suited man faces the camera, looking down intently as he holds a lighter. The camera then shifts to the numbered man, who faces the camera with a somber expression, smoking a cigarette that the suited man's hand has just lit. The scene takes place at night in a dimly lit outdoor area with overhead lights and a fence in the background. The camera uses close-up shots, alternating focus between the two men.",
+          "error": "",
+          "characters": [
+            "numbered man",
+            "suited man"
+          ],
+          "overlapping_clip_indices": [
+            1,
+            3,
+            4
+          ]
+        },
+        {
+          "clip_index": 3,
+          "caption": "The numbered man looks intently at the suited man while lighting a pipe, then exhales smoke. The suited man, with his back to the camera, holds a lighter for him. They stand in a dimly lit outdoor area with overhead lights and a fence in the background. The camera is static, capturing a medium close-up of the numbered man facing the camera.",
+          "error": "",
+          "characters": [
+            "numbered man",
+            "suited man"
+          ],
+          "overlapping_clip_indices": [
+            1,
+            2,
+            4
+          ]
+        },
+        {
+          "clip_index": 4,
+          "caption": "numbered man faces the camera, first looking intently, then casting his gaze downwards with a somber expression. suited man is partially visible from behind, out of focus, facing the numbered man. The scene is an outdoor, dimly lit area at night with overhead lights and a fence in the background. The camera maintains a close-up shot on the numbered man.",
+          "error": "",
+          "characters": [
+            "numbered man",
+            "suited man"
+          ],
+          "overlapping_clip_indices": [
+            1,
+            2,
+            3
+          ]
+        }
+      ],
+      "characters": [
+        "numbered man",
+        "suited man"
+      ],
+      "candidate_clips": [
+        1,
+        2,
+        3,
+        4
+      ]
+    },
+    {
+      "group_index": 209,
+      "group_caption": "young man: A young man with dark hair, wearing a light blue button-up shirt with a patch; older man: An older man in a dark suit jacket and glasses, seen from behind. The scene takes place outdoors at night, under artificial lights, possibly in a secure area. The visual style is a realistic drama, featuring cinematic lighting and a serious tone.",
+      "clips": [
+        {
+          "clip_index": 1,
+          "caption": "young man looks down with a somber expression, then slowly raises his head to look forward seriously. older man stands with his back to the camera, facing the young man. The scene is set outdoors at night, illuminated by distant artificial lights, with a fence visible in the background. The camera remains static in a medium shot, focusing on the young man.",
+          "error": "",
+          "characters": [
+            "young man",
+            "older man"
+          ],
+          "overlapping_clip_indices": []
+        }
+      ],
+      "characters": [
+        "young man",
+        "older man"
+      ],
+      "candidate_clips": [
+        1
+      ]
+    },
+    {
+      "group_index": 225,
+      "group_caption": "young man: A young white man with light brown hair, wearing a light blue shirt with a number tag and dark pants.older man: An older Black man with grey hair, wearing a light blue shirt with suspenders and a number tag.The whole scene takes place outdoors, with two men sitting against a rough stone wall. The visual style is realistic and cinematic, typical of a drama film.",
+      "clips": [
+        {
+          "clip_index": 2,
+          "caption": "The older man sits against a rough stone wall, looking directly at the camera with a serious expression, his hands clasped. The young man sits beside him, looking down and away. The camera then slightly adjusts, showing the older man now looking towards the young man with a concerned expression. The scene is set outdoors against the weathered stone wall, captured in a steady medium shot.",
+          "error": "",
+          "characters": [
+            "young man",
+            "older man"
+          ],
+          "overlapping_clip_indices": [
+            3,
+            4,
+            5
+          ]
+        },
+        {
+          "clip_index": 3,
+          "caption": "young man sits with a somber expression, looking down and to the left; older man sits beside him, looking to the right. They are against a rough stone wall with some moss. The camera is static, capturing them in a medium shot.",
+          "error": "",
+          "characters": [
+            "young man",
+            "older man"
+          ],
+          "overlapping_clip_indices": [
+            2,
+            4,
+            5
+          ]
+        },
+        {
+          "clip_index": 4,
+          "caption": "The young man sits, looking down with a somber expression, his hands clasped. The older man sits beside him, looking to the right in profile, with a contemplative expression. They are both against a rough stone wall with some moss. The camera captures them in a static medium shot, with the young man slightly facing the camera.",
+          "error": "",
+          "characters": [
+            "young man",
+            "older man"
+          ],
+          "overlapping_clip_indices": [
+            2,
+            3,
+            5
+          ]
+        },
+        {
+          "clip_index": 5,
+          "caption": "The young man sits with a somber expression, looking down, his hands clasped. The older man sits beside him, also looking down with a pensive expression. Both are against a rough stone wall. The camera captures them in a medium shot, with the young man facing slightly towards the camera.",
+          "error": "",
+          "characters": [
+            "young man",
+            "older man"
+          ],
+          "overlapping_clip_indices": [
+            2,
+            3,
+            4
+          ]
+        }
+      ],
+      "characters": [
+        "young man",
+        "older man"
+      ],
+      "candidate_clips": [
+        2,
+        3,
+        4,
+        5
+      ]
+    },
+    {
+      "group_index": 228,
+      "group_caption": "gray-haired man: An older Black man with graying hair, wearing a light blue shirt and suspenders, against a stone wall; young man: A younger white man with dark hair, wearing a light blue shirt, against a stone wall. The scene features two men in close-up, seemingly in conversation or contemplation, against a textured stone wall. The visual style is realistic and cinematic, with natural lighting and a focus on character expressions.",
+      "clips": [
+        {
+          "clip_index": 1,
+          "caption": "gray-haired man looks directly at the camera with a serious, contemplative expression, then slowly turns his head slightly to the right as if listening or speaking. He is positioned against a textured stone wall. The camera maintains a static close-up shot on him.",
+          "error": "",
+          "characters": [
+            "gray-haired man"
+          ],
+          "overlapping_clip_indices": [
+            2
+          ]
+        },
+        {
+          "clip_index": 2,
+          "caption": "The gray-haired man, facing the camera, closes his eyes with a pained expression, leaning against a textured stone wall. The young man, also facing the camera, looks down with a serious and concerned gaze. The camera cuts between close-up shots of each man, highlighting their individual reactions against the rough stone background.",
+          "error": "",
+          "characters": [
+            "gray-haired man",
+            "young man"
+          ],
+          "overlapping_clip_indices": [
+            1
+          ]
+        }
+      ],
+      "characters": [
+        "gray-haired man",
+        "young man"
+      ],
+      "candidate_clips": [
+        1,
+        2
+      ]
+    },
+    {
+      "group_index": 231,
+      "group_caption": "speaking man: A white man with dark hair and blue eyes, wearing a light blue denim shirt, appears to be speaking.older man: An older Black man with short grey hair, wearing a light blue shirt and suspenders, looking to the side.The scene takes place outdoors against a rough stone wall. The visual style is realistic live-action cinema, featuring natural lighting and close-up shots.",
+      "clips": [
+        {
+          "clip_index": 2,
+          "caption": "The speaking man looks slightly off-camera with a subtle smile, appearing to speak. The older man looks intently to the side with a serious expression. Both are captured in close-up shots against a rough stone wall outdoors. The camera alternates between the two men, highlighting their individual reactions.",
+          "error": "",
+          "characters": [
+            "speaking man",
+            "older man"
+          ],
+          "overlapping_clip_indices": []
+        }
+      ],
+      "characters": [
+        "speaking man",
+        "older man"
+      ],
+      "candidate_clips": [
+        2
+      ]
+    },
+    {
+      "group_index": 234,
+      "group_caption": "Man in blue shirt: A middle-aged white man with dark, slicked-back hair, wearing a light blue collared shirt; Older man: An older Black man with short, grey hair, wearing a light blue shirt and suspenders. The scene features two men conversing against a textured stone wall. The visual style is realistic cinema, featuring naturalistic lighting and clear imagery.",
+      "clips": [
+        {
+          "clip_index": 4,
+          "caption": "Older man looks down with a pensive and slightly sad expression, his eyes cast downwards. He is positioned against a textured stone wall. The camera is in a static close-up shot, focusing on his face and upper chest.",
+          "error": "",
+          "characters": [
+            "older man"
+          ],
+          "overlapping_clip_indices": [
+            5
+          ]
+        },
+        {
+          "clip_index": 5,
+          "caption": "Older man looks down with a somber expression, his mouth slightly open, as if speaking. He is positioned against a textured stone wall. The camera holds a static close-up shot on the Older man.",
+          "error": "",
+          "characters": [
+            "older man"
+          ],
+          "overlapping_clip_indices": [
+            4
+          ]
+        }
+      ],
+      "characters": [
+        "man in blue shirt",
+        "older man"
+      ],
+      "candidate_clips": [
+        4,
+        5
+      ]
+    },
+    {
+      "group_index": 235,
+      "group_caption": "older man: An older Black man with graying hair, wearing a light blue shirt and suspenders, often with a pensive expression.younger man: A middle-aged white man with dark, slicked-back hair, wearing a light blue shirt, often seen speaking.The whole scene features two men in close-up, seemingly engaged in a conversation against a stone wall background. The visual style is realistic and cinematic, with natural lighting and close-up shots.",
+      "clips": [
+        {
+          "clip_index": 1,
+          "caption": "The `older man` looks down with a pensive expression in a close-up shot. The camera then cuts to the `younger man`, who is seen listening intently before speaking. Both subjects are framed against a textured stone wall background. The camera alternates between close-up shots of each man, capturing their expressions during the conversation.",
+          "error": "",
+          "characters": [
+            "older man",
+            "younger man"
+          ],
+          "overlapping_clip_indices": []
+        }
+      ],
+      "characters": [
+        "older man",
+        "younger man"
+      ],
+      "candidate_clips": [
+        1
+      ]
+    },
+    {
+      "group_index": 247,
+      "group_caption": "suited man: An older man with grey hair, wearing a dark suit, seen from behind as he interacts with a safe. man with glasses: A man with short hair and glasses, wearing a denim jacket, sitting at a desk. The video primarily features two men in an office or study setting, engaged in distinct activities. The visual style is a realistic drama, featuring naturalistic lighting and a serious, suspenseful tone.",
+      "clips": [
+        {
+          "clip_index": 2,
+          "caption": "man with glasses sits at a desk, intently looking down at a device he holds in a dimly lit room filled with papers and a lamp. The camera is in a medium shot, facing him. The suited man is then seen from behind, interacting with a safe built into a plain wall. The camera is static, capturing him in a medium shot.",
+          "error": "",
+          "characters": [
+            "suited man",
+            "man with glasses"
+          ],
+          "overlapping_clip_indices": []
+        }
+      ],
+      "characters": [
+        "suited man",
+        "man with glasses"
+      ],
+      "candidate_clips": [
+        2
+      ]
+    },
+    {
+      "group_index": 279,
+      "group_caption": "dead man: A man in a grey suit and glasses is slumped dead in a chair, with blood on his face. office desk: A large wooden desk is cluttered with papers, a brass lamp, a telephone, and bullet casings. The whole scene takes place in a dimly lit office room with a large window. The visual style is realistic and dramatic, typical of a crime or thriller film.",
+      "clips": [
+        {
+          "clip_index": 1,
+          "caption": "The office desk, cluttered with papers and a brass lamp, occupies the foreground. Behind it, the dead man is slumped motionless in his chair, head tilted back, facing slightly away from the camera. The dimly lit office room features a large window with blinds and dark curtains behind him, revealing trees outside. The camera slowly zooms in on the scene from a medium shot.",
+          "error": "",
+          "characters": [
+            "dead man",
+            "office desk"
+          ],
+          "overlapping_clip_indices": []
+        }
+      ],
+      "characters": [
+        "dead man",
+        "office desk"
+      ],
+      "candidate_clips": [
+        1
+      ]
+    },
+    {
+      "group_index": 283,
+      "group_caption": "older prisoner: An older Black man wearing a light blue shirt with suspenders and a prisoner number tag.committee man: A man with dark hair, wearing a dark suit and tie, seated at a table.police officer: A young police officer in a dark uniform and cap, standing by a door.The scene takes place in a formal room with large windows, possibly an institutional hearing. The visual style is realistic and dramatic, featuring natural lighting and a serious tone.",
+      "clips": [
+        {
+          "clip_index": 1,
+          "caption": "The camera cuts from a shot behind a subject, observing several committee members, including a committee man, seated at a table reviewing papers in a formal room with large windows. The older prisoner then stands facing the camera with a serious, somber expression in a plainer room, while the police officer stands by a dark door, looking away.",
+          "error": "",
+          "characters": [
+            "older prisoner",
+            "committee man",
+            "police officer"
+          ],
+          "overlapping_clip_indices": [
+            2
+          ]
+        },
+        {
+          "clip_index": 2,
+          "caption": "older prisoner stands facing the camera with a serious expression, in a room with a plain wall and a dark wooden door. The camera then cuts to committee man, who is seated and appears to be speaking or reacting with his eyes closed, facing the camera in a close-up. Large windows with blinds are visible behind him. The camera alternates between these two subjects.",
+          "error": "",
+          "characters": [
+            "older prisoner",
+            "committee man"
+          ],
+          "overlapping_clip_indices": [
+            1
+          ]
+        }
+      ],
+      "characters": [
+        "older prisoner",
+        "committee man",
+        "police officer"
+      ],
+      "candidate_clips": [
+        1,
+        2
+      ]
+    },
+    {
+      "group_index": 300,
+      "group_caption": "older man: An older Black man wearing a brown fedora, a white shirt, and a striped tie. The scene takes place outdoors in a natural setting with trees and a cloudy sky. The visual style is realistic and cinematic, featuring natural lighting and a slightly muted color palette.",
+      "clips": [
+        {
+          "clip_index": 1,
+          "caption": "The older man walks, his hand gently touching a stone wall, a jacket draped over his arm. He then looks down with a somber expression. The scene is set outdoors amidst lush trees and a bright sky. The camera transitions from a medium shot of his lower body to a close-up on his face.",
+          "error": "",
+          "characters": [
+            "older man"
+          ],
+          "overlapping_clip_indices": [
+            3,
+            4,
+            5
+          ]
+        },
+        {
+          "clip_index": 3,
+          "caption": "The older man stands outdoors, looking down and to his right with a somber expression, holding a dark item in his hand. Tree branches with green leaves are visible against a cloudy sky in the background. The camera is static, capturing him in a medium close-up shot, with him facing slightly away from the camera.",
+          "error": "",
+          "characters": [
+            "older man"
+          ],
+          "overlapping_clip_indices": [
+            1,
+            4,
+            5
+          ]
+        },
+        {
+          "clip_index": 4,
+          "caption": "The older man looks directly at the camera with a concerned expression, leaning slightly forward. The scene is set outdoors under a cloudy sky, with green trees visible in the background. The camera maintains a medium shot on the older man, with a very subtle push-in.",
+          "error": "",
+          "characters": [
+            "older man"
+          ],
+          "overlapping_clip_indices": [
+            1,
+            3,
+            5
+          ]
+        },
+        {
+          "clip_index": 5,
+          "caption": "The older man is bending forward, looking intently downwards with a serious expression, holding a dark jacket over his arm. The natural setting features dense green trees and a light, cloudy sky. The camera is positioned in a medium shot, slightly below him, with the older man facing the camera and looking downwards.",
+          "error": "",
+          "characters": [
+            "older man"
+          ],
+          "overlapping_clip_indices": [
+            1,
+            3,
+            4
+          ]
+        }
+      ],
+      "characters": [
+        "older man"
+      ],
+      "candidate_clips": [
+        1,
+        3,
+        4,
+        5
+      ]
+    },
+    {
+      "group_index": 307,
+      "group_caption": "Older man: An older Black man with graying hair, wearing a white shirt and a loosened dark tie, reading a paper; Brown hat: A brown fedora-style hat rests on a stone wall in the background. The whole scene takes place outdoors, with a man sitting by a stone wall in a natural setting. The visual style is realistic and cinematic, featuring natural lighting and a contemplative mood.",
+      "clips": [
+        {
+          "clip_index": 1,
+          "caption": "Older man looks down at the paper he is reading, his expression appearing contemplative and slightly pained. The Brown hat rests on the stone wall directly behind him. The background reveals a natural outdoor setting with green foliage and distant trees. The camera remains static, providing a medium close-up shot focused on the Older man, who is facing the camera while looking down.",
+          "error": "",
+          "characters": [
+            "older man",
+            "brown hat"
+          ],
+          "overlapping_clip_indices": [
+            2,
+            3
+          ]
+        },
+        {
+          "clip_index": 2,
+          "caption": "The Older man looks down intently, reading a paper, with a contemplative expression. The Brown hat rests on a stone wall behind him. The background features lush green foliage and open ground, indicating an outdoor natural setting. The camera holds a static medium close-up shot on the Older man, who is facing slightly to the left of the camera.",
+          "error": "",
+          "characters": [
+            "older man",
+            "brown hat"
+          ],
+          "overlapping_clip_indices": [
+            1,
+            3
+          ]
+        },
+        {
+          "clip_index": 3,
+          "caption": "Older man slowly lifts his head from looking down, his expression shifting to a contemplative gaze forward. A Brown hat rests on the stone wall behind him. The background features a rustic stone wall with blurred greenery beyond. The camera remains static in a medium close-up, focusing on the Older man's profile.",
+          "error": "",
+          "characters": [
+            "older man",
+            "brown hat"
+          ],
+          "overlapping_clip_indices": [
+            1,
+            2
+          ]
+        }
+      ],
+      "characters": [
+        "older man",
+        "brown hat"
+      ],
+      "candidate_clips": [
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "group_index": 308,
+      "group_caption": "older man: An older Black man with graying hair, wearing a white collared shirt, looking thoughtfully to the side. The scene features an older man sitting outdoors near a stone wall and a field of tall grass. The visual style is realistic and cinematic, featuring natural lighting and a slightly muted color palette.",
+      "clips": [
+        {
+          "clip_index": 1,
+          "caption": "The older man looks thoughtfully to the side, his gaze directed off-frame. He is seated outdoors, with a rustic stone wall directly behind him. Beyond the wall, a blurred field of greenery suggests tall grass or distant trees. The camera holds a steady medium close-up shot, capturing his profile as he looks away from the lens.",
+          "error": "",
+          "characters": [
+            "older man"
+          ],
+          "overlapping_clip_indices": []
+        },
+        {
+          "clip_index": 3,
+          "caption": "The scene features a field of tall grass and weeds in the foreground, with a dark, blurry forest visible in the background. The camera remains static, capturing the natural outdoor setting.",
+          "error": "",
+          "characters": [],
+          "overlapping_clip_indices": []
+        }
+      ],
+      "characters": [
+        "older man"
+      ],
+      "candidate_clips": [
+        1
+      ]
+    }
+  ]
+}

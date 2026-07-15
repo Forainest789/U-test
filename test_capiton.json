@@ -1,0 +1,33 @@
+{
+  "characters": [
+    "man in cap",
+    "smoking man"
+  ],
+  "chunks": [
+    {
+      "start": 0.0,
+      "end": 3.375,
+      "character_list": [
+        "man in cap"
+      ],
+      "content": "man in cap stands in an outdoor prison yard, wearing a grey cap, dark jacket, and striped shirt. The camera keeps man in cap clearly visible in a steady medium shot."
+    },
+    {
+      "start": 3.375,
+      "end": 6.75,
+      "character_list": [
+        "man in cap"
+      ],
+      "content": "man in cap walks through the outdoor prison yard and turns slightly while remaining identifiable. His grey cap, face, and dark jacket stay visible as the camera follows him."
+    },
+    {
+      "start": 6.75,
+      "end": 10.125,
+      "character_list": [
+        "man in cap",
+        "smoking man"
+      ],
+      "content": "man in cap reappears in the foreground while smoking man appears for the first time nearby, sitting on a bench and holding a cigarette. man in cap remains recognizable from earlier shots, and smoking man is clearly visible as a distinct new character in the same outdoor prison yard."
+    }
+  ]
+}

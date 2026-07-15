@@ -1,0 +1,71 @@
+# Local model/data roots
+/model/
+/models/
+/pretrained/
+/pretrained_models/
+/checkpoints/
+/ckpt/
+/ckpts/
+/weights/
+/data/
+/dataset/
+/datasets/
+/Dataset/
+# Keep the small public sample dataset used by README examples.
+!/sample/
+!/sample/**
+
+# Generated training, inference, benchmark, and validation artifacts
+/experiments/
+/outputs/
+/outputs_*/
+/inference_outputs/
+/logs/
+/lightning_logs/
+/wandb/
+/runs/
+/tmp/
+/tmp*/
+/tmp_*/
+/multi_agent_validation_*/
+
+# Local benchmark repositories cloned for evaluation
+/bench/
+
+# Local human-eval frontend artifacts
+/interface/.venv_streamlit/
+/interface/human_quality_eval_set_*.json
+/interface/pairwise_eval_results*/
+/interface/pairwise_eval_plots/
+/interface/pairwise_slotmem_assets*/
+
+# Python caches and local environments
+__pycache__/
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.env
+.venv/
+.venv_streamlit/
+env/
+venv/
+
+# Model/checkpoint/cache artifacts
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.bin
+*.pkl
+*.npy
+*.npz
+
+# Generated media and logs
+*.mp4
+!/sample/**/*.mp4
+*.concat.txt
+*.log
+
+# OS/editor noise
+.DS_Store

@@ -1,0 +1,93 @@
+{
+  "global_prompt": "A long-haired man and a group of people on a vast desert road.",
+  "chunks": [
+    {
+      "start": 0.0,
+      "end": 3.375,
+      "character_list": [
+        "long-haired man"
+      ],
+      "content": "The long-haired man stands facing the camera with a neutral expression, his mouth slightly open, looking forward. He is positioned on a long, empty desert road with distant rock formations under a clear sky. The camera is static, capturing him in a medium shot."
+    },
+    {
+      "start": 3.375,
+      "end": 6.75,
+      "character_list": [
+        "long-haired man"
+      ],
+      "content": "The long-haired man stands on a desert road, looking forward with a weary expression. The scene features a wide-open, empty desert road stretching into the distance under a clear blue sky, with low hills visible on the horizon. The camera captures him in a medium close-up, facing directly towards the viewer."
+    },
+    {
+      "start": 6.75,
+      "end": 10.125,
+      "character_list": [
+        "long-haired man",
+        "group of people"
+      ],
+      "content": "A group of people walks towards the camera on a long, empty desert road, with distant rock formations under a clear sky. The long-haired man stands in the foreground, facing away from the camera, looking towards the approaching group. The camera is positioned behind the long-haired man, capturing the scene from his perspective."
+    },
+    {
+      "start": 10.125,
+      "end": 13.5,
+      "character_list": [
+        "long-haired man",
+        "group of people"
+      ],
+      "content": "The long-haired man walks away from the camera down a long, empty desert road. Further ahead, a group of people walks towards the camera. The scene features distant rock formations under a clear sky. The camera is positioned behind the long-haired man, capturing a wide view of the expansive desert landscape."
+    },
+    {
+      "start": 13.5,
+      "end": 16.875,
+      "character_list": [
+        "long-haired man",
+        "group of people"
+      ],
+      "content": "The long-haired man walks away from the camera down a long, empty desert road. Further ahead, a group of people walks towards the camera. The scene features distant rock formations under a clear sky. The camera is positioned behind the long-haired man, capturing a wide view of the expansive desert landscape."
+    },
+    {
+      "start": 16.875,
+      "end": 20.25,
+      "character_list": [
+        "long-haired man",
+        "group of people"
+      ],
+      "content": "The long-haired man walks away from the camera down a long, empty desert road. Further ahead, a group of people walks towards the camera. The scene features distant rock formations under a clear sky. The camera is positioned behind the long-haired man, capturing a wide view of the expansive desert landscape."
+    },
+    {
+      "start": 20.25,
+      "end": 20.25,
+      "character_list": [
+        "long-haired man",
+        "group of people"
+      ],
+      "content": "The long-haired man walks away from the camera down a long, empty desert road. Further ahead, a group of people walks towards the camera. The scene features distant rock formations under a clear sky. The camera is positioned behind the long-haired man, capturing a wide view of the expansive desert landscape."
+    }
+  ],
+  "characters": {
+    "long-haired man": [
+      "The long-haired man stands facing the camera with a neutral expression, his mouth slightly open, looking forward. He is positioned on a long, empty desert road with distant rock formations under a clear sky. The camera is static, capturing him in a medium shot.",
+      "The long-haired man stands on a desert road, looking forward with a weary expression. The scene features a wide-open, empty desert road stretching into the distance under a clear blue sky, with low hills visible on the horizon. The camera captures him in a medium close-up, facing directly towards the viewer.",
+      "A group of people walks towards the camera on a long, empty desert road, with distant rock formations under a clear sky. The long-haired man stands in the foreground, facing away from the camera, looking towards the approaching group. The camera is positioned behind the long-haired man, capturing the scene from his perspective.",
+      "The long-haired man walks away from the camera down a long, empty desert road. Further ahead, a group of people walks towards the camera. The scene features distant rock formations under a clear sky. The camera is positioned behind the long-haired man, capturing a wide view of the expansive desert landscape.",
+      "The long-haired man walks away from the camera down a long, empty desert road. Further ahead, a group of people walks towards the camera. The scene features distant rock formations under a clear sky. The camera is positioned behind the long-haired man, capturing a wide view of the expansive desert landscape.",
+      "The long-haired man walks away from the camera down a long, empty desert road. Further ahead, a group of people walks towards the camera. The scene features distant rock formations under a clear sky. The camera is positioned behind the long-haired man, capturing a wide view of the expansive desert landscape.",
+      "The long-haired man walks away from the camera down a long, empty desert road. Further ahead, a group of people walks towards the camera. The scene features distant rock formations under a clear sky. The camera is positioned behind the long-haired man, capturing a wide view of the expansive desert landscape."
+    ],
+    "group of people": [
+      "",
+      "",
+      "A group of people walks towards the camera on a long, empty desert road, with distant rock formations under a clear sky. The long-haired man stands in the foreground, facing away from the camera, looking towards the approaching group. The camera is positioned behind the long-haired man, capturing the scene from his perspective.",
+      "The long-haired man walks away from the camera down a long, empty desert road. Further ahead, a group of people walks towards the camera. The scene features distant rock formations under a clear sky. The camera is positioned behind the long-haired man, capturing a wide view of the expansive desert landscape.",
+      "The long-haired man walks away from the camera down a long, empty desert road. Further ahead, a group of people walks towards the camera. The scene features distant rock formations under a clear sky. The camera is positioned behind the long-haired man, capturing a wide view of the expansive desert landscape.",
+      "The long-haired man walks away from the camera down a long, empty desert road. Further ahead, a group of people walks towards the camera. The scene features distant rock formations under a clear sky. The camera is positioned behind the long-haired man, capturing a wide view of the expansive desert landscape.",
+      "The long-haired man walks away from the camera down a long, empty desert road. Further ahead, a group of people walks towards the camera. The scene features distant rock formations under a clear sky. The camera is positioned behind the long-haired man, capturing a wide view of the expansive desert landscape."
+    ]
+  },
+  "original_caption": [
+    "The long-haired man stands facing the camera with a neutral expression, his mouth slightly open, looking forward. He is positioned on a long, empty desert road with distant rock formations under a clear sky. The camera is static, capturing him in a medium shot.",
+    "The long-haired man stands on a desert road, looking forward with a weary expression. The scene features a wide-open, empty desert road stretching into the distance under a clear blue sky, with low hills visible on the horizon. The camera captures him in a medium close-up, facing directly towards the viewer.",
+    "A group of people walks towards the camera on a long, empty desert road, with distant rock formations under a clear sky. The long-haired man stands in the foreground, facing away from the camera, looking towards the approaching group. The camera is positioned behind the long-haired man, capturing the scene from his perspective.",
+    "The long-haired man walks away from the camera down a long, empty desert road. Further ahead, a group of people walks towards the camera. The scene features distant rock formations under a clear sky. The camera is positioned behind the long-haired man, capturing a wide view of the expansive desert landscape."
+  ],
+  "removed_caption_before_begin_idx": []
+}

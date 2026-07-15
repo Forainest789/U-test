@@ -1,0 +1,9 @@
+lightning
+deepspeed
+openai
+opencv-python
+matplotlib
+scikit-image
+tensorboard
+PyYAML
+flash_attn==2.8.0.post2

@@ -1,0 +1,9 @@
+SlotMem
+Copyright 2026 SlotMem Authors
+
+This repository includes SlotMem training, inference, data curation, and
+evaluation utilities.
+
+The `diffsynth/` package vendors and adapts runtime components from
+DiffSynth-Studio and Wan model support code. These runtime components are
+distributed under the Apache License, Version 2.0.

@@ -1,0 +1,25 @@
+video_id,group_index,candidate_clips,target_clip,memory_clip,update_memory_clip,shared_characters
+Top001,16,1|2|3,1,2,3,bald man;man in cap
+Top001,16,1|2|4,1,2,4,bald man;man in cap
+Top001,16,1|2|3,1,3,2,bald man;man in cap
+Top001,16,1|3|4,1,3,4,bald man;man in cap
+Top001,16,1|2|4,1,4,2,bald man;man in cap
+Top001,16,1|3|4,1,4,3,bald man;man in cap
+Top001,16,1|2|3,2,1,3,bald man;man in cap
+Top001,16,1|2|4,2,1,4,bald man;man in cap
+Top001,16,1|2|3,2,3,1,bald man;man in cap
+Top001,16,2|3|4,2,3,4,bald man;man in cap;smoking man
+Top001,16,1|2|4,2,4,1,bald man;man in cap
+Top001,16,2|3|4,2,4,3,bald man;man in cap;smoking man
+Top001,16,1|2|3,3,1,2,bald man;man in cap
+Top001,16,1|3|4,3,1,4,bald man;man in cap
+Top001,16,1|2|3,3,2,1,bald man;man in cap
+Top001,16,2|3|4,3,2,4,bald man;man in cap;smoking man
+Top001,16,1|3|4,3,4,1,bald man;man in cap
+Top001,16,2|3|4,3,4,2,bald man;man in cap;smoking man
+Top001,16,1|2|4,4,1,2,bald man;man in cap
+Top001,16,1|3|4,4,1,3,bald man;man in cap
+Top001,16,1|2|4,4,2,1,bald man;man in cap
+Top001,16,2|3|4,4,2,3,bald man;man in cap;smoking man
+Top001,16,1|3|4,4,3,1,bald man;man in cap
+Top001,16,2|3|4,4,3,2,bald man;man in cap;smoking man
