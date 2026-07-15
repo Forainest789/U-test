@@ -30,7 +30,8 @@
 /multi_agent_validation_*/
 
 # Local benchmark repositories cloned for evaluation
-/bench/
+/bench/*
+!/bench/README.md
 
 # Local human-eval frontend artifacts
 /interface/.venv_streamlit/

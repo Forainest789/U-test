@@ -28,7 +28,7 @@ pip install -e .
 pip install -r requirements_slotmem.txt
 ```
 
-Optional packages for data curation, Streamlit interfaces, and local benchmark helpers are listed in `requirements_optional.txt`.
+Optional packages for data curation and Streamlit interfaces are listed in `requirements_optional.txt`.
 
 ## Checkpoints
 
@@ -109,6 +109,7 @@ Use `test_slotmem_stage2.sh` with the corresponding stage-2 checkpoints for the 
 ## Benchmarks
 
 Benchmark helpers operate on already generated SlotMem inference output folders.
+Install each external benchmark by following its original GitHub repository. See `bench/README.md` for the expected checkout layout.
 
 ```bash
 OPENAI_API_KEY=... \
@@ -116,7 +117,7 @@ NARRASTREAM_API_BASE_URL=https://api.openai.com/v1 \
 bash run_slotmem_benchmarks_api.sh /path/to/inference_output
 ```
 
-For the full helper, provide external benchmark checkouts and their Python environments explicitly:
+For the full helper, provide the benchmark checkouts and their Python environments explicitly:
 
 ```bash
 mkdir -p bench
