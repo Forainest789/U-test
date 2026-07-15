@@ -17,8 +17,6 @@ Core launchers:
 | `test_slotmem_stage1.sh` | stage-1 inference |
 | `test_slotmem_stage2.sh` | stage-2 inference |
 
-The repository vendors the required DiffSynth/Wan2.2 runtime under `diffsynth/`. The installable package name is `slotmem`; the runtime import namespace remains `diffsynth` for compatibility with the upstream codebase.
-
 ## Setup
 
 ```bash
@@ -32,22 +30,15 @@ pip install -r requirements_slotmem.txt
 
 Optional packages for data curation, Streamlit interfaces, and local benchmark helpers are listed in `requirements_optional.txt`.
 
-The launchers default to `/models/Wan2.2-I2V-A14B` for the Wan2.2 I2V base model. Override `CKPT_DIR` if your model is stored elsewhere.
+## Checkpoints
 
-SlotMem checkpoints are available at:
+Download SlotMem checkpoints from Hugging Face:
 
-```text
-https://huggingface.co/YilaiLiu-HKU/SlotMem/tree/main/ckpt
+```bash
+huggingface-cli download YilaiLiu-HKU/SlotMem --local-dir . --include "ckpt/*"
 ```
 
-By default, the shell scripts expect SlotMem weights under:
-
-```text
-ckpt/stage1/*.pt
-ckpt/stage2/*.pt
-```
-
-Checkpoint files are not committed to Git.
+Set `CKPT_DIR` to your local Wan2.2 I2V base model directory when running training or inference.
 
 ## Data
 
