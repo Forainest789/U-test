@@ -1,6 +1,6 @@
 # SlotMem for Wan2.2 I2V
 
-Official code for SlotMem, a two-stage slot-memory pipeline for long video generation with Wan2.2 I2V.
+Official code for SlotMem, a character-addressable internal memory framework that stores recurring characters as compact role-wise slots for multi-character narrative long video generation.
 
 <p align="center">
   <img src="assets/jigsaw2.png" alt="SlotMem method overview" width="95%">
