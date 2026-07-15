@@ -1,5 +1,4 @@
-# Optional packages for data curation, benchmark helpers, and Streamlit interfaces.
+# Optional packages for data curation and Streamlit interfaces.
 # Core SlotMem training/inference dependencies are in requirements_slotmem.txt.
 tensorflow
 streamlit
-vllm
