@@ -32,6 +32,7 @@
 # Local benchmark repositories cloned for evaluation
 /bench/*
 !/bench/README.md
+!/bench/*.sh
 
 # Local human-eval frontend artifacts
 /interface/.venv_streamlit/
