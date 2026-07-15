@@ -114,7 +114,7 @@ Install each external benchmark by following its original GitHub repository. See
 ```bash
 OPENAI_API_KEY=... \
 NARRASTREAM_API_BASE_URL=https://api.openai.com/v1 \
-bash run_slotmem_benchmarks_api.sh /path/to/inference_output
+bash bench/run_slotmem_benchmarks_api.sh /path/to/inference_output
 ```
 
 For the full helper, provide the benchmark checkouts and their Python environments explicitly:
@@ -130,7 +130,7 @@ NARRASTREAM_API_PYTHON=/path/to/narrastream-api/python \
 QWEN35_PYTHON=/path/to/qwen35/python \
 OPENAI_COMPAT_API_KEY=... \
 OPENAI_COMPAT_BASE_URL=https://api.openai.com/v1 \
-bash run_slotmem_benchmarks_gpt41_qwen35.sh /path/to/inference_output
+bash bench/run_slotmem_benchmarks_gpt41_qwen35.sh /path/to/inference_output
 ```
 
 ViStoryBench reference images are not auto-collected. Prepare character reference images manually before enabling that benchmark.
