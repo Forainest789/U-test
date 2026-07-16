@@ -110,6 +110,35 @@ Use `test_slotmem_stage2.sh` with the corresponding stage-2 checkpoints for the 
 
 We provide wrappers for evaluating generated SlotMem videos with [VBench](https://github.com/Vchitect/VBench), [NarraStream-Bench](https://github.com/Eddie0521/NarraStream-Bench), and [ViStoryBench](https://github.com/ViStoryBench/vistorybench). Thanks to these projects for their contributions to the community.
 
+Main quantitative results from the paper:
+
+| Benchmark | Metric ↑ | Wan2.2-I2V | +StoryDiff. | +StoryMem | +IAMFlow | +SlotMem |
+|---|---|---:|---:|---:|---:|---:|
+| VBench | Background Consistency | 0.8580 | **0.8950** | 0.8659 | 0.8929 | 0.8832 |
+| VBench | Motion Smoothness | 0.9850 | 0.9805 | 0.9849 | 0.9908 | **0.9912** |
+| VBench | Dynamic Degree | 0.7826 | 0.8696 | **0.9130** | 0.3913 | 0.8696 |
+| VBench | Aesthetic Quality | 0.5688 | **0.6091** | 0.5260 | 0.5628 | 0.5651 |
+| VBench | Imaging Quality | 0.6154 | 0.6620 | 0.5618 | **0.7119** | 0.5963 |
+| VBench | Human Anatomy | 0.9381 | 0.9440 | 0.8892 | 0.9062 | **0.9480** |
+| ViStoryBench | Style Similarity | 0.7279 | 0.8123 | 0.8040 | 0.8649 | **0.8819** |
+| ViStoryBench | Character Similarity | 0.7701 | 0.8098 | 0.7592 | 0.8446 | **0.8603** |
+| ViStoryBench | Prompt Alignment | 0.8299 | 0.7627 | 0.8273 | 0.7192 | **0.8733** |
+| ViStoryBench | Character Matching | 0.9877 | 0.9879 | 0.9789 | 0.9859 | **0.9957** |
+| ViStoryBench | Inception Score | 5.0985 | **6.6777** | 4.7509 | 4.8609 | 6.0769 |
+| ViStoryBench | Aesthetic Score | 4.6121 | **5.3475** | 4.3363 | 4.7729 | 4.5278 |
+| ViStoryBench | Copy-Paste Complement | 0.4789 | 0.4689 | 0.5004 | 0.4692 | **0.5631** |
+| NarraStream-Bench | Subject Consistency | 0.8427 | 0.6927 | 0.7181 | 0.8524 | **0.8771** |
+| NarraStream-Bench | Background Consistency | 0.8135 | 0.8146 | 0.8339 | **0.8485** | 0.8444 |
+| NarraStream-Bench | Motion Smoothness | 0.3442 | 0.3186 | 0.3360 | 0.4681 | **0.5166** |
+| NarraStream-Bench | Temporal Flickering | 0.7523 | 0.6204 | 0.6933 | **0.8614** | 0.8181 |
+| NarraStream-Bench | Video Temporal Stability Score | 0.5859 | 0.4133 | 0.6272 | **0.7527** | 0.6836 |
+| NarraStream-Bench | Boundary Smoothness | 0.3102 | 0.1778 | 0.5231 | 0.4368 | **0.7529** |
+| NarraStream-Bench | Conditional Adjacent | 0.3632 | 0.3264 | 0.4556 | **0.6131** | 0.6126 |
+| NarraStream-Bench | Conditional Long-range | 0.7239 | 0.5880 | 0.6165 | 0.7313 | **0.8363** |
+| NarraStream-Bench | Dynamic Trajectory | 0.4550 | 0.4935 | 0.5235 | **0.5533** | 0.4723 |
+| NarraStream-Bench | Entity Grounding | 0.6633 | 0.5675 | 0.6648 | 0.6029 | **0.6735** |
+| NarraStream-Bench | VLM Score | 0.4708 | 0.2817 | 0.4735 | 0.4607 | **0.5384** |
+
 ```bash
 OPENAI_API_KEY=... \
 NARRASTREAM_API_BASE_URL=https://api.openai.com/v1 \
@@ -120,7 +149,11 @@ Detailed benchmark usage, repository checkouts, and environment setup are provid
 
 ## Data Curation
 
-Data curation uses TransNetV2 for shot detection. See [`data_curation/README.md`](data_curation/README.md) for the required checkout, weights layout, and generated data format.
+<p align="center">
+  <img src="assets/data_curation.png" alt="SlotMem data curation pipeline" width="95%">
+</p>
+
+See [`data_curation/README.md`](data_curation/README.md) for the full pipeline and generated data format.
 
 ## Acknowledgements
 
