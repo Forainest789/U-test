@@ -32,7 +32,7 @@ Optional packages for data curation and Streamlit interfaces are listed in [`req
 
 ## Checkpoints
 
-Because SlotMem is sensitive to the scale and distribution of the training data, we strongly recommend training SlotMem checkpoints on your own target data before running final inference. The released checkpoints are provided as reference weights for reproducing the pipeline and checking the expected checkpoint layout.
+Due to limited training data scaling, we strongly recommend training SlotMem checkpoints on your own target data before running final inference.
 
 Download SlotMem checkpoints from Hugging Face:
 
