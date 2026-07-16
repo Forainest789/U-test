@@ -32,6 +32,8 @@ Optional packages for data curation and Streamlit interfaces are listed in [`req
 
 ## Checkpoints
 
+Because SlotMem is sensitive to the scale and distribution of the training data, we strongly recommend training SlotMem checkpoints on your own target data before running final inference. The released checkpoints are provided as reference weights for reproducing the pipeline and checking the expected checkpoint layout.
+
 Download SlotMem checkpoints from Hugging Face:
 
 ```bash
@@ -110,7 +112,7 @@ Use `test_slotmem_stage2.sh` with the corresponding stage-2 checkpoints for the 
 
 We provide wrappers for evaluating generated SlotMem videos with [VBench](https://github.com/Vchitect/VBench), [NarraStream-Bench](https://github.com/Eddie0521/NarraStream-Bench), and [ViStoryBench](https://github.com/ViStoryBench/vistorybench). Thanks to these projects for their contributions to the community.
 
-Main quantitative results from the paper:
+Main quantitative results from the paper, with GPT-4.1 used for VLM-based metrics:
 
 | Benchmark | Metric ↑ | Wan2.2-I2V | +StoryDiff. | +StoryMem | +IAMFlow | +SlotMem |
 |---|---|---:|---:|---:|---:|---:|
