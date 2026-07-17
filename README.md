@@ -11,9 +11,9 @@ Official code for SlotMem, a character-addressable internal memory framework tha
 <div align="center">
   <table>
     <tr>
-      <td><video src="assets/demo1.mp4" controls autoplay muted loop playsinline width="260"></video></td>
-      <td><video src="assets/demo2.mp4" controls autoplay muted loop playsinline width="260"></video></td>
-      <td><video src="assets/demo3.mp4" controls autoplay muted loop playsinline width="260"></video></td>
+      <td><a href="assets/demo1.mp4"><img src="assets/demo1_preview.jpg" alt="SlotMem demo 1" width="260"></a></td>
+      <td><a href="assets/demo2.mp4"><img src="assets/demo2_preview.jpg" alt="SlotMem demo 2" width="260"></a></td>
+      <td><a href="assets/demo3.mp4"><img src="assets/demo3_preview.jpg" alt="SlotMem demo 3" width="260"></a></td>
     </tr>
   </table>
 </div>
