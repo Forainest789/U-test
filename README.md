@@ -90,36 +90,35 @@ These files are only for path wiring and format inspection. The training videos 
 
 ## Training
 
+Stage 1:
+
 ```bash
 cd /path/to/SlotMem
 
-DATA_ROOT=/path/to/train_data \
-CKPT_DIR=/path/to/Wan2.2-I2V-A14B \
-bash train_slotmem_stage1.sh
-
-DATA_ROOT=/path/to/train_data \
-CKPT_DIR=/path/to/Wan2.2-I2V-A14B \
-HIGH_EXPERT_CKPT_PATH=/path/to/stage1_high.pt \
-LOW_EXPERT_CKPT_PATH=/path/to/stage1_low.pt \
-bash train_slotmem_stage2.sh
-```
-
-For the included sample layout:
-
-```bash
 CUDA_VISIBLE_DEVICES=0,1 \
 CKPT_DIR=/path/to/Wan2.2-I2V-A14B \
 DATA_ROOT=./sample/train \
-CANDIDATE_CSV=./sample/train/candidate_groups.csv \
-CHARACTER_LISTS_DIR=./sample/train/character_lists \
-VIDEO_ROOT=./sample/train/video \
 OUTPUT_ROOT=./experiments/slotmem_stage1 \
 bash train_slotmem_stage1.sh
 ```
 
-For stage 2, use `CANDIDATE_CSV=./sample/train/stage2_candidate_groups.csv` and provide the stage-1 high/low expert checkpoints.
+Stage 2:
+
+```bash
+cd /path/to/SlotMem
+
+CUDA_VISIBLE_DEVICES=0,1 \
+CKPT_DIR=/path/to/Wan2.2-I2V-A14B \
+LOW_EXPERT_CKPT_PATH=/path/to/stage1_low.pt \
+HIGH_EXPERT_CKPT_PATH=/path/to/stage1_high.pt \
+DATA_ROOT=./sample/train \
+OUTPUT_ROOT=./experiments/slotmem_stage2 \
+bash train_slotmem_stage2.sh
+```
 
 ## Inference
+
+Stage 1:
 
 ```bash
 cd /path/to/SlotMem
@@ -128,13 +127,26 @@ CUDA_VISIBLE_DEVICES=0 \
 CKPT_DIR=/path/to/Wan2.2-I2V-A14B \
 JSON_PATH=./sample/test/3_271/rewrite_caption.json \
 REF_IMAGE_PATH=./sample/test/3_271/frame.jpg \
-HIGH_EXPERT_CKPT_PATH=/path/to/high_noise.pt \
-LOW_EXPERT_CKPT_PATH=/path/to/low_noise.pt \
-OUTPUT_ROOT=./inference_outputs/slotmem_i2v \
+LOW_EXPERT_CKPT_PATH=/path/to/stage1_low.pt \
+HIGH_EXPERT_CKPT_PATH=/path/to/stage1_high.pt \
+OUTPUT_ROOT=./inference_outputs/slotmem_stage1 \
 bash test_slotmem_stage1.sh
 ```
 
-Use `test_slotmem_stage2.sh` with the corresponding stage-2 checkpoints for the final model.
+Stage 2:
+
+```bash
+cd /path/to/SlotMem
+
+CUDA_VISIBLE_DEVICES=0 \
+CKPT_DIR=/path/to/Wan2.2-I2V-A14B \
+JSON_PATH=./sample/test/3_271/rewrite_caption.json \
+REF_IMAGE_PATH=./sample/test/3_271/frame.jpg \
+LOW_EXPERT_CKPT_PATH=/path/to/stage1_low.pt,/path/to/stage2_low.pt \
+HIGH_EXPERT_CKPT_PATH=/path/to/stage1_high.pt,/path/to/stage2_high.pt \
+OUTPUT_ROOT=./inference_outputs/slotmem_stage2 \
+bash test_slotmem_stage2.sh
+```
 
 ## Benchmarks
 
