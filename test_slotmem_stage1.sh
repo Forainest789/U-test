@@ -87,7 +87,6 @@ cmd=(
   --height "${HEIGHT:-480}"
   --width "${WIDTH:-832}"
   --context_frames "${CONTEXT_FRAMES:-81}"
-  --save_fps "${SAVE_FPS:-24}"
   --num_overlap_frame "${NUM_OVERLAP_FRAME:-5}"
   --ref_pad_cfg
   --dual_expert_load_mode "${DUAL_EXPERT_LOAD_MODE}"

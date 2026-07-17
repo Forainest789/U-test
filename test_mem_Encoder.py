@@ -3003,7 +3003,6 @@ def parse_args():
     parser.add_argument("--height", type=int, default=480)
     parser.add_argument("--width", type=int, default=832)
     parser.add_argument("--context_frames", type=int, default=81)
-    parser.add_argument("--save_fps", type=float, default=24.0)
     parser.add_argument("--negative_prompt", type=str, default="bright tones, overexposed, static, blurred details, subtitles, style, works, paintings, images, static, overall gray, worst quality, low quality, JPEG compression residue, ugly, incomplete, extra fingers, poorly drawn hands, poorly drawn faces, deformed, disfigured, misshapen limbs, fused fingers, still picture, messy background, three legs, many people in the background, walking backwards")
     parser.add_argument("--ref_image_path", type=str, default=None)
     parser.add_argument("--ref_pad_cfg", action="store_true", default=False)
@@ -3693,9 +3692,8 @@ def main():
         save_current_video = True
         if bool(getattr(args, "save_only_full_buffer_target", False)):
             save_current_video = bool(full_buffer_status_before_generate.get("is_full", False))
-        save_fps = float(getattr(args, "save_fps", 24.0) or 24.0)
         if save_current_video:
-            save_video(frames_to_save, save_path, fps=save_fps)
+            save_video(frames_to_save, save_path, fps=16)
             print(f"  > Saved to {save_path} (frames={len(frames_to_save)})")
         else:
             print(
@@ -3717,7 +3715,7 @@ def main():
             "start": chunk.get("start", None),
             "end": chunk.get("end", None),
             "seed": int(chunk_seed),
-            "fps": save_fps,
+            "fps": 16,
             "frames": int(len(frames_to_save)) if bool(save_current_video) else 0,
             "raw_frames": int(len(video_frames)),
             "video_saved": bool(save_current_video),
