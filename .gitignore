@@ -65,6 +65,9 @@ venv/
 
 # Generated media and logs
 *.mp4
+!/assets/demo1.mp4
+!/assets/demo2.mp4
+!/assets/demo3.mp4
 !/sample/**/*.mp4
 *.concat.txt
 *.log

@@ -6,6 +6,18 @@ Official code for SlotMem, a character-addressable internal memory framework tha
   <img src="assets/jigsaw2.png" alt="SlotMem method overview" width="95%">
 </p>
 
+## Visualization
+
+<div align="center">
+  <table>
+    <tr>
+      <td><video src="assets/demo1.mp4" controls autoplay muted loop playsinline width="260"></video></td>
+      <td><video src="assets/demo2.mp4" controls autoplay muted loop playsinline width="260"></video></td>
+      <td><video src="assets/demo3.mp4" controls autoplay muted loop playsinline width="260"></video></td>
+    </tr>
+  </table>
+</div>
+
 ## Overview
 
 Core launchers:
