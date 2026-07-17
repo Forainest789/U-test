@@ -8,22 +8,31 @@ Official code for SlotMem, a character-addressable internal memory framework tha
 
 ## Visualization
 
-
-
-https://github.com/user-attachments/assets/1d21a9f9-b9a5-4c31-b1cc-432c7deb533b
-
-
-https://github.com/user-attachments/assets/283037e1-bc2d-48ea-b6b4-671f5df99dc2
-
-https://github.com/user-attachments/assets/074048d9-7221-48b4-a705-157db6208ea4
-
-
-
-
-
-
-https://github.com/user-attachments/assets/73671112-9f29-4e84-88b5-2f9a7cc8c284
-
+<table>
+  <tr>
+    <td>
+      <video src="https://github.com/user-attachments/assets/73671112-9f29-4e84-88b5-2f9a7cc8c284"
+             controls
+             muted
+             width="100%">
+      </video>
+    </td>
+    <td>
+      <video src="https://github.com/user-attachments/assets/1d21a9f9-b9a5-4c31-b1cc-432c7deb533b"
+             controls
+             muted
+             width="100%">
+      </video>
+    </td>
+    <td>
+      <video src="https://github.com/user-attachments/assets/283037e1-bc2d-48ea-b6b4-671f5df99dc2"
+             controls
+             muted
+             width="100%">
+      </video>
+    </td>
+  </tr>
+</table>
 
 ## Overview
 
