@@ -1,4 +1,4 @@
-# SlotMem for Wan2.2 I2V
+# SlotMem: Character-Addressable Internal Memory for Narrative Long Video Generation
 
 Official code for SlotMem, a character-addressable internal memory framework that stores recurring characters as compact role-wise slots for multi-character narrative long video generation.
 
