@@ -8,15 +8,11 @@ Official code for SlotMem, a character-addressable internal memory framework tha
 
 ## Visualization
 
-<div align="center">
-  <table>
-    <tr>
-      <td><a href="assets/demo1.mp4"><img src="assets/demo1_preview.jpg" alt="SlotMem demo 1" width="260"></a></td>
-      <td><a href="assets/demo2.mp4"><img src="assets/demo2_preview.jpg" alt="SlotMem demo 2" width="260"></a></td>
-      <td><a href="assets/demo3.mp4"><img src="assets/demo3_preview.jpg" alt="SlotMem demo 3" width="260"></a></td>
-    </tr>
-  </table>
-</div>
+https://github.com/YilaiLiu-HKU/SlotMem/raw/main/assets/demo1.mp4
+
+https://github.com/YilaiLiu-HKU/SlotMem/raw/main/assets/demo2.mp4
+
+https://github.com/YilaiLiu-HKU/SlotMem/raw/main/assets/demo3.mp4
 
 ## Overview
 
