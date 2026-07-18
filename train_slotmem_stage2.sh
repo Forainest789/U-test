@@ -65,7 +65,6 @@ common_args=(
   --noise_domain_boundary_ratio 0.9
   --learning_rate "${LEARNING_RATE:-1e-4}"
   --latent_dim 16
-  --patch_dim 5120
   --num_frames 81
   --ref_pad_cfg
   --num_overlap_frame 5
@@ -75,13 +74,11 @@ common_args=(
   --training_strategy "${TRAINING_STRATEGY:-ddp}"
   --model_slice_mode "none"
   --tp_size 1
-  --extract_single_timestep_align_train
   --use_train_weights_for_extract_and_probe
   --precompute_image_emb
   --precompute_image_emb_strict
   --offload_image_encoder_after_extraction
   --no-keep_image_encoder_on_gpu
-  --memory_injection_mode "context_only"
   --enable_sparse_role_memory_attn
   --sparse_role_memory_layer_idx 3
   --sparse_role_memory_injection_layers "${SPARSE_ROLE_MEMORY_INJECTION_LAYERS:-0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15}"
@@ -102,7 +99,6 @@ common_args=(
   --neighbor_filter_kernel 5
   --max_memory_tokens_per_character 512
   --slotmem_memory_bank_mode single
-  --prompt_drop_prob 0.0
   --memory_drop_prob 0.0
   --slotmem_memory_encoder_mode "on"
   --slotmem_memory_encoder_layers "${SLOTMEM_MEMORY_ENCODER_LAYERS:-0-15}"

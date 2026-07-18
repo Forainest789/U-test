@@ -65,9 +65,10 @@ def save_args_to_yaml(args, output_path):
         if dist.is_available() and dist.is_initialized():
             if dist.get_rank() != 0:
                 return None  # Skip saving from non-main processes
-    except:
-        # If distributed training is not set up, continue with saving
-        pass
+    except (ImportError, RuntimeError) as exc:
+        # If distributed training is unavailable or not set up, continue with
+        # the environment-variable rank checks below.
+        print(f"Warning: Failed to query distributed rank: {exc}")
     
     # Check environment variable for local rank (common in distributed setups)
     local_rank = os.environ.get('LOCAL_RANK', '0')
@@ -122,8 +123,10 @@ def save_args_to_yaml(args, output_path):
         if os.path.exists(lock_path):
             try:
                 os.remove(lock_path)
-            except:
+            except FileNotFoundError:
                 pass
+            except OSError as exc:
+                print(f"Warning: Failed to remove lock file {lock_path}: {exc}")
         
         return hparams_path
             
@@ -135,6 +138,8 @@ def save_args_to_yaml(args, output_path):
         if os.path.exists(lock_path):
             try:
                 os.remove(lock_path)
-            except:
+            except FileNotFoundError:
                 pass
+            except OSError as cleanup_exc:
+                print(f"Warning: Failed to remove lock file {lock_path}: {cleanup_exc}")
         return None

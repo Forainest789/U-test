@@ -1114,7 +1114,7 @@ class ReferenceInferenceRuntime:
 
                 if i == 0:
                     print(
-                        f"  [MemoryDebug] has_memory={has_memory}, use_memory_path={use_memory_path}, mode={self.memory_injection_mode}, "
+                        f"  [MemoryDebug] has_memory={has_memory}, use_memory_path={use_memory_path}, "
                         f"has_valid_memory_tokens={has_valid_memory_tokens}, "
                         f"has_valid_bank_tokens={has_valid_bank_tokens}, "
                         f"valid_bank_keys={valid_bank_keys}",

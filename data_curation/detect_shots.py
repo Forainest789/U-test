@@ -90,10 +90,16 @@ class VideoProcessor:
         rate = result.stdout.strip()
         if "/" in rate:
             num, den = rate.split("/", 1)
-            try: return float(num) / float(den)
-            except: return None
-        try: return float(rate)
-        except: return None
+            try:
+                return float(num) / float(den)
+            except (ValueError, ZeroDivisionError) as exc:
+                print(f"[Preprocess] 无法解析 ffprobe 帧率 {rate!r}: {exc}", file=sys.stderr)
+                return None
+        try:
+            return float(rate)
+        except ValueError as exc:
+            print(f"[Preprocess] 无法解析 ffprobe 帧率 {rate!r}: {exc}", file=sys.stderr)
+            return None
 
     def convert_to_24fps(self, video_path):
         fps = self._get_video_fps(video_path)

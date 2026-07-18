@@ -288,7 +288,12 @@ def _analytic_role_wise_slot_memory_bank_bytes(args, engine, num_characters):
     if not bool(getattr(engine, "jigsaw_extra_encoder_enabled", False)):
         return 0
     slots = int(getattr(engine, "jigsaw_extra_encoder_slots", getattr(args, "jigsaw_extra_encoder_slots", 0)) or 0)
-    dim = int(getattr(engine, "patch_dim", getattr(args, "patch_dim", 5120)) or 5120)
+    try:
+        dim = int(engine.patch_dim)
+    except (AttributeError, TypeError, ValueError) as exc:
+        raise RuntimeError("SlotMem engine.patch_dim must be initialized from the runtime DiT") from exc
+    if dim <= 0:
+        raise ValueError(f"SlotMem engine.patch_dim must be positive, got {dim}")
     layers = list(getattr(engine, "sparse_role_memory_injection_layers", []) or [])
     groups = list(getattr(engine, "jigsaw_extra_encoder_layer_groups", []) or [])
     group_count = max(1, len(groups))
@@ -709,7 +714,6 @@ class SlotMemInferenceEngine(ReferenceInferenceEngine):
         self.device = "cuda"
         self.dtype = torch.bfloat16
         self.native_wan_inference = bool(getattr(args, "native_wan_inference", False))
-        self.memory_injection_mode = "context_only"
         self.train_noise_domain = str(getattr(args, "train_noise_domain", "low_noise")).strip().lower()
         self.train_stage = str(getattr(args, "train_stage", "stage1")).strip().lower()
         self.noise_domain_boundary_ratio = float(getattr(args, "noise_domain_boundary_ratio", 0.9))
@@ -755,12 +759,12 @@ class SlotMemInferenceEngine(ReferenceInferenceEngine):
             print("[Init] sample_solver=unipc (Wan FlowUniPCMultistepScheduler)", flush=True)
         self._install_pipe_compat()
         runtime_dit = self.pipe.active_denoising_model() if hasattr(self.pipe, "active_denoising_model") else self.pipe.denoising_model()
-        configured_patch_dim = int(getattr(args, "patch_dim", 5120))
-        inferred_patch_dim = int(getattr(runtime_dit, "dim", configured_patch_dim))
-        if configured_patch_dim != inferred_patch_dim:
-            print(f"[Init] Override patch_dim from {configured_patch_dim} to DiT dim {inferred_patch_dim}")
-        self.patch_dim = inferred_patch_dim
-        setattr(self.args, "patch_dim", self.patch_dim)
+        try:
+            self.patch_dim = int(runtime_dit.dim)
+        except (AttributeError, TypeError, ValueError) as exc:
+            raise RuntimeError("Runtime DiT must expose an integer-compatible 'dim' attribute") from exc
+        if self.patch_dim <= 0:
+            raise ValueError(f"Runtime DiT dim must be positive, got {self.patch_dim}")
 
         latent_dim = int(getattr(args, "latent_dim", 16))
         self.jigsaw_memory_bank_mode = str(getattr(args, "jigsaw_memory_bank_mode", "single")).strip().lower()
@@ -3014,15 +3018,15 @@ def parse_args():
     parser.add_argument("--tiled", action="store_true", default=False)
     parser.add_argument("--tile_size", type=int, nargs="+", default=[30, 52])
     parser.add_argument("--tile_stride", type=int, nargs="+", default=[15, 26])
-    parser.add_argument("--extract_layers", type=str, default="1,2,3,4,5,6,7,8,9,10,11,12,13,14,15")
-    parser.add_argument("--role_token_selection_mode", type=str, default="layer7_single", choices=["baseline", "two_role_diff", "one_vs_rest", "layer7_single"])
+    parser.add_argument("--extract_layers", type=str, default="0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15")
+    parser.add_argument("--role_token_selection_mode", type=str, default="two_role_diff", choices=["baseline", "two_role_diff", "one_vs_rest", "layer7_single"])
     parser.add_argument("--top_visual_tokens", type=float, default=0.1)
     parser.add_argument("--top_visual_tokens_per_head", type=int, default=0)
     parser.add_argument("--otsu_scope", type=str, default="frame", choices=["clip", "frame"])
     parser.add_argument("--token_weight", type=float, default=1.0)
     parser.add_argument("--suffix_attention_scale", type=float, default=1.0)
     parser.add_argument("--max_memory_tokens_per_character", type=int, default=512)
-    parser.add_argument("--use_attn_score_selection", action="store_true")
+    parser.add_argument("--use_attn_score_selection", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--neighbor_filter_kernel", type=int, default=5)
     parser.add_argument("--neighbor_filter_any_window", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--memory_enable_patch_similarity_filter", action=argparse.BooleanOptionalAction, default=False)
@@ -3038,11 +3042,10 @@ def parse_args():
     parser.add_argument("--use_first_appearance_memory_only", action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument("--use_learnable_memory_pos", action="store_true")
     parser.add_argument("--use_segment_embed", action="store_true")
-    parser.add_argument("--patch_dim", type=int, default=5120)
     parser.add_argument("--allow_injection_outside_bank_range", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--enable_sparse_role_memory_attn", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--sparse_role_memory_layer_idx", type=int, default=3)
-    parser.add_argument("--sparse_role_memory_injection_layers", type=str, default="3")
+    parser.add_argument("--sparse_role_memory_injection_layers", type=str, default="0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15")
     parser.add_argument("--memory_layer_binding_mode", type=str, default="layerwise", choices=["layerwise", "shared"])
     parser.add_argument(
         "--memory_bank_selection_mode",
@@ -3064,15 +3067,15 @@ def parse_args():
     parser.add_argument("--sparse_role_memory_query_chunk_size", type=int, default=128)
     parser.add_argument("--sparse_role_memory_layer_scales", type=str, default="")
     parser.add_argument("--debug_sparse_role_memory_attn", action=argparse.BooleanOptionalAction, default=False)
-    parser.add_argument("--slotmem_memory_encoder_mode", dest="slotmem_memory_encoder_mode", type=str, default="off",
+    parser.add_argument("--slotmem_memory_encoder_mode", dest="slotmem_memory_encoder_mode", type=str, default="on",
                         choices=["off", "on", "true", "1", "extra", "extra_encoder", "slotmem_memory_encoder", "contrastive_encoder"])
     parser.add_argument("--slotmem_memory_encoder_layers", dest="slotmem_memory_encoder_layers", type=str, default="0-15")
     parser.add_argument("--slotmem_memory_encoder_layer_groups", dest="slotmem_memory_encoder_layer_groups", type=str, default="0-4,5-10,11-15")
-    parser.add_argument("--slotmem_memory_encoder_slots", dest="slotmem_memory_encoder_slots", type=int, default=32)
+    parser.add_argument("--slotmem_memory_encoder_slots", dest="slotmem_memory_encoder_slots", type=int, default=64)
     parser.add_argument("--slotmem_memory_encoder_dim", dest="slotmem_memory_encoder_dim", type=int, default=512)
     parser.add_argument("--slotmem_memory_encoder_hidden_dim", dest="slotmem_memory_encoder_hidden_dim", type=int, default=1024)
-    parser.add_argument("--slotmem_memory_encoder_use_t_embed", dest="slotmem_memory_encoder_use_t_embed", action="store_true", default=False)
-    parser.add_argument("--slotmem_memory_encoder_use_slot_index_embed", dest="slotmem_memory_encoder_use_slot_index_embed", action="store_true", default=False)
+    parser.add_argument("--slotmem_memory_encoder_use_t_embed", dest="slotmem_memory_encoder_use_t_embed", action=argparse.BooleanOptionalAction, default=True)
+    parser.add_argument("--slotmem_memory_encoder_use_slot_index_embed", dest="slotmem_memory_encoder_use_slot_index_embed", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--slotmem_memory_encoder_aux_weight", dest="slotmem_memory_encoder_aux_weight", type=float, default=0.05)
     parser.add_argument("--slotmem_memory_encoder_bg_tokens", dest="slotmem_memory_encoder_bg_tokens", type=int, default=64)
     parser.add_argument("--slotmem_memory_writer_mode", dest="slotmem_memory_writer_mode", type=str, default="auto",
@@ -3085,7 +3088,7 @@ def parse_args():
     parser.add_argument("--slotmem_memory_writer_max_delta_norm", dest="slotmem_memory_writer_max_delta_norm", type=float, default=0.0)
     parser.add_argument("--slotmem_memory_writer_detach_c_short", dest="slotmem_memory_writer_detach_c_short", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--slotmem_disable_memory_side_rope", dest="slotmem_disable_memory_side_rope", action=argparse.BooleanOptionalAction, default=True)
-    parser.add_argument("--memory_runtime_log_every", type=int, default=5)
+    parser.add_argument("--memory_runtime_log_every", type=int, default=1)
     parser.add_argument("--save_memory_viz", action="store_true")
     parser.add_argument("--memory_viz_dir", type=str, default=None)
     parser.add_argument("--save_feature_mapping_viz", action="store_true")

@@ -961,11 +961,6 @@ class LearnableMemoryEmbeddings(torch.nn.Module):
 
 import pandas as pd
 import matplotlib.pyplot as plt
-try:
-    from skimage import filters as sk_filters
-except Exception as e:
-    print(f"[Warning] Failed to import skimage.filters, Otsu threshold disabled: {e}")
-    sk_filters = None
 
 class LossLogger:
     def __init__(self, save_dir, inherit_history=True):
@@ -989,7 +984,6 @@ class LossLogger:
                 self.last_step = -1
         
     def log(self, step, loss, used_memory=None, memory_dropped=None,
-            prompt_dropped=None,
             image_condition_available=None, image_condition_used=None, image_condition_dropped=None,
             memory_condition_available=None, memory_condition_used=None,
             loss_no_bbox_x2=None,
@@ -1007,7 +1001,6 @@ class LossLogger:
             "diffusion_timestep": diffusion_timestep,
             "used_memory": used_memory,
             "memory_dropped": memory_dropped,
-            "prompt_dropped": prompt_dropped,
             "image_condition_available": image_condition_available,
             "image_condition_used": image_condition_used,
             "image_condition_dropped": image_condition_dropped,
@@ -1467,30 +1460,6 @@ class StyleAwareMemoryProjector(torch.nn.Module):
         return identity + out
 
 
-def compute_dynamic_similarity_threshold(sim_values, fallback_quantile=0.75):
-    """
-    Compute dynamic threshold for similarity scores.
-    Priority: Otsu -> quantile fallback.
-    """
-    if sim_values is None:
-        return 0.0
-    if isinstance(sim_values, torch.Tensor):
-        vals = sim_values.detach().float().reshape(-1).cpu().numpy()
-    else:
-        vals = np.asarray(sim_values, dtype=np.float32).reshape(-1)
-    if vals.size == 0:
-        return 0.0
-    vals = vals[np.isfinite(vals)]
-    if vals.size == 0:
-        return 0.0
-    if sk_filters is not None and vals.size > 1 and np.unique(vals).size > 1:
-        tau = float(sk_filters.threshold_otsu(vals))
-        if np.isfinite(tau):
-            return tau
-    q = float(np.clip(fallback_quantile, 0.0, 1.0))
-    return float(np.quantile(vals, q))
-
-
 def pick_nearest_bank_by_percent(current_percent, bank_percents):
     """Pick nearest bank index by |p_cur - p_bank|."""
     if not bank_percents:
@@ -1504,29 +1473,6 @@ def pick_nearest_bank_by_percent(current_percent, bank_percents):
             best_dist = d
             best_idx = idx
     return best_idx
-
-
-def parse_triplet_string(value, default_triplet):
-    """Parse 'a,b,c' style string to 3-float tuple, fallback to default_triplet."""
-    if isinstance(value, str):
-        parts_raw = [x.strip() for x in value.split(',') if str(x).strip() != '']
-    elif isinstance(value, (list, tuple)):
-        parts_raw = list(value)
-    else:
-        parts_raw = []
-
-    if len(parts_raw) != 3:
-        print(f"[Warning] Invalid triplet '{value}', fallback to default {default_triplet}")
-        return tuple(default_triplet)
-
-    parts = []
-    for item in parts_raw:
-        try:
-            parts.append(float(item))
-        except (TypeError, ValueError):
-            print(f"[Warning] Invalid triplet '{value}', fallback to default {default_triplet}")
-            return tuple(default_triplet)
-    return tuple(parts)
 
 
 def parse_float_csv(value, default_list):
@@ -1559,66 +1505,8 @@ def parse_float_csv(value, default_list):
     return parsed
 
 
-class Top1MemoryTokenFusion(torch.nn.Module):
-    """Minimal compatibility stub for legacy top1 memory fusion.
-
-    This training script now focuses on context_only + sparse role memory branch.
-    Input-fusion modes are intentionally kept as no-op for structural safety.
-    """
-
-    def __init__(
-        self,
-        dim=5120,
-        hidden_dim=1024,
-        similarity_mode="projected",
-        sim_chunk_size=2048,
-        sparse_gate=True,
-        coarse_topk=64,
-        token_rerank_chunk_size=512,
-        hybrid_chunk_by_latent_t=True,
-        use_relative_rope_for_memory_matching=True,
-        memory_relative_rope_dim=256,
-        debug_relative_rope=False,
-        use_stage_aware_relative_rope=True,
-        coarse_relative_rope_strength_high_noise=0.0,
-        coarse_relative_rope_strength_mid_noise=0.25,
-        coarse_relative_rope_strength_low_noise=1.0,
-        fine_relative_rope_strength_high_noise=0.1,
-        fine_relative_rope_strength_mid_noise=0.5,
-        fine_relative_rope_strength_low_noise=1.0,
-        disable_memory_reverse_topn_for_ablation=True,
-        use_per_role_independent_fusion=True,
-        per_role_fusion_winner_mode="max_similarity",
-        debug_per_role_fusion=False,
-    ):
-        super().__init__()
-        self.dim = int(dim)
-        self.hidden_dim = int(hidden_dim)
-
-    def forward(self, video_tokens, memory_tokens=None, **kwargs):
-        stats = {
-            'inject_ratio': 0.0,
-            'sim1_mean': 0.0,
-            'tau_sim': 0.0,
-            'sim_mode': 'disabled',
-            'tau_filter_enabled': 0.0,
-            'relrope_enabled': 0.0,
-            'relrope_query_valid_ratio': 0.0,
-            'relrope_memory_valid_ratio': 0.0,
-            'relrope_coarse_gamma': 1.0,
-            'relrope_fine_gamma': 1.0,
-            'per_role_mode_enabled': 0.0,
-            'winner_counts': None,
-            'role_memory_token_counts': None,
-            'role_query_valid_ratio': None,
-            'selected_role_index': None,
-            'selected_role_names': None,
-        }
-        return video_tokens, stats
-
-
 class CharacterWiseCrossAttention(torch.nn.Module):
-    """Character-wise memory cross-attention for context_only mode.
+    """Character-wise cross-attention from selected video tokens to role memory.
 
     Query selection is strictly driven by probe payload flat_idx. Role boxes are
     used only as geometric priors (uv); missing bbox does not drop selected
@@ -3294,7 +3182,6 @@ def extract_patch_embeddings_for_character(
     
     use_sparse_role_feature = (
         bool(kwargs.get('enable_sparse_role_memory_attn', True))
-        and str(kwargs.get('memory_injection_mode', 'context_only')).strip().lower() == 'context_only'
         and str(kwargs.get('sparse_role_memory_feature_source', 'attn_out')).strip().lower() in ('attn_out', 'self_attn_out')
     )
     use_hybrid_feature = (
@@ -3759,7 +3646,6 @@ def extract_patch_embeddings_for_characters_batch(
     positive_prompt_embeds = positive_prompt_embeds.to(device=device)
     use_sparse_role_feature = (
         bool(kwargs.get('enable_sparse_role_memory_attn', extract_config.get('enable_sparse_role_memory_attn', True)))
-        and str(kwargs.get('memory_injection_mode', extract_config.get('memory_injection_mode', 'context_only'))).strip().lower() == 'context_only'
         and str(kwargs.get('sparse_role_memory_feature_source', extract_config.get('sparse_role_memory_feature_source', 'attn_out'))).strip().lower() in ('attn_out', 'self_attn_out')
     )
     use_hybrid_feature = (
@@ -5522,7 +5408,6 @@ class LightningModelForTrainWithMemoryV4(pl.LightningModule):
         pretrained_lora_path=None,
         model_VAE=None,
         args=None,
-        patch_dim=5120,
         projector_bottleneck=256,
         latent_dim=None,
         timing_tracker=None
@@ -5550,12 +5435,17 @@ class LightningModelForTrainWithMemoryV4(pl.LightningModule):
         self.dit = getattr(self.pipe, 'dit', None)
 
         dit_model_runtime = self.pipe.denoising_model()
-        inferred_patch_dim = int(getattr(dit_model_runtime, 'dim', patch_dim))
-        if int(patch_dim) != inferred_patch_dim:
-            print(f"[V9][Init] Override patch_dim from {patch_dim} to DiT dim {inferred_patch_dim}", flush=True)
-        patch_dim = inferred_patch_dim
-        if args is not None:
-            setattr(args, 'patch_dim', int(patch_dim))
+        runtime_patch_dim = getattr(dit_model_runtime, 'dim', None)
+        if runtime_patch_dim is None:
+            raise ValueError("Cannot infer patch dimension: runtime DiT has no 'dim' attribute")
+        try:
+            patch_dim = int(runtime_patch_dim)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                f"Invalid runtime DiT dimension {runtime_patch_dim!r}; expected a positive integer"
+            ) from exc
+        if patch_dim <= 0:
+            raise ValueError(f"Invalid runtime DiT dimension {patch_dim}; expected a positive integer")
 
         tiler_kwargs = {}
         if model_VAE is not None:
@@ -5613,9 +5503,6 @@ class LightningModelForTrainWithMemoryV4(pl.LightningModule):
         self.projector_weight_stats = deque(maxlen=200) 
         self.use_learnable_memory_pos = bool(getattr(args, "use_learnable_memory_pos", False))
         self.use_segment_embed = bool(getattr(args, "use_segment_embed", False))
-        self.memory_injection_mode = 'context_only'
-        self._default_use_input_injection = False
-        self._default_use_context_injection = True
         self.noise_domain_boundary = float(getattr(args, 'noise_domain_boundary_ratio', 0.9)) if args else 0.9
         self.char_attn_noise_scope = str(getattr(args, 'char_attn_noise_scope', self.train_noise_domain)) if args else self.train_noise_domain
         self.low_noise_lora_adapter_name = str(getattr(args, 'low_noise_lora_adapter_name', 'low_noise')) if args else 'low_noise'
@@ -5699,9 +5586,7 @@ class LightningModelForTrainWithMemoryV4(pl.LightningModule):
         self.use_error_recycling = getattr(args, 'use_error_recycling', False) if not self.train_memory_only else False
         self.use_existing_error_buffers = getattr(args, 'use_existing_error_buffers', False) if self.train_memory_only else False
         
-        # Prompt and memory dropping for CFG training
-        # Prompt drop is disabled in SlotMem training (always use positive prompt).
-        self.prompt_drop_prob = 0.0
+        # Memory dropping for CFG training
         self.memory_drop_prob = getattr(args, 'memory_drop_prob', 0.1)
         self.negative_prompt = getattr(args, 'negative_prompt', "bright tones, overexposed, static, blurred details, subtitles, style, works, paintings, images, static, overall gray, worst quality, low quality, JPEG compression residue, ugly, incomplete, extra fingers, poorly drawn hands, poorly drawn faces, deformed, disfigured, misshapen limbs, fused fingers, still picture, messy background, three legs, many people in the background, walking backwards")
         self.probe_bbox_loss_weight_x2 = bool(getattr(args, 'probe_bbox_loss_weight_x2', False)) if args else False
@@ -5957,22 +5842,6 @@ class LightningModelForTrainWithMemoryV4(pl.LightningModule):
             if args and self.jigsaw_memory_bank_mode == 'legacy_multi'
             else []
         )
-        quantile_abc = parse_triplet_string(
-            getattr(args, 'memory_fallback_quantile_abc', '0.80,0.70,0.75') if args else '0.80,0.70,0.75',
-            default_triplet=(0.80, 0.70, 0.75),
-        )
-        alpha_abc = parse_triplet_string(
-            getattr(args, 'memory_alpha_abc', '0.10,0.30,0.15') if args else '0.10,0.30,0.15',
-            default_triplet=(0.10, 0.30, 0.15),
-        )
-        max_ratio_abc = parse_triplet_string(
-            getattr(args, 'memory_max_inject_ratio_abc', '0.10,0.30,0.15') if args else '0.10,0.30,0.15',
-            default_triplet=(0.10, 0.30, 0.15),
-        )
-        self.memory_fallback_quantile_a, self.memory_fallback_quantile_b, self.memory_fallback_quantile_c = quantile_abc
-        self.memory_alpha_a, self.memory_alpha_b, self.memory_alpha_c = alpha_abc
-        self.memory_max_inject_ratio_a, self.memory_max_inject_ratio_b, self.memory_max_inject_ratio_c = max_ratio_abc
-        
         # Load weights from broken DeepSpeed checkpoint if specified
         resume_ds_ckpt = getattr(args, 'resume_weights_from_ds_ckpt', None) if args else None
         if resume_ds_ckpt is not None:
@@ -8121,7 +7990,6 @@ class LightningModelForTrainWithMemoryV4(pl.LightningModule):
             return 0
         
         # 预设标志位
-        prompt_dropped = False
         memory_dropped = False
         image_emb = {}
         
@@ -8429,7 +8297,7 @@ class LightningModelForTrainWithMemoryV4(pl.LightningModule):
             if probe_noisy_latents is not noisy_latents:
                 del probe_noisy_latents
 
-            self._train_runtime_log('before_memory_aware_dit_forward', prompt_dropped=prompt_dropped, memory_dropped=memory_dropped, memory_condition_available=memory_condition_available)
+            self._train_runtime_log('before_memory_aware_dit_forward', memory_dropped=memory_dropped, memory_condition_available=memory_condition_available)
             noise_pred = self._memory_aware_dit_forward(
                 noisy_latents=noisy_latents,
                 memory_feature_tokens_selected=memory_feature_tokens_selected,
@@ -8570,7 +8438,6 @@ class LightningModelForTrainWithMemoryV4(pl.LightningModule):
         self.log("probe_bbox_loss_weight_enabled", 1.0 if self.probe_bbox_loss_weight_x2 else 0.0)
         self.log("probe_bbox_loss_weight_applied", float(bbox_weight_applied))
         self.log("probe_bbox_cover_ratio", float(bbox_cover_ratio))
-        self.log("prompt_dropped", 1.0 if prompt_dropped else 0.0)
         self.log("memory_dropped", 1.0 if memory_dropped else 0.0)
         loss_value = float(loss.detach().item())
         if memory_dropped:
@@ -8620,7 +8487,6 @@ class LightningModelForTrainWithMemoryV4(pl.LightningModule):
                 loss_no_bbox_x2=loss_no_bbox_x2.item(),
                 used_memory=memory_effective_used,
                 memory_dropped=bool(memory_dropped),
-                prompt_dropped=bool(prompt_dropped),
                 image_condition_available=image_condition_available,
                 image_condition_used=image_condition_used,
                 image_condition_dropped=image_condition_dropped,
@@ -8921,7 +8787,7 @@ def parse_args():
     parser.add_argument("--num_frames", type=int, default=81)
     parser.add_argument("--height", type=int, default=480)
     parser.add_argument("--width", type=int, default=832)
-    parser.add_argument("--max_epochs", type=int, default=1)
+    parser.add_argument("--max_epochs", type=int, default=100)
     parser.add_argument("--max_steps", type=int, default=-1,
                         help="Maximum optimizer steps to run. Set <=0 to disable; when enabled, training stops when either max_steps or max_epochs is reached.")
     parser.add_argument("--learning_rate", type=float, default=1e-4)
@@ -8957,12 +8823,12 @@ def parse_args():
                             "This loads LoRA, memory_pos_embed, and memory_segment_embed weights but NOT optimizer state.")
     
     # Gradient checkpointing
-    parser.add_argument("--use_gradient_checkpointing", action="store_true")
-    parser.add_argument("--use_gradient_checkpointing_offload", action="store_true")
+    parser.add_argument("--use_gradient_checkpointing", action=argparse.BooleanOptionalAction, default=True)
+    parser.add_argument("--use_gradient_checkpointing_offload", action=argparse.BooleanOptionalAction, default=True)
     
     # Checkpoint saving
-    parser.add_argument("--checkpoint_save_every_n_epochs", type=int, default=1)
-    parser.add_argument("--checkpoint_save_every_n_steps", type=int, default=0)
+    parser.add_argument("--checkpoint_save_every_n_epochs", type=int, default=0)
+    parser.add_argument("--checkpoint_save_every_n_steps", type=int, default=200)
     
     # Error recycling (compatible with v2/v3)
     parser.add_argument("--use_first_aug", action="store_true")
@@ -8975,7 +8841,7 @@ def parse_args():
     parser.add_argument("--error_modulate_factor", type=float, default=0.0)
     parser.add_argument("--ref_pad_num", type=int, default=0)
     parser.add_argument("--num_motion_frames", type=int, default=1)
-    parser.add_argument("--num_overlap_frame", type=int, default=0)
+    parser.add_argument("--num_overlap_frame", type=int, default=5)
     parser.add_argument("--num_motion_latent", type=int, default=None)
     parser.add_argument("--p_motion_threshold", type=float, default=0.9)
     parser.add_argument("--y_error_num", type=int, default=1)
@@ -8985,7 +8851,7 @@ def parse_args():
     parser.add_argument("--y_prob", type=float, default=0.9)
     parser.add_argument("--latent_prob", type=float, default=0.9)
     parser.add_argument("--clean_prob", type=float, default=0.1)
-    parser.add_argument("--ref_pad_cfg", action="store_true")
+    parser.add_argument("--ref_pad_cfg", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--repeat_first_frame", action="store_true")
     parser.add_argument("--clean_buffer_update_prob", type=float, default=0.1)
     parser.add_argument("--use_last_y_error", action="store_true")
@@ -8993,31 +8859,27 @@ def parse_args():
     # Memory-only mode
     parser.add_argument("--train_memory_only", action="store_true")
     
-    # Prompt and memory dropping for CFG training
-    parser.add_argument("--prompt_drop_prob", type=float, default=0.0,
-                        help="Deprecated and ignored. Prompt drop is disabled in the SlotMem training path.")
-    parser.add_argument("--memory_drop_prob", type=float, default=0.1,
-                        help="Probability of dropping memory tokens (set to zero) for training. Default: 0.1")
+    # Memory dropping for CFG training
+    parser.add_argument("--memory_drop_prob", type=float, default=0.0,
+                        help="Probability of dropping memory tokens (set to zero) for training. Default: 0.0")
     parser.add_argument("--negative_prompt", type=str, default="bright tones, overexposed, static, blurred details, subtitles, style, works, paintings, images, static, overall gray, worst quality, low quality, JPEG compression residue, ugly, incomplete, extra fingers, poorly drawn hands, poorly drawn faces, deformed, disfigured, misshapen limbs, fused fingers, still picture, messy background, three legs, many people in the background, walking backwards",
                         help="Negative prompt used for unconditional CFG branch during training.")
     
     # Memory extraction
-    parser.add_argument("--extract_layers", type=str, default="10,20,30")
-    parser.add_argument("--role_token_selection_mode", type=str, default="baseline",
+    parser.add_argument("--extract_layers", type=str, default="0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15")
+    parser.add_argument("--role_token_selection_mode", type=str, default="two_role_diff",
                         choices=["baseline", "two_role_diff", "layer7_single"],
                         help="How to choose role tokens for training-time memory extraction and query probe. two_role_diff uses A-B / B-A token purification when exactly two valid roles are available. layer7_single ignores extract_layers and runs one parallel probe at sparse_role_memory_layer_idx with baseline plus per-role token-drop branches, then uses normal-drop(role) responses as that role's token map.")
-    parser.add_argument("--top_visual_tokens", type=float, default=-1)
+    parser.add_argument("--top_visual_tokens", type=float, default=0.1)
     parser.add_argument("--top_visual_tokens_per_head", type=int, default=0)
     parser.add_argument("--otsu_scope", type=str, default="frame", choices=["clip", "frame"])
     parser.add_argument("--token_weight", type=float, default=1)
-    parser.add_argument("--max_memory_tokens_per_character", type=int, default=2048,
-                        help="Max memory tokens per character. Default: 2048.")
+    parser.add_argument("--max_memory_tokens_per_character", type=int, default=512,
+                        help="Max memory tokens per character. Default: 512.")
     parser.add_argument("--max_memory_characters", type=int, default=2, 
-                        help="Max number of characters to extract memory for. -1 means unlimited. Default: -1")
+                        help="Max number of characters to extract memory for. -1 means unlimited. Default: 2")
     parser.add_argument("--cfg_scale_extraction", type=float, default=5.0,
                         help="CFG scale for attention extraction (default: 5.0)")
-    parser.add_argument("--extract_single_timestep_align_train", action="store_true", default=True,
-                        help="Deprecated compatibility flag: exact timestep alignment is always on.")
     parser.add_argument("--train_stage", type=str, default="stage1", choices=["stage1", "stage2"],
                         help="Manual training stage switch for SlotMem.")
     parser.add_argument("--slotmem_memory_bank_mode", dest="slotmem_memory_bank_mode", type=str, default="single", choices=["single", "legacy_multi"],
@@ -9026,15 +8888,15 @@ def parse_args():
                         help="Timestep source for training character-semantic probe. Main DiT forward/loss always use the current training timestep.")
     parser.add_argument("--memory_bank_percents", type=str, default="0.85,0.60,0.35,0.12",
                         help="Legacy_multi-only comma-separated bank percentages in [0,1], used for multi-bank extraction and nearest-bank selection.")
-    parser.add_argument("--neighbor_filter_kernel", type=int, default=3,
-                        help="Kernel size for neighborhood block filter (0 to disable). Default: 3.")
+    parser.add_argument("--neighbor_filter_kernel", type=int, default=5,
+                        help="Kernel size for neighborhood block filter (0 to disable). Default: 5.")
     parser.add_argument("--neighbor_filter_any_window", action=argparse.BooleanOptionalAction, default=True,
                         help="If true, token is kept when any kernel×kernel block containing it has enough selected patches.")
     parser.add_argument("--enable_viz_extraction", action="store_true",
                         help="Enable periodic viz_extraction visualization (saves by_timestep heatmaps). Disabled by default to avoid slowdown.")
     parser.add_argument("--precompute_image_emb", action=argparse.BooleanOptionalAction, default=True,
                         help="Precompute image conditioning embeddings in extraction process and pass to training.")
-    parser.add_argument("--precompute_image_emb_strict", action="store_true",
+    parser.add_argument("--precompute_image_emb_strict", action=argparse.BooleanOptionalAction, default=True,
                         help="Fail fast if precomputed image embedding is missing or generation fails.")
     parser.add_argument("--image_condition_people_pixelate_prob", type=float, default=0.0,
                         help="Probability (per training step) to pixelate people in all image conditions on CPU. 0 disables.")
@@ -9050,7 +8912,7 @@ def parse_args():
                         help="Keep image encoder resident on GPU during training. Default false to minimize peak memory.")
     parser.add_argument("--offload_image_encoder_after_extraction", action=argparse.BooleanOptionalAction, default=True,
                         help="After extraction-side precompute, move image encoder back to CPU to reduce training-time memory.")
-    parser.add_argument("--aggressive_vram_optimization", action="store_true",
+    parser.add_argument("--aggressive_vram_optimization", action=argparse.BooleanOptionalAction, default=True,
                         help="Unified aggressive VRAM mode: on-demand VAE GPU residency during training and forced cache release between extraction phases.")
     parser.add_argument("--inline_progress_print_every", type=int, default=1,
                         help="Print inline extract-train progress every N samples after initial warmup.")
@@ -9072,9 +8934,8 @@ def parse_args():
                         help="Number of GPUs for training (-1 for auto)")
     
     # Projector
-    parser.add_argument("--patch_dim", type=int, default=5120)
     parser.add_argument("--use_learnable_memory_pos", action="store_true", help="Use learnable embeddings for memory instead of RoPE")
-    parser.add_argument("--use_attn_score_selection", action="store_true")
+    parser.add_argument("--use_attn_score_selection", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--projector_bottleneck", type=int, default=256)
     parser.add_argument("--use_projector", action=argparse.BooleanOptionalAction, default=False,
                         help="Enable projector in memory forward/save/load path. Use --no-use_projector to force raw-memory path.")
@@ -9084,8 +8945,6 @@ def parse_args():
                         help="Latent dimension for StyleAwareMemoryProjector. Default 16 for WanVideoVAE.")
     parser.add_argument("--use_grouped_cross_attn", action="store_true",
                         help="Enable grouped cross-attention (text/memory separate attention then gated fusion). Default off for backward compatibility.")
-    parser.add_argument("--memory_fusion_dim", type=int, default=1024,
-                        help="Hidden dim for top1 memory fusion projections.")
     parser.add_argument("--memory_similarity_mode", type=str, default="projected", choices=["projected", "token", "hybrid", "hybrid_feature"],
                         help="Similarity mode in top1 fusion: projected=q/k projection, token=raw token cosine, hybrid=projected coarse retrieval + token rerank, hybrid_feature=use probe layer features as query and memory layer features as key.")
     parser.add_argument("--feature_match_layer_idx", type=int, default=7,
@@ -9094,40 +8953,13 @@ def parse_args():
                         help="Storage dtype for captured feature vectors in hybrid_feature mode.")
     parser.add_argument("--hybrid_feature_use_legacy_memory_key", action="store_true",
                         help="If set, hybrid_feature falls back to legacy key path (memory token as key) instead of extraction-layer feature key.")
-    parser.add_argument("--memory_fusion_sim_chunk_size", type=int, default=2048,
-                        help="Chunk size for video-token similarity in memory fusion. <=0 disables chunking.")
-    parser.add_argument("--memory_hybrid_coarse_topk", type=int, default=64,
-                        help="Hybrid mode: projected-space coarse top-k candidates per video token.")
-    parser.add_argument("--memory_hybrid_rerank_chunk_size", type=int, default=512,
-                        help="Hybrid mode fallback: token rerank chunk size over video tokens, used only when --no-memory_hybrid_chunk_by_latent_t.")
-    parser.add_argument("--memory_hybrid_chunk_by_latent_t", action=argparse.BooleanOptionalAction, default=True,
-                        help="Hybrid mode strict path: split rerank by latent temporal chunk (one latent t per chunk). When enabled, missing/invalid latent_h or latent_w raises an error (no fallback).")
-    parser.add_argument("--use_relative_rope_for_memory_matching", action=argparse.BooleanOptionalAction, default=True,
-                        help="Enable bbox-relative 2D RoPE for memory matching q/k in hybrid mode.")
-    parser.add_argument("--memory_relative_rope_dim", type=int, default=256,
-                        help="Rotary dimension used by bbox-relative 2D RoPE in memory matching.")
-    parser.add_argument("--debug_relative_rope", action=argparse.BooleanOptionalAction, default=False,
-                        help="Enable debug logs/stats for relative RoPE matching path.")
-    parser.add_argument("--use_stage_aware_relative_rope", action=argparse.BooleanOptionalAction, default=True,
-                        help="Apply stage-aware gamma scaling on relative RoPE uv coordinates.")
-    parser.add_argument("--coarse_relative_rope_strength_high_noise", type=float, default=0.0)
-    parser.add_argument("--coarse_relative_rope_strength_mid_noise", type=float, default=0.25)
-    parser.add_argument("--coarse_relative_rope_strength_low_noise", type=float, default=1.0)
-    parser.add_argument("--fine_relative_rope_strength_high_noise", type=float, default=0.1)
-    parser.add_argument("--fine_relative_rope_strength_mid_noise", type=float, default=0.5)
-    parser.add_argument("--fine_relative_rope_strength_low_noise", type=float, default=1.0)
-    parser.add_argument("--memory_fusion_sparse_gate", action=argparse.BooleanOptionalAction, default=True,
-                        help="If true, compute gate MLP only on injected tokens to reduce peak memory.")
-    parser.add_argument("--memory_injection_mode", type=str, default="context_only",
-                        choices=["context_only"],
-                        help="Memory injection mode fixed to context_only in this script.")
     parser.add_argument("--enable_sparse_role_memory_attn", action=argparse.BooleanOptionalAction, default=True,
-                        help="Enable standalone sparse role-aware memory cross-attention branch for context_only mode.")
+                        help="Enable standalone sparse role-aware memory cross-attention.")
     parser.add_argument("--sparse_role_memory_layer_idx", type=int, default=3,
                         help="Target DiT layer index for sparse role-aware memory branch insertion.")
-    parser.add_argument("--sparse_role_memory_injection_layers", type=str, default=None,
+    parser.add_argument("--sparse_role_memory_injection_layers", type=str, default="0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15",
                         help="Comma-separated DiT layer indices for sparse role-aware memory branch insertion. "
-                             "If unset, falls back to --sparse_role_memory_layer_idx.")
+                             "Default: 0-15; if explicitly unset, falls back to --sparse_role_memory_layer_idx.")
     parser.add_argument("--char_attn_noise_scope", type=str, default="low_noise", choices=["high_noise", "low_noise"],
                         help="Enable char-attn + memory path on which noise domain(s). If low_noise/high_noise only, the other domain trains as base LoRA without memory/char-attn.")
     parser.add_argument("--sparse_role_memory_num_heads", type=int, default=8,
@@ -9150,22 +8982,22 @@ def parse_args():
                         help="Optional comma map layer:scale applied after sparse role-memory injection.")
     parser.add_argument("--debug_sparse_role_memory_attn", action=argparse.BooleanOptionalAction, default=False,
                         help="Enable debug stats for sparse role-aware memory branch.")
-    parser.add_argument("--slotmem_memory_encoder_mode", dest="slotmem_memory_encoder_mode", type=str, default="off",
+    parser.add_argument("--slotmem_memory_encoder_mode", dest="slotmem_memory_encoder_mode", type=str, default="on",
                         choices=["off", "on", "true", "1", "extra", "extra_encoder", "slotmem_memory_encoder", "contrastive_encoder"],
                         help="Enable SlotMem memory encoder over raw layerwise memory tokens before memory_projector.")
     parser.add_argument("--slotmem_memory_encoder_layers", dest="slotmem_memory_encoder_layers", type=str, default="0-15",
                         help="Layers captured/injected by SlotMem memory encoder mode. Default: 0-15.")
     parser.add_argument("--slotmem_memory_encoder_layer_groups", dest="slotmem_memory_encoder_layer_groups", type=str, default="0-4,5-10,11-15",
                         help="Comma-separated layer groups for the three SlotMem memory encoders.")
-    parser.add_argument("--slotmem_memory_encoder_slots", dest="slotmem_memory_encoder_slots", type=int, default=32,
+    parser.add_argument("--slotmem_memory_encoder_slots", dest="slotmem_memory_encoder_slots", type=int, default=64,
                         help="Query slots per role per layer after SlotMem memory encoder compression.")
     parser.add_argument("--slotmem_memory_encoder_dim", dest="slotmem_memory_encoder_dim", type=int, default=512,
                         help="Internal dimension of the SlotMem memory encoder.")
     parser.add_argument("--slotmem_memory_encoder_hidden_dim", dest="slotmem_memory_encoder_hidden_dim", type=int, default=1024,
                         help="Hidden dimension of the SlotMem memory encoder FFN.")
-    parser.add_argument("--slotmem_memory_encoder_use_t_embed", dest="slotmem_memory_encoder_use_t_embed", action="store_true", default=False,
+    parser.add_argument("--slotmem_memory_encoder_use_t_embed", dest="slotmem_memory_encoder_use_t_embed", action=argparse.BooleanOptionalAction, default=True,
                         help="Condition SlotMem memory encoder compression on the current DiT timestep embedding.")
-    parser.add_argument("--slotmem_memory_encoder_use_slot_index_embed", dest="slotmem_memory_encoder_use_slot_index_embed", action="store_true", default=False,
+    parser.add_argument("--slotmem_memory_encoder_use_slot_index_embed", dest="slotmem_memory_encoder_use_slot_index_embed", action=argparse.BooleanOptionalAction, default=True,
                         help="Add learned slot-index identity embeddings after SlotMem memory encoder compression.")
     parser.add_argument("--slotmem_memory_encoder_aux_weight", dest="slotmem_memory_encoder_aux_weight", type=float, default=0.05,
                         help="Weight for SlotMem memory encoder role/background auxiliary contrastive CE loss.")
@@ -9205,22 +9037,6 @@ def parse_args():
                         help="Stage2 replay probability: skip the memory writer and train the stage1-style memory injection branch on the same stage2 triplet batch.")
     parser.add_argument("--slotmem_disable_memory_side_rope", dest="slotmem_disable_memory_side_rope", action=argparse.BooleanOptionalAction, default=True,
                         help="Disable memory-side key RoPE and merge value RoPE-center addition in SlotMem memory encoder scripts.")
-    parser.add_argument("--memory_fallback_quantile_abc", type=str, default="0.80,0.70,0.75",
-                        help="Fallback quantiles for A/B/C as comma-separated string.")
-    parser.add_argument("--memory_alpha_abc", type=str, default="0.10,0.30,0.15",
-                        help="Injection strengths for A/B/C as comma-separated string.")
-    parser.add_argument("--memory_max_inject_ratio_abc", type=str, default="0.10,0.30,0.15",
-                        help="Max injection ratios for A/B/C as comma-separated string.")
-    parser.add_argument("--memory_reverse_top3_constraint", action="store_true",
-                        help="Enable reverse top-3 constraint for input fusion (compatible with bank script).")
-    parser.add_argument("--memory_reverse_topn", type=int, default=0,
-                        help="Reverse constraint top-N for input fusion. 0 disables; N>0 means a video token can fuse a memory token only if it is in that memory token's top-N video matches in each latent-t.")
-    parser.add_argument("--disable_memory_reverse_topn_for_ablation", action=argparse.BooleanOptionalAction, default=True,
-                        help="If true, force-disable reverse-topN stage in fusion for clean ablation.")
-    parser.add_argument("--allow_injection_outside_bank_range", action=argparse.BooleanOptionalAction, default=True,
-                        help="If true, allow memory injection when timestep percent is outside configured bank range.")
-    parser.add_argument("--use_tau_sim_filter", action=argparse.BooleanOptionalAction, default=True,
-                        help="If false, disable tau_sim threshold filtering before ratio clipping.")
     parser.add_argument("--train_query_bbox_probe_use_eval_mode", action=argparse.BooleanOptionalAction, default=True,
                         help="Temporarily set denoising model to eval() during character-semantic probe.")
     parser.add_argument("--train_query_bbox_probe_use_no_grad", action=argparse.BooleanOptionalAction, default=True,
@@ -9231,19 +9047,12 @@ def parse_args():
                         help="If enabled, multiply loss weight by 2 inside character probe regions for each latent t.")
     parser.add_argument("--use_detached_local_probe_for_zero3", action=argparse.BooleanOptionalAction, default=False,
                         help="Run character-semantic probe on a detached local full model under ZeRO-3.")
-    parser.add_argument("--use_train_weights_for_extract_and_probe", action=argparse.BooleanOptionalAction, default=False,
+    parser.add_argument("--use_train_weights_for_extract_and_probe", action=argparse.BooleanOptionalAction, default=True,
                         help="When enabled, extraction/probe use current training-model weights (including LoRA) in eval/no-grad style paths and do not use detached local probe/extractor routes.")
     parser.add_argument("--probe_on_tp_leader_only", action=argparse.BooleanOptionalAction, default=True,
                         help="When detached probe is enabled, run probe only on TP leader and broadcast query boxes.")
-    parser.add_argument("--use_per_role_independent_fusion", action=argparse.BooleanOptionalAction, default=True,
-                        help="Enable per-role independent fusion and winner-takes-max-similarity merge.")
-    parser.add_argument("--per_role_fusion_winner_mode", type=str, default="max_similarity", choices=["max_similarity"],
-                        help="Winner mode for per-role fusion.")
-    parser.add_argument("--debug_per_role_fusion", action=argparse.BooleanOptionalAction, default=False,
-                        help="Print per-role fusion debug stats (role token count/query-valid/winner distribution).")
-    
     # Trainer
-    parser.add_argument("--training_strategy", type=str, default="auto")
+    parser.add_argument("--training_strategy", type=str, default="ddp")
     parser.add_argument("--model_slice_mode", type=str, default="none", choices=["none", "zero3"],
                         help="Model slicing/sharding mode. zero3 enables DeepSpeed ZeRO-3 parameter partitioning.")
     parser.add_argument("--use_detached_local_extractor_for_zero3", action=argparse.BooleanOptionalAction, default=False,
@@ -9289,8 +9098,6 @@ def parse_args():
                         help="Runtime debug print interval in global steps (when --debug_runtime_print is enabled).")
     parser.add_argument("--enable_attn_monitor", action="store_true",
                         help="Enable per-layer attention response monitoring hooks (disabled by default for speed).")
-    parser.add_argument("--memory_inject_start_ratio", type=float, default=0.0,
-                        help="Deprecated by learnable memory importance gates. Kept for backward compatibility.")
     parser.add_argument("--cuda_trim_interval", type=int, default=10,
                         help="Check CUDA cache fragmentation every N train steps; trim only when large fragmentation is detected.")
     parser.add_argument("--cuda_trim_min_fragment_mb", type=int, default=1536,
@@ -9312,7 +9119,6 @@ def _normalize_role_wise_slot_memory_bank_args(args):
     if mode not in ('single', 'legacy_multi'):
         mode = 'single'
     setattr(args, 'jigsaw_memory_bank_mode', mode)
-    setattr(args, 'extract_single_timestep_align_train', True)
     if mode == 'legacy_multi':
         bank_percents = str(getattr(args, 'memory_bank_percents', '0.85,0.60,0.35,0.12') or '0.85,0.60,0.35,0.12')
         setattr(args, 'memory_bank_percents', bank_percents)
@@ -9440,7 +9246,6 @@ def train_slotmem(args):
         'max_memory_characters': args.max_memory_characters,
         'cfg_scale': args.cfg_scale_extraction,
         'memory_similarity_mode': args.memory_similarity_mode,
-        'memory_injection_mode': args.memory_injection_mode,
         'enable_sparse_role_memory_attn': args.enable_sparse_role_memory_attn,
         'sparse_role_memory_injection_layers': args.sparse_role_memory_injection_layers,
         'sparse_role_memory_layer_scales': args.sparse_role_memory_layer_scales,
@@ -9480,7 +9285,6 @@ def train_slotmem(args):
         'stage2_stage1_branch_prob': args.stage2_stage1_branch_prob,
         'tiler_kwargs': tiler_kwargs,
         'suffix_attention_scale': args.suffix_attention_scale,
-        'extract_single_timestep_align_train': True,
         'train_stage': args.train_stage,
         'jigsaw_memory_bank_mode': args.jigsaw_memory_bank_mode,
         'jigsaw_memory_extract_timestep_mode': getattr(args, 'jigsaw_memory_extract_timestep_mode', 'aligned'),
@@ -9542,7 +9346,6 @@ def train_slotmem(args):
         pretrained_lora_path=args.pretrained_lora_path,
         model_VAE=None,
         args=args,
-        patch_dim=args.patch_dim,
         projector_bottleneck=args.projector_bottleneck,
         latent_dim=args.latent_dim,
         timing_tracker=timing_tracker,
