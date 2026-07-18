@@ -85,7 +85,7 @@ fi
 mkdir -p "${OUTPUT_DIR}"
 
 cmd=(
-  python3 -u test_mem_Encoder.py
+  python3 -u infer_slotmem.py
   --ckpt_dir "${CKPT_DIR}"
   --json_path "${JSON_PATH}"
   --ref_image_path "${REF_IMAGE_PATH}"

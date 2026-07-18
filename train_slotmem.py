@@ -4575,7 +4575,7 @@ class InlineExtractThenTrainDataset(IterableDataset):
                 width=ds_args.get('width', 832),
             )
         else:
-            from test_dataloading import CandidateGroupsDataset
+            from slotmem_dataset import CandidateGroupsDataset
 
             args_ns = SimpleNamespace(**self.dataset_config.get('dataset_args', {}))
             self.dataset = CandidateGroupsDataset(csv_path, char_dir, vid_root, args_ns, skip_log_path=skip_log)

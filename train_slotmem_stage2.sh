@@ -178,7 +178,7 @@ run_stage2_domain() {
   echo "TRAINABLE=Wan LoRA + memory writer + stage1 character-wise memory attention + memory encoder"
   echo "=========================================="
 
-  torchrun --nproc_per_node="${NUM_TRAIN_GPUS}" --master-port="${MASTER_PORT}" train_mem_Encoder.py \
+  torchrun --nproc_per_node="${NUM_TRAIN_GPUS}" --master-port="${MASTER_PORT}" train_slotmem.py \
     "${common_args[@]}" \
     --output_path "${output_dir}" \
     --exp_prefix "${exp_prefix}" \

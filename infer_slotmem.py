@@ -53,7 +53,7 @@ from attention_probe_utils import (
     process_attention_map_to_mask as process_attention_map_to_mask_v2,
     verify_target_text_is_single_token,
 )
-from train_mem_Encoder import (
+from train_slotmem import (
     AttentionOutputFeatureTap,
     ForwardStopAfterLayer,
     LearnableMemoryEmbeddings,

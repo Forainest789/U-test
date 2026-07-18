@@ -176,7 +176,7 @@ run_phase() {
     phase_args+=(--pretrained_lora_path "${pretrained_lora_path}")
   fi
 
-  torchrun --nproc_per_node="${NUM_TRAIN_GPUS}" --master-port="${MASTER_PORT}" train_mem_Encoder.py \
+  torchrun --nproc_per_node="${NUM_TRAIN_GPUS}" --master-port="${MASTER_PORT}" train_slotmem.py \
     "${common_args[@]}" \
     "${phase_args[@]}"
 }
