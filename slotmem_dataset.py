@@ -16,7 +16,7 @@ from tqdm import tqdm
 _DECODE_BACKEND_CACHE = None
 _BACKEND_HINT_PRINTED = False
 
-# ---------- FFmpeg GPU 解码 (NVDEC/CUDA) ----------
+# FFmpeg GPU decoding (NVDEC/CUDA).
 def _resolve_tool_bin(env_key, default_bin):
     """Resolve external tool path from env var with sane fallback."""
     v = os.environ.get(env_key, "").strip()
@@ -24,7 +24,7 @@ def _resolve_tool_bin(env_key, default_bin):
 
 
 def _ffmpeg_gpu_video_info(path):
-    """用 ffprobe 获取视频信息。返回 dict: width, height, fps, num_frames。失败抛错。"""
+    """Return width, height, FPS, and frame count from ffprobe."""
     ffprobe_bin = _resolve_tool_bin("FFPROBE_BIN", "ffprobe")
     cmd = [
         ffprobe_bin, "-v", "error", "-select_streams", "v:0",
@@ -169,10 +169,9 @@ def _ffmpeg_decode_frames_with_backend(path, frame_indices, width, height, fps, 
 
 
 def _ffmpeg_gpu_decode_frames(path, frame_indices, width, height, fps):
-    """
-    用 ffmpeg -hwaccel cuda 解码指定帧，输出 RGB。要求系统 ffmpeg 带 CUDA/NVDEC。
-    frame_indices: list[int]，帧下标（从 0 开始）。
-    返回: np.ndarray uint8 shape (N, H, W, 3)，失败抛错。
+    """Decode zero-based frame indices to RGB ``uint8[N,H,W,3]``.
+
+    Backend selection prefers available GPU paths and falls back as configured.
     """
     if not frame_indices:
         return np.zeros((0, height, width, 3), dtype=np.uint8)
@@ -218,7 +217,7 @@ class TextVideoDataset_New(Dataset):
         self.misc_size = [self.height, self.width]
         self.video_list = []
         
-        # 不再使用 use_QWen.txt / blackwhite_video_folders.txt / failed_frame_extraction.txt 过滤
+        # Load every video under the requested path without auxiliary filter lists.
         print(f"Loading videos from specified path: {base_path}")
         
         # Traverse directories: Duration -> VideoFolder
@@ -309,7 +308,7 @@ class TextVideoDataset_New(Dataset):
         return image
 
     def load_video_segment(self, video_path, start_time, end_time, target_num_frames=81):
-        """使用 FFmpeg 自动解码（优先可用最快后端，CUDA 失败自动回退 CPU）。"""
+        """Decode with the fastest available FFmpeg backend, falling back to CPU."""
         info = _ffmpeg_gpu_video_info(video_path)
         total_frames = info["num_frames"]
         fps = info["fps"]
@@ -486,13 +485,13 @@ class TextVideoDataset_New(Dataset):
                 use_memory = False
             else:
                 # Multiple valid chunks
-                # "选取除了第一个...以外的任意片段" -> Select from valid_chunks[1:]
+                # Reserve the first chunk for memory and sample the target from later chunks.
                 candidates_indices = list(range(1, len(valid_chunks)))
                 core_idx = random.choice(candidates_indices)
                 core_chunk = valid_chunks[core_idx]
                 
                 # Memory Selection Logic
-                # "挑选memory时优先挑选核心片段的所有出现character都有出现的片段作为memory"
+                # Prefer historical memory chunks containing every target role.
                 # Identify Core Characters
                 core_chars = core_chunk.get('character_list', [])
                 
@@ -501,10 +500,7 @@ class TextVideoDataset_New(Dataset):
                     use_memory = False
                 else:
                     memory_candidates_indices = []
-                    # Looking for memory in OTHER chunks? Or PREVIOUS chunks? 
-                    # Assuming "memory" implies previous context, looking at indices 0 to core_idx-1
-                    # But strict instruction: "挑选memory时...". If I look at ALL chunks except core?
-                    # Usually memory is historical. I will restrict to previous valid chunks.
+                    # Memory is historical, so candidates must precede the target chunk.
                     possible_memory_indices = list(range(0, core_idx))
                     
                     if len(possible_memory_indices) > 0:
@@ -744,7 +740,7 @@ class CandidateGroupsDataset(Dataset):
         return image
 
     def check_video_ok(self, video_path):
-        """轻量检查：仅 ffprobe 查帧数，不解码。确认可加载后再解码，避免后知后觉。"""
+        """Check the frame count with ffprobe before decoding."""
         try:
             info = _ffmpeg_gpu_video_info(video_path)
             total_frames = info.get("num_frames") or 0
@@ -753,7 +749,7 @@ class CandidateGroupsDataset(Dataset):
             return False
 
     def load_video_full(self, video_path):
-        """Load full clip video and sample num_frames. 使用 FFmpeg GPU 解码。Returns tensor [C,T,H,W] or None if frame count too small."""
+        """Load and sample a full clip as ``[C,T,H,W]``, or return ``None`` if too short."""
         try:
             info = _ffmpeg_gpu_video_info(video_path)
             total_frames = info["num_frames"]
@@ -768,7 +764,7 @@ class CandidateGroupsDataset(Dataset):
             return None
 
     def load_video_segment(self, video_path, start_time, end_time, target_num_frames=81):
-        """使用 FFmpeg GPU (-hwaccel cuda) 解码。"""
+        """Decode a video segment through the configured FFmpeg backend."""
         info = _ffmpeg_gpu_video_info(video_path)
         total_frames = info["num_frames"]
         fps = info["fps"]
@@ -832,7 +828,7 @@ class CandidateGroupsDataset(Dataset):
             explicit_target_clip = None
             explicit_memory_clip = None
             explicit_update_memory_clip = None
-        # 单次尝试，不重试
+        # Sample once; the caller handles skipped items.
         core_clip = int(explicit_target_clip) if explicit_target_clip is not None else random.choice(candidate_clips_list)
         json_path = os.path.join(self.character_lists_dir, f"{video_id}.json")
         if not os.path.isfile(json_path):
@@ -945,7 +941,7 @@ class CandidateGroupsDataset(Dataset):
         if missing_paths:
             self._log_skip(video_id, group_index, core_clip, "video_missing", " ".join(missing_paths))
             return None
-        # 先轻量检查 core 和 memory 帧数，通过后再解码，避免后知后觉
+        # Validate target and memory frame counts before expensive decoding.
         if not self.check_video_ok(core_path):
             self._log_skip(video_id, group_index, core_clip, "frame_count_core", "")
             return None

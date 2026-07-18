@@ -122,8 +122,8 @@ def verify_target_text_is_single_token(pipe, target_text):
 def find_token_index_in_prompt(pipe, prompt, target_text, token_ids, token_texts, use_all_occurrences=False):
     """
     Find the indices of all target tokens in the encoded prompt.
-    直接匹配时忽略大小写：若精确匹配未找到，则在 prompt 中按忽略大小写查找 target_text，
-    用 prompt 中的实际片段（如 "Tank"）再查 token 位置。
+    If the exact token match fails, find ``target_text`` case-insensitively
+    in the prompt and retry with the prompt's original casing.
     
     Args:
         use_all_occurrences: If True, return ALL occurrences of each token (for multi-occurrence handling)
@@ -154,10 +154,10 @@ def find_token_index_in_prompt(pipe, prompt, target_text, token_ids, token_texts
                     found.append(indices[0])
         return found if found else None
     
-    # 1. 精确匹配
+    # Try the encoded target tokens first.
     found_indices = find_indices_for_tokens(token_ids, token_texts)
     
-    # 2. 未找到且 target_text 非空时：忽略大小写在 prompt 中查找，用 prompt 中的实际片段再查 token
+    # Retry with the prompt's original casing when needed.
     if not found_indices and target_text and isinstance(prompt, str):
         m = re.search(re.escape(target_text), prompt, re.IGNORECASE)
         if m:
@@ -305,7 +305,7 @@ class AttentionMapExtractor:
                     attn = dq[0]
                 else:
                     attn = dq[-1]
-                # CFG差值: cond - uncond, 突出角色独有的注意力区域
+                # CFG difference (conditional - unconditional) emphasizes role-specific regions.
                 if attn.dim() >= 2 and attn.shape[0] == 2:
                     attn = (attn[1] - attn[0]).clamp(min=0)
                 results[layer_idx] = attn
@@ -316,16 +316,18 @@ class AttentionMapExtractor:
 
 class MultiCharacterAttentionMapExtractor:
     """
-    多角色共用一次 DiT forward：对 union 的 token 取 attention [B,H,Sq,K]，
-    在 hook 内按每个角色的 prefix/suffix 列做加权求和，得到每个角色一张 map。
-    char_configs: list of dict, 每项 {target_token_indices, suffix_token_indices, suffix_scale, token_weight}。
+    Share one DiT forward across roles by collecting attention ``[B,H,Sq,K]``
+    for the union of role tokens. Hooks produce one map per role by weighting
+    its prefix and suffix columns. Each ``char_configs`` item contains
+    ``target_token_indices``, ``suffix_token_indices``, ``suffix_scale``, and
+    ``token_weight``.
     """
     def __init__(self, pipe, target_layers, char_configs, cfg_scale=1.0):
         self.pipe = pipe
         self.target_layers = target_layers
         self.char_configs = char_configs
         self.cfg_scale = cfg_scale
-        # 建 union 与每角色在 union 中的列下标
+        # Build the token union and each role's column indices within it.
         all_indices = []
         for c in char_configs:
             pre = c.get('target_token_indices', [])
@@ -432,7 +434,7 @@ class MultiCharacterAttentionMapExtractor:
         self.attention_maps = {}
 
     def get_attention_maps_per_character(self):
-        """Return list of dict: [ {layer_idx: tensor}, ... ]，与 char_configs 一一对应。"""
+        """Return one ``{layer_idx: tensor}`` mapping per character config."""
         nchars = len(self.char_slices)
         out = [{} for _ in range(nchars)]
         for (layer_idx, char_idx), dq in self.attention_maps.items():
@@ -1083,9 +1085,7 @@ def process_autoregressive_visualization(dino_model, has_dino, all_indices, fram
                 print(f"    Frame {t}: Error post-processing: {e}")
         print(f"  ✓ Spatial extraction complete.")
 
-    # -------------------------------------------------------------------------
-    # 3. Initialize Memory Bank with Anchor Frame (MODIFIED: Applied Spatial Filter)
-    # -------------------------------------------------------------------------
+    # Initialize the memory bank from spatially filtered anchor-frame tokens.
     memory_bank = None  # [N_stored, Dim]
     attn_score_threshold = 0.0
     
@@ -1093,8 +1093,7 @@ def process_autoregressive_visualization(dino_model, has_dino, all_indices, fram
     frame_end = (best_frame_idx + 1) * (H_lat * W_lat)
     anchor_indices_local = [idx - frame_start for idx in all_indices if frame_start <= idx < frame_end]
     
-    # === NEW: Spatial Filter for Anchor Frame Initial Tokens ===
-    # We must ensure the initial memory does not contain background noise
+    # Spatial filtering keeps background noise out of the initial memory.
     if use_bound != "None" and len(anchor_indices_local) > 0:
         print(f"  Filtering Anchor Frame (Frame {best_frame_idx}) with spatial constraints...")
         
@@ -1302,7 +1301,7 @@ def process_autoregressive_visualization(dino_model, has_dino, all_indices, fram
             valid_indices = frame_indices_tensor[is_novel_mask].cpu().tolist()
             novel_indices_local.extend(valid_indices)
             
-            # Update Memory Bank with NEW novel tokens
+            # Add novel tokens to the memory bank.
             # Only update if NOT anchor frame (Anchor is already in bank)
             if len(valid_indices) > 0 and t != best_frame_idx:
                 new_features = candidate_features[is_novel_mask]

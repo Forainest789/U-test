@@ -1245,7 +1245,7 @@ class StatsAdaptiveNorm(torch.nn.Module):
     def forward(self, x, z_mean, z_std):
         # x: [B, N, D]
         # z_mean, z_std: [B, C_lat]
-        # 确保z_mean和z_std的dtype与stats_proj的权重dtype一致
+        # Match statistics to the projection weight dtype.
         target_dtype = self.stats_proj[0].weight.dtype
         z_mean = z_mean.to(dtype=target_dtype)
         z_std = z_std.to(dtype=target_dtype)
@@ -1261,7 +1261,8 @@ class StyleAwareMemoryProjector(torch.nn.Module):
     """
     V7 Projector: Semantics-First, Style-Last.
     Structure: InputProj -> AdaLN(t) -> Act -> MidProj -> AdaIN(z_t) -> OutputProj(Zero)
-    [修改] 添加时间门控机制：高噪声阶段（高t）基本不调制，低噪声阶段（低t）略微调制
+    Separate time gates retain semantic gradients while suppressing unstable
+    style alignment at high noise.
     """
     def __init__(self, dim=5120, time_embed_dim=256, latent_dim=16, bottleneck_dim=256, dropout=0.05):
         super().__init__()
@@ -1280,21 +1281,13 @@ class StyleAwareMemoryProjector(torch.nn.Module):
         # 4. Style Alignment (Distribution-Aware)
         self.style_norm = StatsAdaptiveNorm(bottleneck_dim, stats_dim=latent_dim)
         
-        # 5. [新增] 分离的时间门控机制：AdaLN和StyleNorm使用不同的门控策略
-        # AdaLN (语义门控): 高t时保持较小但不为0的值，允许语义信息在高噪声时也有贡献，保持梯度流
-        # StyleNorm (分布对齐): 高t时更严格抑制，因为高噪声时分布不稳定
-        # 
-        # AdaLN门控初始化：scale=4.0, bias=-1.0
-        # - 高t时：t_normalized≈1, gate_raw = 4*(1-1) - 1 = -1, sigmoid(-1)≈0.27 (保持一定梯度)
-        # - 低t时：t_normalized≈0, gate_raw = 4*(1-0) - 1 = 3, sigmoid(3)≈0.95 (几乎全开)
-        self.time_gate_scale_adaln = torch.nn.Parameter(torch.tensor(4.0))  # AdaLN门控缩放
-        self.time_gate_bias_adaln = torch.nn.Parameter(torch.tensor(-1.0))  # AdaLN门控偏移
+        # AdaLN is about 0.27 at high noise and 0.95 at low noise.
+        self.time_gate_scale_adaln = torch.nn.Parameter(torch.tensor(4.0))
+        self.time_gate_bias_adaln = torch.nn.Parameter(torch.tensor(-1.0))
         
-        # StyleNorm门控初始化：scale=6.0, bias=-3.0 (更严格)
-        # - 高t时：t_normalized≈1, gate_raw = 6*(1-1) - 3 = -3, sigmoid(-3)≈0.05 (严格抑制)
-        # - 低t时：t_normalized≈0, gate_raw = 6*(1-0) - 3 = 3, sigmoid(3)≈0.95 (几乎全开)
-        self.time_gate_scale_style = torch.nn.Parameter(torch.tensor(6.0))  # StyleNorm门控缩放（更严格）
-        self.time_gate_bias_style = torch.nn.Parameter(torch.tensor(-3.0))  # StyleNorm门控偏移（更严格）
+        # StyleNorm is about 0.05 at high noise and 0.95 at low noise.
+        self.time_gate_scale_style = torch.nn.Parameter(torch.tensor(6.0))
+        self.time_gate_bias_style = torch.nn.Parameter(torch.tensor(-3.0))
         
         # 6. Output Projection (Zero-Initialized)
         self.output_proj = torch.nn.Linear(bottleneck_dim, dim)
@@ -1306,9 +1299,9 @@ class StyleAwareMemoryProjector(torch.nn.Module):
         memory: [B, N, D]
         t_emb: [B, T_dim]
         noisy_latents: [B, C_lat, F, H, W]
-        condition_mask: [B, F, H, W] or None, 1表示条件帧位置（应排除），0表示非条件帧位置（应统计）
-        timestep: [B] or scalar, 原始时间步，用于计算门控
-        num_train_timesteps: int, 训练时的总时间步数，默认1000
+        condition_mask: [B, F, H, W] or None; one excludes conditioning frames.
+        timestep: [B] or scalar timestep used by the gates.
+        num_train_timesteps: Total number of training timesteps; defaults to 1,000.
         """
         # Residual connection base
         identity = memory
@@ -1318,12 +1311,11 @@ class StyleAwareMemoryProjector(torch.nn.Module):
         
         # B. Semantic Gating (Time)
         # Selects WHAT to remember based on denoising stage
-        x_before_adaln = x  # 保存AdaLN前的值，用于门控
+        x_before_adaln = x  # Retain the pre-AdaLN value for interpolation.
         x = self.adaln_block(x, t_emb)
-        # [新增] AdaLN时间门控：高噪声时保持较小但不为0的值，允许语义信息贡献并保持梯度流
-        # gate_adaln: [B, 1]，高t时≈0.27（保持梯度），低t时≈0.95（几乎全开）
+        # ``gate_adaln`` remains nonzero at high noise to preserve gradients.
         if timestep is not None:
-            # 将 timestep 归一化到 [0, 1]，高t（高噪声）时接近1，低t（低噪声）时接近0
+            # Normalize timesteps to [0,1], increasing with noise level.
             if isinstance(timestep, torch.Tensor):
                 if timestep.dim() == 0:
                     timestep = timestep.unsqueeze(0)
@@ -1333,21 +1325,21 @@ class StyleAwareMemoryProjector(torch.nn.Module):
             else:
                 timestep = torch.tensor([timestep], device=x.device, dtype=x.dtype).expand(x.shape[0])
             
-            # 归一化：高t时接近1，低t时接近0
+            # High-noise timesteps approach one.
             t_normalized = timestep.float() / num_train_timesteps  # [B]
-            # AdaLN门控：保持一定梯度流，即使在高噪声时
+            # Preserve a semantic gradient path at high noise.
             gate_raw_adaln = self.time_gate_scale_adaln * (1.0 - t_normalized) + self.time_gate_bias_adaln  # [B]
             gate_adaln = torch.sigmoid(gate_raw_adaln).unsqueeze(1).unsqueeze(1).to(x.dtype)  # [B, 1, 1]
         else:
-            # 如果没有提供 timestep，使用默认门控（全开，即 gate=1）
+            # Without a timestep, leave the gate fully open.
             gate_adaln = torch.ones(x.shape[0], 1, 1, device=x.device, dtype=x.dtype)
         
-        # 门控混合：gate_adaln在高t时保持约0.27，允许语义信息贡献并保持梯度流
+        # Interpolate between the original and AdaLN-normalized values.
         x = gate_adaln * x + (1.0 - gate_adaln) * x_before_adaln
         
         x = self.act(x)
         x = self.dropout(x)
-        # 确保 x 的数据类型与 mid_proj 权重的数据类型一致
+        # Match the activation to the projection weight dtype.
         x = x.to(self.mid_proj.weight.dtype)
         x = self.mid_proj(x)
         
@@ -1355,21 +1347,20 @@ class StyleAwareMemoryProjector(torch.nn.Module):
         # Adapts HOW it looks based on current noise distribution
         with torch.no_grad():
             if condition_mask is not None:
-                # 只统计非条件帧位置（mask=0的位置）
-                # condition_mask: [B, F, H, W], 需要扩展到 [B, C_lat, F, H, W]
+                # Compute statistics only where the conditioning mask is zero.
+                # Expand ``[B,F,H,W]`` to ``[B,C_lat,F,H,W]``.
                 B, C_lat, F, H, W = noisy_latents.shape
-                # 确保mask的shape匹配
+                # Align the mask shape with the noisy latents.
                 if condition_mask.shape[1:] != (F, H, W):
-                    # 如果mask的F维度不匹配，可能需要调整
-                    # 假设mask的第一帧是条件帧
+                    # Adapt mismatched temporal dimensions.
                     if condition_mask.shape[1] == 1:
-                        # 单帧mask，扩展到所有帧
+                        # Broadcast a single-frame mask across time.
                         condition_mask = condition_mask.expand(B, F, H, W)
                     else:
-                        # 截断或填充到F
+                        # Truncate or pad to F.
                         mask_F = condition_mask.shape[1]
                         if mask_F < F:
-                            # 填充：假设后续帧都是非条件帧
+                            # Treat padded later frames as non-conditioning frames.
                             pad = torch.zeros(B, F - mask_F, H, W, 
                                              device=condition_mask.device, 
                                              dtype=condition_mask.dtype)
@@ -1377,65 +1368,64 @@ class StyleAwareMemoryProjector(torch.nn.Module):
                         else:
                             condition_mask = condition_mask[:, :F, :, :]
                 
-                # 扩展mask到C_lat维度: [B, F, H, W] -> [B, 1, F, H, W] -> [B, C_lat, F, H, W]
+                # Expand the mask across latent channels.
                 mask_expanded = condition_mask.unsqueeze(1).expand(B, C_lat, F, H, W)
-                # 反转mask：1表示条件帧（排除），0表示非条件帧（保留）
-                # 我们想要mask=0的位置，所以用 (1 - mask)
+                # Invert the mask so true entries identify valid statistics positions.
                 valid_mask = (1 - mask_expanded).bool()
                 
-                # 只对valid位置计算统计
+                # Compute moments over valid positions only.
                 if valid_mask.any():
-                    # 将invalid位置设为0，然后计算统计（但需要归一化）
+                    # Zero invalid positions and normalize by the valid count.
                     masked_latents = noisy_latents * valid_mask.float()
                     
-                    # 计算有效位置的数量：在dim=(2,3,4)上sum
+                    # Count valid positions over temporal and spatial dimensions.
                     B, C_lat = noisy_latents.shape[0], noisy_latents.shape[1]
-                    valid_count = valid_mask.sum(dim=(2, 3, 4), keepdim=True)  # [B, C_lat, 1] 或 [B, C_lat, 1, 1, 1]
+                    valid_count = valid_mask.sum(dim=(2, 3, 4), keepdim=True)  # [B,C_lat,1,1,1]
                     valid_count = torch.clamp(valid_count, min=1)
-                    valid_count_flat = valid_count.view(B, C_lat)  # 强制reshape为[B, C_lat]
+                    valid_count_flat = valid_count.view(B, C_lat)
                     
-                    # 计算均值：在dim=(2,3,4)上sum，得到[B, C_lat]
+                    # Compute per-channel means over temporal and spatial dimensions.
                     masked_sum = masked_latents.sum(dim=(2, 3, 4), keepdim=False)  # [B, C_lat]
                     mean = masked_sum / valid_count_flat  # [B, C_lat]
                     
-                    # 计算方差
+                    # Compute per-channel variances.
                     mean_expanded = mean.unsqueeze(-1).unsqueeze(-1).unsqueeze(-1)  # [B, C_lat, 1, 1, 1]
                     centered = (noisy_latents - mean_expanded) * valid_mask.float()
                     var_sum = (centered ** 2).sum(dim=(2, 3, 4), keepdim=False)  # [B, C_lat]
                     var = var_sum / valid_count_flat  # [B, C_lat]
                     std = torch.sqrt(var + 1e-5)  # [B, C_lat]
                 else:
-                    # 如果没有有效位置，回退到全量统计
+                    # Fall back to full-volume statistics when no positions are valid.
                     var, mean = torch.var_mean(noisy_latents, dim=(2, 3, 4), unbiased=False)
                     std = torch.sqrt(var + 1e-5)
-                    # 确保shape为[B, C_lat]，即使C_lat=1也要保持2D
+                    # Preserve ``[B,C_lat]`` when ``C_lat == 1``.
                     if mean.dim() == 1:
-                        mean = mean.unsqueeze(-1)  # [B] -> [B, 1] (当C_lat=1时)
+                        mean = mean.unsqueeze(-1)  # [B] -> [B,1]
                     if std.dim() == 1:
-                        std = std.unsqueeze(-1)  # [B] -> [B, 1] (当C_lat=1时)
+                        std = std.unsqueeze(-1)  # [B] -> [B,1]
             else:
-                # 没有mask，使用全量统计（原始行为）
+                # Without a mask, use full-volume statistics.
                 # Calculate stats over spatial+temporal dimensions (F, H, W)
                 # noisy_latents is [B, C, F, H, W] -> dims (2, 3, 4)
                 var, mean = torch.var_mean(noisy_latents, dim=(2, 3, 4), unbiased=False)
                 std = torch.sqrt(var + 1e-5)
-                # 确保shape为[B, C_lat]，即使C_lat=1也要保持2D
+                # Preserve ``[B,C_lat]`` when ``C_lat == 1``.
                 if mean.dim() == 1:
-                    mean = mean.unsqueeze(-1)  # [B] -> [B, 1] (当C_lat=1时)
+                    mean = mean.unsqueeze(-1)  # [B] -> [B,1]
                 if std.dim() == 1:
-                    std = std.unsqueeze(-1)  # [B] -> [B, 1] (当C_lat=1时)
+                    std = std.unsqueeze(-1)  # [B] -> [B,1]
             
-        # 确保mean和std的dtype与style_norm的权重dtype一致
+        # Match statistics to the StyleNorm weight dtype.
         target_dtype = self.style_norm.stats_proj[0].weight.dtype
         mean = mean.to(dtype=target_dtype)
         std = std.to(dtype=target_dtype)
         
-        # [新增] StyleNorm时间门控：高噪声时更严格抑制分布对齐，因为高噪声时分布不稳定
-        x_before_style = x  # 保存StyleNorm前的值，用于门控
+        # Suppress distribution alignment more strongly at high noise.
+        x_before_style = x  # Retain the pre-StyleNorm value for interpolation.
         x = self.style_norm(x, mean, std)
-        # 使用独立的StyleNorm门控，比AdaLN更严格
+        # StyleNorm uses an independent, stricter gate.
         if timestep is not None:
-            # 重新计算t_normalized（如果之前已经计算过，可以复用，但为了清晰这里重新计算）
+            # Recompute the normalized timestep for this gate.
             if isinstance(timestep, torch.Tensor):
                 if timestep.dim() == 0:
                     timestep = timestep.unsqueeze(0)
@@ -1445,13 +1435,13 @@ class StyleAwareMemoryProjector(torch.nn.Module):
                 timestep = torch.tensor([timestep], device=x.device, dtype=x.dtype).expand(x.shape[0])
             
             t_normalized = timestep.float() / num_train_timesteps  # [B]
-            # StyleNorm门控：更严格抑制，高t时≈0.05（几乎关闭），低t时≈0.95（几乎全开）
+            # The StyleNorm gate is about 0.05 at high noise and 0.95 at low noise.
             gate_raw_style = self.time_gate_scale_style * (1.0 - t_normalized) + self.time_gate_bias_style  # [B]
             gate_style = torch.sigmoid(gate_raw_style).unsqueeze(1).unsqueeze(1).to(x.dtype)  # [B, 1, 1]
         else:
             gate_style = torch.ones(x.shape[0], 1, 1, device=x.device, dtype=x.dtype)
         
-        # 门控混合：gate_style在高t时≈0.05，严格抑制分布对齐
+        # Interpolate between the original and StyleNorm-aligned values.
         x = gate_style * x + (1.0 - gate_style) * x_before_style
         
         # D. Output Projection (Residual)
@@ -2127,13 +2117,13 @@ def run_detailed_viz_extraction(
     C, T, H, W = memory_video_tensor.shape
     C_lat, F_lat, H_lat, W_lat = latents.shape
     
-    # 获取 DiT patch_size，计算实际 attention/patch 空间分辨率
+    # Derive the attention-grid resolution from the DiT patch size.
     _patch_size = pipe.dit.patch_size  # e.g., (1, 2, 2)
     H_patch = H_lat // _patch_size[1]  # 60 // 2 = 30
     W_patch = W_lat // _patch_size[2]  # 104 // 2 = 52
     spatial_shape = (H_patch, W_patch)
     
-    # Parse character name and find token indices（热力图查询时忽略 _ - 等特殊符号，只考虑文本 token）
+    # Parse the role name, ignoring separators in heatmap token queries.
     character_name = character_id.replace('_', ' ').replace('-', ' ').strip()
     parts = character_id.replace('-', '_').split('_', 1)
     prefix_text = parts[0]
@@ -2212,7 +2202,7 @@ def run_detailed_viz_extraction(
     num_blocks = len(pipe.dit.blocks)
     all_layer_indices = list(range(num_blocks))
     
-    # 解析实际提取使用的层 (与 extract_patch_embeddings_for_character 保持一致)
+    # Match the layers used by patch-embedding extraction.
     configured_layers = extract_config.get('extract_layers', [-1])
     if isinstance(configured_layers, list) and -1 in configured_layers:
         extract_layer_indices = all_layer_indices
@@ -2261,7 +2251,7 @@ def run_detailed_viz_extraction(
         for layer_idx, amap in raw_maps.items():
             while amap.dim() > 1 and amap.shape[0] == 1:
                 amap = amap.squeeze(0)
-            # 修复: 对head维度取均值 [H, N_vis] → [N_vis]，避免head维度被错误flatten到空间维度
+            # Average heads ``[H,N_vis] -> [N_vis]`` without flattening into space.
             if amap.dim() > 1:
                 amap = amap.mean(dim=0)
             step_layer_maps[step_idx][layer_idx] = amap.detach().float().cpu()
@@ -2300,7 +2290,7 @@ def run_detailed_viz_extraction(
         if agg_map is None:
             return None
         num_tokens = agg_map.shape[0]
-        F_actual = num_tokens // (H_patch * W_patch)  # 使用 patch grid 分辨率
+        F_actual = num_tokens // (H_patch * W_patch)  # Use patch-grid resolution.
         binary_mask, continuous_map, selected_indices, frame_info = process_attention_map_to_mask(
             agg_map, threshold=top_visual_tokens, spatial_shape=spatial_shape,
             num_frames=F_actual, otsu_scope="frame", neighbor_filter_kernel=neighbor_filter_kernel,
@@ -2308,7 +2298,7 @@ def run_detailed_viz_extraction(
         )
         if isinstance(selected_indices, set):
             selected_indices = list(selected_indices)
-        total_spatial = H_patch * W_patch  # patch 空间每帧 token 数
+        total_spatial = H_patch * W_patch  # Spatial patch tokens per frame.
         positions = []
         for idx in selected_indices:
             frame_idx = idx // total_spatial
@@ -2322,7 +2312,7 @@ def run_detailed_viz_extraction(
     # --- Helper: draw visualization ---
     frames_np = ((memory_video_tensor.permute(1, 2, 3, 0).cpu().numpy() + 1.0) * 127.5).clip(0, 255).astype(np.uint8)
     T_vid, H_vid, W_vid, _ = frames_np.shape
-    # stride 需要反映 patch grid → pixel 的缩放 (patch_size 在 VAE 8x 基础上再 2x)
+    # Map the patch grid to pixels after VAE and DiT downsampling.
     stride_t = max(1, T_vid // F_lat) if F_lat > 0 else 4
     stride_h = H_vid // H_patch  # 480 // 30 = 16
     stride_w = W_vid // W_patch  # 832 // 52 = 16
@@ -2395,35 +2385,23 @@ def save_extraction_visualization(
     char_positions_dict,  # {char_id: positions_tensor}
     vae_stride=(4, 8, 8)  # (T_stride, H_stride, W_stride)
 ):
-    """
-    保存提取结果的热力图可视化（分角色）。
-    只保留最近的 2 个 use_memory=True 的 sample_id 文件夹。
-    """
+    """Save per-role extraction overlays, retaining the two latest samples."""
     import shutil
     import matplotlib.pyplot as plt
     import matplotlib.patches as patches
     import os
     import numpy as np
     
-    # -----------------------------------------------------------
-    # 1. 目录管理逻辑 (Check: 是否始终只保存2个)
-    # -----------------------------------------------------------
+    # Keep only the two most recent visualization samples.
     os.makedirs(viz_root_dir, exist_ok=True)
     
-    # 获取当前所有已保存的样本文件夹，按名称排序 (假设 sample_id 以时间戳开头，排序即按时间)
+    # Timestamp-prefixed sample IDs sort chronologically by directory name.
     existing_dirs = sorted([d for d in os.listdir(viz_root_dir) if os.path.isdir(os.path.join(viz_root_dir, d))])
     
-    # 如果当前样本是新的，且已存数量 >= 2，则删除最旧的
-    # 逻辑验证：
-    #   - 假设已有 [S1, S2]
-    #   - 新来 S3
-    #   - sorted 结果 [S1, S2]
-    #   - 删除 S1
-    #   - 保存 S3
-    #   - 最终状态 [S2, S3] (始终保持2个)
+    # Delete the oldest directory before adding a third sample.
     if sample_id not in existing_dirs:
         while len(existing_dirs) >= 2:
-            oldest_dir = os.path.join(viz_root_dir, existing_dirs.pop(0)) # 弹出并删除最旧的
+            oldest_dir = os.path.join(viz_root_dir, existing_dirs.pop(0))
             try:
                 shutil.rmtree(oldest_dir)
                 #print(f"[Viz] Removed old visualization: {oldest_dir}")
@@ -2431,59 +2409,54 @@ def save_extraction_visualization(
                 pass
                 #print(f"[Viz] Error deleting old dir {oldest_dir}: {e}")
     
-    # 创建当前样本目录
+    # Create the current sample directory.
     sample_dir = os.path.join(viz_root_dir, sample_id)
     if os.path.exists(sample_dir):
         shutil.rmtree(sample_dir)
     os.makedirs(sample_dir, exist_ok=True)
     
-    # -----------------------------------------------------------
-    # 2. 视频帧预处理
-    # -----------------------------------------------------------
+    # Prepare video frames.
     # [C, T, H, W] -> [T, H, W, C] & [-1, 1] -> [0, 255]
     frames = ((video_tensor.permute(1, 2, 3, 0).cpu().numpy() + 1.0) * 127.5).clip(0, 255).astype(np.uint8)
     T, H, W, C = frames.shape
     stride_t, stride_h, stride_w = vae_stride
     
-    # 颜色列表 (用于区分不同角色，虽然分了文件夹，但画图时也可以用不同色)
+    # Assign distinct overlay colors to roles.
     colors = ['red', 'cyan', 'lime', 'yellow', 'magenta']
     
-    # -----------------------------------------------------------
-    # 3. 分角色绘制
-    # -----------------------------------------------------------
+    # Render each role separately.
     for i, (char_id, positions) in enumerate(char_positions_dict.items()):
         if positions is None or positions.shape[0] == 0:
             continue
             
-        # 为该角色创建子目录
-        # 处理 char_id 中的非法文件名字符
+        # Create a role directory with a filesystem-safe name.
         safe_char_id = "".join([c if c.isalnum() else "_" for c in char_id])
         char_dir = os.path.join(sample_dir, f"role_{safe_char_id}")
         os.makedirs(char_dir, exist_ok=True)
         
-        # 挑选颜色
+        # Select the role color.
         color = colors[i % len(colors)]
         
-        # 解析位置
+        # Parse patch positions.
         pos_list = positions.cpu().numpy() # [N, 3] -> (t, h, w)
         active_latent_frames = sorted(list(set(pos_list[:, 0])))
         
         for lat_t in active_latent_frames:
-            # 获取该帧该角色的所有 patch
+            # Collect this role's patches for the latent frame.
             patches_in_frame = pos_list[pos_list[:, 0] == lat_t]
             
-            # 计算对应的 Pixel Frame 索引
+            # Map the latent frame to its pixel-frame index.
             start_t = int(lat_t * stride_t)
             if start_t >= T: continue
             
-            # 绘图
+            # Draw the overlay.
             img = frames[start_t].copy()
             
             plt.figure(figsize=(10, 6))
             plt.imshow(img)
             ax = plt.gca()
             
-            # 叠加 Patch
+            # Overlay selected patches.
             for _, lat_h, lat_w in patches_in_frame:
                 y = lat_h * stride_h
                 x = lat_w * stride_w
@@ -2493,12 +2466,12 @@ def save_extraction_visualization(
             plt.axis('off')
             plt.title(f"{char_id} | Latent Frame {int(lat_t)} | {len(patches_in_frame)} Patches")
             
-            # 保存
+            # Save the rendered frame.
             out_name = f"frame_{start_t:04d}.jpg"
             plt.savefig(os.path.join(char_dir, out_name), bbox_inches='tight', pad_inches=0)
             plt.close()
             
-    # 保存 info.txt
+    # Save role metadata.
     with open(os.path.join(sample_dir, "info.txt"), "w") as f:
         f.write(f"Sample ID: {sample_id}\n")
         f.write(f"Characters found: {list(char_positions_dict.keys())}\n")
@@ -2973,9 +2946,9 @@ def extract_patch_embeddings_for_character(
     pipe,
     memory_video_tensor,  # [C, T, H, W]
     character_id,
-    original_prompt,  # 🔥 新增：原始完整 prompt
+    original_prompt,  # Full source prompt.
     extract_layers,
-    # [新增] 必须在这里加上 latents 参数，否则上面调用时传不进来
+    # Optional cached latents avoid repeated VAE encoding.
     latents=None,         
     cached_conditions=None,
     top_visual_tokens=-1,
@@ -3003,7 +2976,7 @@ def extract_patch_embeddings_for_character(
     extract_debug_events = kwargs.get('extract_debug_events', None)
     
     if latents is None:
-        # 兼容旧逻辑：如果没有传入 latents，则现场计算
+        # Encode latents when the caller did not provide a cache.
         vae_dtype = _get_vae_runtime_dtype(pipe.vae, default_dtype=torch.bfloat16)
         memory_video_for_vae = memory_video_tensor.to(dtype=vae_dtype, device=device)
         
@@ -3022,13 +2995,12 @@ def extract_patch_embeddings_for_character(
             
             del memory_video_for_vae
     else:
-        # 使用传入的缓存 (确保在 device 上)
+        # Move cached latents to the active device.
         latents = latents.to(device=device)
     
     C_lat, F_lat, H_lat, W_lat = latents.shape
     
-    # 获取 DiT patch_size，计算实际 attention/patch 空间分辨率
-    # Wan 14B patch_size=(1,2,2): 实际注意力空间为 (H_lat//2, W_lat//2)
+    # Wan 14B patch_size=(1,2,2) halves the latent spatial resolution.
     _patch_size = pipe.dit.patch_size  # e.g., (1, 2, 2)
     H_patch = H_lat // _patch_size[1]  # 60 // 2 = 30
     W_patch = W_lat // _patch_size[2]  # 104 // 2 = 52
@@ -3044,7 +3016,7 @@ def extract_patch_embeddings_for_character(
     # Add batch dimension
     latents_batch = latents.unsqueeze(0).to(device=device, dtype=pipe.torch_dtype)  # [1, C_lat, F_lat, H_lat, W_lat
     
-    # 🔥 使用原始完整 prompt 编码 context
+    # Encode context from the full source prompt.
     # Text encode with CFG
     if cfg_scale > 1.0:
         prompt_embeds_pos = pipe.prompter.encode_prompt(prompt=original_prompt, positive=True, device=device)
@@ -3058,14 +3030,13 @@ def extract_patch_embeddings_for_character(
     prompt_embeds = prompt_embeds.to(device=device)
     positive_prompt_embeds = positive_prompt_embeds.to(device=device)
     
-    # 🔥 解析角色名（用于查找 token）；热力图查询时忽略 _ - 等特殊符号，只考虑文本 token
+    # Parse the role name, ignoring separators in heatmap token queries.
     character_name = character_id.replace('_', ' ').replace('-', ' ').strip()
     parts = character_id.replace('-', '_').split('_', 1) 
     prefix_text = parts[0]
     suffix_text = parts[1].replace('_', ' ') if len(parts) > 1 else None
     
-    # 🔥 新逻辑：先查找完整角色名，再根据结构划分前后缀
-    # 1. 获取完整角色名的 token 信息
+    # Resolve the full role name before splitting prefix and suffix tokens.
     token_ids, token_texts, _ = verify_target_text_is_single_token(pipe, character_name)
     if not token_ids:
         _append_extract_debug_event(
@@ -3076,10 +3047,10 @@ def extract_patch_embeddings_for_character(
         )
         return None, None, []
 
-    # 2. 在原始 prompt 中查找完整角色名的位置
+    # Locate the full role name in the source prompt.
     full_indices = find_token_index_in_prompt(pipe, original_prompt, character_name, token_ids, token_texts)
     
-    # 🔥 如果角色名不在 prompt 中，返回空结果（该角色无 memory）
+    # A role absent from the prompt contributes no memory.
     if not full_indices:
         if debug:
             print(f"[extract_patch_embeddings] Character '{character_name}' not found in prompt: '{original_prompt[:100]}...'")
@@ -3092,8 +3063,7 @@ def extract_patch_embeddings_for_character(
         )
         return torch.zeros(0, 5120, dtype=torch.float32), torch.zeros(0, 3, dtype=torch.long), []
     
-    # 3. 根据 character_id 结构划分 prefix 和 suffix
-    # 计算 prefix 和 suffix 各占多少个 token
+    # Derive prefix and suffix token counts from ``character_id``.
     prefix_token_ids, _, _ = verify_target_text_is_single_token(pipe, prefix_text)
     num_prefix_tokens = len(prefix_token_ids) if prefix_token_ids else 0
     
@@ -3103,8 +3073,7 @@ def extract_patch_embeddings_for_character(
     else:
         num_suffix_tokens = 0
     
-    # 4. 从完整位置列表中切片得到 prefix 和 suffix 的位置
-    # full_indices 是连续的 token 位置，例如 [5, 6] 表示 "woman blonde"
+    # Slice contiguous full-name indices into prefix and suffix positions.
     prefix_indices = full_indices[:num_prefix_tokens]
     suffix_indices = full_indices[num_prefix_tokens:num_prefix_tokens + num_suffix_tokens] if num_suffix_tokens > 0 else []
     
@@ -3121,14 +3090,13 @@ def extract_patch_embeddings_for_character(
         'token_weight': token_weight,
     }]
 
-    # 4. 实例化 Extractor (新用法)
-    # 直接将两组索引和 Scale 传入
+    # Configure the extractor with prefix and suffix indices.
     attn_extractor = AttentionMapExtractor(
         pipe, 
         extract_layers, 
-        target_token_indices=prefix_indices,  # 前缀 (权重 1.0)
-        suffix_token_indices=suffix_indices,  # 后缀 (权重由 scale 控制)
-        suffix_scale=suffix_attention_scale,  # 传入参数
+        target_token_indices=prefix_indices,  # Prefix weight is 1.0.
+        suffix_token_indices=suffix_indices,  # Suffix weight is controlled by scale.
+        suffix_scale=suffix_attention_scale,
         cfg_scale=cfg_scale, 
         token_weight=token_weight
     )
@@ -3296,13 +3264,13 @@ def extract_patch_embeddings_for_character(
         print(f"[extract_patch_embeddings] Attention aggregated over {step_count} steps")
     del image_cond_kwargs, prompt_embeds
     
-    # 修复: 若仍有多维(理论上经过head均值后已是1D), 保险取均值而非flatten
+    # Average any residual head dimension instead of flattening it into space.
     if aggregated_map.dim() > 1:
         aggregated_map = aggregated_map.mean(dim=0)
     
-    # Calculate frame count from tokens (使用 patch 空间分辨率)
+    # Calculate frame count from the patch-grid token count.
     num_tokens = aggregated_map.shape[0]
-    spatial_per_frame = H_patch * W_patch  # 30 * 52 = 1560 (非 H_lat * W_lat)
+    spatial_per_frame = H_patch * W_patch  # 30 * 52 = 1560.
     F_actual = num_tokens // spatial_per_frame
     
     # Select tokens
@@ -3344,18 +3312,18 @@ def extract_patch_embeddings_for_character(
         print(f"[DEBUG extract_patch] max_tokens={max_tokens}, len(selected_indices)={len(selected_indices)}")
     if max_tokens > 0 and len(selected_indices) > max_tokens:
         if kwargs.get("use_attn_score_selection", False):
-            # 从 aggregated_map 中提取对应索引的分数
+            # Read attention scores at selected indices.
             scores = [aggregated_map[idx].item() for idx in selected_indices]
-            # 按分数从高到低排序，取前 max_tokens 个
+            # Keep the highest-scoring tokens.
             scored_indices = sorted(zip(selected_indices, scores), key=lambda x: x[1], reverse=True)
             selected_indices = [x[0] for x in scored_indices[:max_tokens]]
         else:
-            # 原有的随机筛选逻辑
+            # Randomly subsample when score selection is disabled.
             indices = torch.randperm(len(selected_indices))[:max_tokens]
             indices = indices.tolist()
             selected_indices = [selected_indices[i] for i in indices]
 
-    # [关键] 无论何种筛选方式，最后必须按原始索引排序以对齐可学习位置编码
+    # Preserve source order so learned positional embeddings remain aligned.
     selected_indices = sorted(selected_indices)
     if _pm_is_layerwise_container(last_layer_tokens):
         attention_map_extra = dict(kwargs)
@@ -3407,11 +3375,11 @@ def extract_patch_embeddings_for_character(
         )
         return None, None, []
     
-    # Extract selected memory features at selected positions (使用 patch grid 分辨率)
+    # Extract memory features at selected patch-grid positions.
     memory_feature_tokens_selected = []
     memory_feature_positions_selected = []
     
-    total_spatial = H_patch * W_patch  # patch 空间每帧 token 数 (30*52=1560)
+    total_spatial = H_patch * W_patch  # Spatial patch tokens per frame.
     
     for idx in selected_indices:
         frame_idx = idx // total_spatial
@@ -3471,7 +3439,7 @@ def _attention_map_to_patch_embeddings(
     top_visual_tokens=-1, top_visual_tokens_per_head=0, otsu_scope="frame", neighbor_filter_kernel=0,
     max_tokens=-1, debug=False, neighbor_filter_any_window=True, source_token_features=None, **kwargs
 ):
-    """从单角色聚合 attention map 生成 memory feature 选中三元组。"""
+    """Build a selected memory-feature triplet from one character's aggregated attention map."""
     extract_debug_events = kwargs.get('extract_debug_events', None)
     if aggregated_map.dim() > 1:
         aggregated_map = aggregated_map.mean(dim=0)
@@ -3605,9 +3573,10 @@ def extract_patch_embeddings_for_characters_batch(
     cached_conditions, extract_layers, device, extract_config, cfg_scale=5.0,
     suffix_attention_scale=1.0, token_weight=0.2, tiler_kwargs=None, debug=False, **kwargs
 ):
-    """
-    多角色共用同一段 step 循环，只做一次 DiT 多步 forward，再按角色聚合 map 并分别做 patch 提取。
-    返回 list[(pe, pos, meta)] 与 character_ids 同序；未在 prompt 中的角色为 (None, None, []).
+    """Extract patches for multiple characters through one shared DiT step loop.
+
+    Returns ``(pe, pos, meta)`` entries in ``character_ids`` order. Characters
+    absent from the prompt produce ``(None, None, [])``.
     """
     if isinstance(extract_layers, str):
         extract_layers = [-1] if extract_layers.strip() == '-1' else [int(x.strip()) for x in extract_layers.split(',')]
@@ -3783,7 +3752,7 @@ def extract_patch_embeddings_for_characters_batch(
                 image_cond_kwargs['clip_feature'] = clip_feature.to(device=device, dtype=latents_batch.dtype)
             image_cond_kwargs['y'] = y.to(device=device, dtype=latents_batch.dtype)
     layer7_probe_image_cond_kwargs = _make_single_positive_condition_kwargs(image_cond_kwargs)
-    # 每步累加到每角色一个 accumulator，不保存所有 step 的中间 tensor，避免 OOM
+    # Accumulate per role without retaining every step tensor, avoiding OOM.
     per_char_sum = [None] * len(valid_chars)
     per_char_count = [0] * len(valid_chars)
     shared_layer_tokens = None
@@ -5560,7 +5529,7 @@ class LightningModelForTrainWithMemoryV4(pl.LightningModule):
         self.jigsaw_disable_memory_side_rope = bool(getattr(args, 'jigsaw_disable_memory_side_rope', True)) if args else True
         self._effective_use_segment_embed = False
         self._effective_use_learnable_memory_pos = False
-        # n*2048: max_total = 2048 * max_memory_characters（固定每角色 2048）
+        # Cap the combined selection at 2,048 tokens per character.
         self._max_memory_characters = getattr(args, "max_memory_characters", 2)
         self._max_total_memory_tokens = 2048 * self._max_memory_characters
         self.memory_embeddings = None
@@ -5963,7 +5932,7 @@ class LightningModelForTrainWithMemoryV4(pl.LightningModule):
         )
     
     def _get_versioned_save_dir(self):
-        """获取 Lightning version 目录，确保新训练不会覆盖旧的 loss_curve/attention_response_evolution"""
+        """Return the Lightning version directory without overwriting earlier training artifacts."""
         log_dir = getattr(self.trainer, 'log_dir', None)
         if log_dir and os.path.isdir(log_dir):
             return log_dir
@@ -6026,7 +5995,7 @@ class LightningModelForTrainWithMemoryV4(pl.LightningModule):
             return 0
 
     def on_train_start(self):
-        # 默认不常驻 image encoder 到 GPU，降低训练阶段峰值显存。
+        # Keep the image encoder off GPU by default to reduce peak training memory.
         if hasattr(self.pipe_VAE, 'image_encoder') and self.pipe_VAE.image_encoder is not None:
             if self.keep_image_encoder_on_gpu:
                 self.pipe_VAE.image_encoder.to(device=self.device, dtype=torch.float32)
@@ -6042,7 +6011,7 @@ class LightningModelForTrainWithMemoryV4(pl.LightningModule):
         version_dir = self._get_versioned_save_dir()
         inherit_log_history = bool(getattr(self, 'resume_from_ds_ckpt', False))
         if self.global_rank == 0 and inherit_log_history:
-            # 使用 version 目录，避免新训练覆盖旧的 loss_curve/attention_response_evolution
+            # Use versioned directories to preserve artifacts from earlier runs.
             self._maybe_bootstrap_loss_history(version_dir)
         if inherit_log_history and torch.distributed.is_available() and torch.distributed.is_initialized():
             torch.distributed.barrier()
@@ -6051,11 +6020,10 @@ class LightningModelForTrainWithMemoryV4(pl.LightningModule):
             self.display_step_offset = resume_step_from_history
             print(f"[LossLogger] Resume step inherited from CSV: {self.display_step_offset}")
 
-        # 单进程 inline 模式：每个 rank 只显示自己的训练进度条
+        # Inline mode gives each rank its own progress bar.
         my_position = self.global_rank + 1
         
-        # 2. 初始化 tqdm
-        # total 使用 estimated_stepping_batches 估算总步数，让进度条能显示百分比
+        # Estimate total steps so tqdm can display completion percentage.
         current_global_step = int(self.global_step)
         display_start_step = max(current_global_step, int(getattr(self, 'display_step_offset', 0)))
         self._display_step_offset_runtime = display_start_step - current_global_step
@@ -6065,10 +6033,10 @@ class LightningModelForTrainWithMemoryV4(pl.LightningModule):
             position=my_position,
             total=display_start_step + self.trainer.estimated_stepping_batches,
             initial=display_start_step,
-            leave=True,          # 训练结束保留最后状态
-            dynamic_ncols=True,  # 自适应窗口宽度
-            smoothing=0.01,      # 平滑系数
-            file=sys.stdout      # 确保输出到标准输出
+            leave=True,          # Keep the final state visible after training.
+            dynamic_ncols=True,  # Adapt the bar width to the terminal.
+            smoothing=0.01,      # Smooth the reported rate.
+            file=sys.stdout      # Write progress to standard output.
         )
         pixelate_prob = float(getattr(self.args, 'image_condition_people_pixelate_prob', 0.0)) if hasattr(self, 'args') else 0.0
         pixelate_enabled = bool(pixelate_prob > 0.0)
@@ -6084,22 +6052,21 @@ class LightningModelForTrainWithMemoryV4(pl.LightningModule):
         if self.global_rank == 0:
             self.loss_logger = LossLogger(version_dir, inherit_history=inherit_log_history)
     def on_train_batch_end(self, outputs, batch, batch_idx):
-            # 只要进度条初始化了，所有 Rank 都会执行这里
+        # Every rank with an initialized progress bar updates it here.
             if hasattr(self, 'train_pbar'):
                 loss = outputs['loss'].item() if isinstance(outputs, dict) else outputs.item()
                 
-                # 手动更新 1 步
+                # Advance one optimizer step.
                 self.train_pbar.update(1)
                 
                 display_step = int(self.global_step) + int(getattr(self, '_display_step_offset_runtime', 0))
-                # 设置后缀信息 (Loss, Step)
-                # 使用 OrderedDict 或 dict 都可以
+                # Show current loss and global step.
                 self.train_pbar.set_postfix({
                     "loss": f"{loss:.4f}",
                     "step": display_step,
                 })
 
-    # [新增] 训练结束关闭进度条
+    # Close the progress bar at training end.
     def on_train_end(self):
         if self.global_rank == 0 and getattr(self, '_lora_save_thread', None) is not None:
             if self._lora_save_thread.is_alive():
@@ -7937,11 +7904,10 @@ class LightningModelForTrainWithMemoryV4(pl.LightningModule):
         return dit_model.unpatchify(x_output, (f, h, w))
 
     def training_step(self, batch, batch_idx):
-        """
-        已优化的训练步：
-        1. 优先使用提取端预计算的 latents，跳过耗时的 VAE 编码。
-        2. 仅在 latents 缺失时回退到实时 VAE 编码。
-        3. [修复] 恢复了 Motion Frames 的概率判定逻辑。
+        """Run one training step, preferring cached latents over VAE encoding.
+
+        Falls back to live VAE encoding when cached latents are unavailable and
+        retains the configured probabilistic motion-frame conditioning.
         """
         self._train_runtime_log('training_step_enter', batch_is_none=(batch is None), batch_idx=batch_idx)
         if self._ddp_sync_should_skip(batch is None):
@@ -7951,7 +7917,7 @@ class LightningModelForTrainWithMemoryV4(pl.LightningModule):
         if self.timing_tracker:
             self.timing_tracker.start('training')
         
-        # --- 1. 基础数据准备 ---
+        # Prepare batch data.
         text = batch.get("text", "")
         if isinstance(text, list):
             text = text[0]
@@ -7989,21 +7955,21 @@ class LightningModelForTrainWithMemoryV4(pl.LightningModule):
                     return int(_tok.shape[0])
             return 0
         
-        # 预设标志位
+        # Initialize branch state.
         memory_dropped = False
         image_emb = {}
         
-        # --- 2. 核心编码逻辑 (VAE & CLIP & Text) ---
+        # Encode text, video latents, and image features.
         with torch.no_grad():
-            # A. 文本提示词编码 (由于涉及 Dropout 增强，通常在训练端实时计算)
+            # Prompt embeddings are computed here with the other frozen encoders.
             prompt_emb = self.pipe_VAE.encode_prompt(text)
             
-            # B. 视频 Latents 获取 (提速关键点)
+            # Obtain video latents.
             latents = batch.get("latents")
             
             if latents is not None:
                 self._train_runtime_log('latents_prefetched_found', latents=latents)
-                # [路径 1] 使用提取端缓存好的 Latents (极快)
+                # Reuse precomputed latents when available.
                 latents = latents.to(device=self.device, dtype=self.pipe_VAE.torch_dtype)
                 if latents.dim() == 4:
                     latents = latents.unsqueeze(0)
@@ -8014,7 +7980,7 @@ class LightningModelForTrainWithMemoryV4(pl.LightningModule):
             if self._ddp_sync_should_skip(latents is None):
                 raise RuntimeError("latents missing after dataset-side resampling; expected prefetched valid latents for every yielded batch")
 
-            # C. 图像特征编码 (Image Encoder / CLIP)
+            # Encode image features with CLIP.
             self._train_runtime_log('after_latents_sync', latents=latents)
             # DDP-shared trigger: decide once per training step (not extraction step).
             pixelate_prob = float(getattr(self.args, 'image_condition_people_pixelate_prob', 0.0)) if hasattr(self, 'args') else 0.0
@@ -8072,7 +8038,7 @@ class LightningModelForTrainWithMemoryV4(pl.LightningModule):
                 allow_missing_precomputed=allow_missing_precomputed,
             )
 
-        # --- 3. 扩散模型训练逻辑 ---
+        # Run the diffusion training path.
         self._maybe_trim_cuda_cache(stage='pre_diffusion')
         self._train_runtime_log('before_diffusion_prep', latents=latents, use_memory=use_memory, has_memory_features=_bank_has_real_tokens(memory_feature_bank_tokens_selected_raw))
         image_condition_available_cached = bool(
@@ -8083,7 +8049,7 @@ class LightningModelForTrainWithMemoryV4(pl.LightningModule):
         )
         self.pipe.device = self.device
         
-        # 准备噪声和时间步（若提取端提供对齐 timestep，则优先复用）
+        # Reuse an aligned extraction timestep when supplied; otherwise sample one.
         noise = torch.randn_like(latents)
         extracted_timestep = batch.get("extracted_timestep", None)
         if isinstance(extracted_timestep, torch.Tensor):
@@ -8147,7 +8113,7 @@ class LightningModelForTrainWithMemoryV4(pl.LightningModule):
         del noise
         self._train_runtime_log('after_noise_prep', timestep=timestep, noisy_latents=noisy_latents, target=target)
         
-        # 记忆注入与前向传播
+        # Inject memory and run the forward pass.
         memory_condition_available = bool(
             use_memory and _bank_has_real_tokens(memory_feature_bank_tokens_selected_raw)
             and memory_enabled_this_step
@@ -8363,7 +8329,7 @@ class LightningModelForTrainWithMemoryV4(pl.LightningModule):
             image_emb.pop('clip_feature', None)
             image_emb.pop('y', None)
         
-        # --- 4. 计算 Loss 与日志 ---
+        # Compute losses and metrics.
         loss_pre_weighted, loss_pre_no_bbox_x2, bbox_cover_ratio, bbox_weight_applied = self._compute_loss_with_optional_character_probe_weight(
             noise_pred=noise_pred,
             target=target,
@@ -8525,23 +8491,23 @@ class LightningModelForTrainWithMemoryV4(pl.LightningModule):
             self._perf_last_log_time = now_t
             print(f"[Train] throughput step={self.global_step+1} {steps_per_sec:.3f} steps/s", flush=True)
 
-        # 仅保存 LoRA 权重（不触发 DeepSpeed ckpt）
+        # Save LoRA weights without triggering a DeepSpeed checkpoint.
 
         save_every = getattr(self.args, "checkpoint_save_every_n_steps", 0) if hasattr(self, "args") else 0
         should_ckpt_sync = bool(save_every) and (self.global_step > 0) and (display_step > 0) and (display_step % save_every == 0)
         dist_ready = dist.is_available() and dist.is_initialized()
 
-        # 1) 所有 rank：保存前对齐（避免 rank0 保存卡住时其它 rank 继续跑导致 collective mismatch/timeout）
+        # Synchronize all ranks before saving to avoid collective mismatches.
         if should_ckpt_sync and dist_ready:
             if dist.get_backend() == "gloo":
                 dist.monitored_barrier(timeout=timedelta(minutes=30))
             else:
                 dist.barrier()
 
-        # 2) 只有 rank0 真正执行保存（其它 rank 只等 barrier）
+        # Only rank zero writes; other ranks wait at the barriers.
         if should_ckpt_sync and self.global_rank == 0:
             try:
-                # ⚠️ 关键：不要在这里 return（否则其它 rank 会卡在下面的 barrier）
+                # Do not return here; other ranks must reach the following barrier.
                 if self._lora_save_thread is not None and self._lora_save_thread.is_alive():
                     print(f"[Checkpoint] Previous LoRA save still running, skip step {display_step}", flush=True)
                 else:
@@ -8577,11 +8543,11 @@ class LightningModelForTrainWithMemoryV4(pl.LightningModule):
                     )
                     self._lora_save_thread.start()
             except Exception as e:
-                # rank0 保存异常也要显式打印（否则其它 rank 只看到 timeout/abort）
+                # Report rank-zero write failures before peers time out.
                 print(f"[Checkpoint] ERROR at step {display_step}: {e}", flush=True)
                 raise
 
-        # 3) 所有 rank：保存后对齐
+        # Synchronize all ranks after saving.
         if should_ckpt_sync and dist_ready:
             if dist.get_backend() == "gloo":
                 dist.monitored_barrier(timeout=timedelta(minutes=30))
@@ -8758,7 +8724,7 @@ def parse_args():
     parser.add_argument("--exp_prefix", default='', type=str)
     parser.add_argument("--dataset_path", type=str, default=None, help="Optional; used only by training-side fallback. Data comes from candidate_groups_csv + character_lists + video_root.")
     parser.add_argument("--sample_list_path", type=str, default=None)
-    # Candidate dataset (唯一数据源)
+    # Candidate dataset is the sole training data source.
     parser.add_argument("--candidate_groups_csv", type=str, default=None, help="Optional candidate_groups dataset source.")
     parser.add_argument("--character_lists_dir", type=str, default=None, help="Optional character_lists source.")
     parser.add_argument("--video_root", type=str, default=None, help="Optional video root source.")
@@ -8770,7 +8736,7 @@ def parse_args():
     parser.add_argument("--image_encoder_path", type=str, default=None)
     parser.add_argument("--vae_path", type=str, default=None)
     parser.add_argument("--dit_path", type=str, default=None)
-    # 在 parse_args 函数中找到 Memory extraction 部分，添加以下代码：
+    # Memory extraction arguments.
     parser.add_argument("--suffix_attention_scale", type=float, default=1.0,
                     help="Scale factor for attention scores of words after the first underscore. "
                          "Default 1.0 (equal weight). Set to 0.5 to halve their contribution.")
@@ -9372,12 +9338,12 @@ def train_slotmem(args):
     # -------------------------------------------------------------------------
     print(f"[Trainer] Initializing with {trainer_devices} devices")
     
-    # 使用 TensorBoardLogger 确保 lightning_logs/version_N
+    # TensorBoardLogger creates the ``lightning_logs/version_N`` layout.
     from lightning.pytorch.loggers import TensorBoardLogger
     tb_logger = TensorBoardLogger(save_dir=args.output_path, name="lightning_logs")
     
-    # barrier 后第一次 collective（如梯度 all-reduce）易触发 NCCL 超时，将进程组超时设为 60 分钟
-    # model_slice_mode=zero3：参数切片（ZeRO-3）
+    # Allow 60 minutes for the first post-barrier collective operation.
+    # ``model_slice_mode=zero3`` shards parameters with ZeRO-3.
     strategy_name = str(getattr(args, "training_strategy", "auto") or "auto").strip().lower()
     slice_mode = str(getattr(args, "model_slice_mode", "none") or "none").strip().lower()
     if slice_mode == "zero3" and strategy_name != "deepspeed_stage_3":

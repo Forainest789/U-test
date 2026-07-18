@@ -444,9 +444,10 @@ def merge_chunk_videos(output_dir, merged_filename="merged_chunks.mp4", pattern=
 
 def save_chunk_memory_visualization(viz_root_dir, chunk_idx, video_frames, char_positions_dict,
                                     h_patch, w_patch, vae_stride_t=4, char_boxes_dict=None):
-    """
-    保存单个 chunk 的 memory token 可视化。
-    对每个角色按 latent 时间维度保存覆盖图，只保存对应压缩步长的首帧：pixel_t = latent_t * vae_stride_t。
+    """Save per-character memory-token overlays for one chunk.
+
+    Each latent-time overlay uses the first corresponding pixel frame:
+    ``pixel_t = latent_t * vae_stride_t``.
     """
     if not video_frames or not char_positions_dict:
         return
@@ -956,7 +957,7 @@ class ReferenceInferenceRuntime:
 
             # 2. Image encode
             image_emb = {}
-            num_condition_frames = None  # [修复] 保存实际条件帧数量
+            num_condition_frames = None  # Actual number of conditioning frames.
             if ref_images is None and getattr(self.pipe.dit, 'has_image_input', False):
                 raise ValueError(
                     "Reference image is required for this DiT (has_image_input=True). "
@@ -968,7 +969,7 @@ class ReferenceInferenceRuntime:
                 if random_ref_frame is None:
                     random_ref_frame = ref_images[0]
             
-                # [修复] 保存实际条件帧数量
+                # Preserve the actual conditioning-frame count for the wrapper.
                 num_condition_frames = len(ref_images)
 
                 # Native WAN path guard:
@@ -999,7 +1000,7 @@ class ReferenceInferenceRuntime:
                     ref_pad_cfg=effective_ref_pad_cfg,
                     ref_pad_num=effective_ref_pad_num
                 )
-                # [修复] 将实际条件帧数量传递给后续的 forward wrapper
+                # Pass the actual count to the downstream forward wrapper.
                 image_emb['num_condition_frames'] = num_condition_frames
                 self.pipe.image_encoder.to("cpu")
 
@@ -1020,7 +1021,7 @@ class ReferenceInferenceRuntime:
 
             # 4. Denoising loop
             denoising_latents = latents.clone()
-            # [修复] 为无 memory 路径准备过滤后的 image_emb（移除 num_condition_frames）
+            # Remove wrapper-only metadata for the memory-free denoising path.
             # num_condition_frames is only for MemoryAwareDiTForward; denoising_model() does not accept it.
             image_emb_for_denoising = {k: v for k, v in image_emb.items() if k != 'num_condition_frames'}
         
