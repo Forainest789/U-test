@@ -1,10 +1,8 @@
-"""
-批量：对目录下所有 MP4 做镜头检测 + 亮度二次过滤，结果汇总到一张 CSV。
-- 输入：目录路径（通过 --path 指定）
-- 视频标识：文件名第一个.前的部分，须为 Top{三位数字}，否则记为异常并写入 abnormal_mp4name.log
-- CSV 列：video_id, shot_groups, filtered_shot_groups, filtered_shot_groups_avg_brightness_ge_1_8（均为 (start_frame,end_frame) 列表）
-- 二次过滤：filtered_shot_groups 中仅保留三帧平均亮度 >= 理论最大亮度 1/8 的镜头
-- 仅生成 CSV，不导出样本片段；异常文件（标识不符或处理失败）整段路径写入 output_dir/abnormal_mp4name.log
+"""Detect shots and write brightness-filtered groups to CSV.
+
+Video IDs must match ``Top`` plus three digits. The secondary filter keeps
+shots whose sampled frames average at least one eighth of the dtype maximum.
+Invalid or failed paths are logged separately.
 """
 import os
 import re
@@ -24,10 +22,10 @@ tf.config.set_visible_devices([], 'GPU')
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 TMP_DIR = os.environ.get("SLOTMEM_CURATION_TMP", tempfile.gettempdir())
-# 视频标识须匹配此前缀（第一个.前为 Top + 三位数字）
+# Video IDs are the prefix before the first dot: Top plus three digits.
 VIDEO_ID_PATTERN = re.compile(r"^Top\d{3}$")
 
-# 确保可导入 TransNetV2 官方 inference 模块
+# Import the official TransNetV2 inference implementation.
 _TRANSNET_INFERENCE = os.path.join(SCRIPT_DIR, "TransNetV2", "inference")
 if _TRANSNET_INFERENCE not in sys.path:
     sys.path.insert(0, _TRANSNET_INFERENCE)
@@ -48,10 +46,10 @@ def _resolve_transnet_weights(model_path):
     raise FileNotFoundError("未找到 TransNetV2 权重...")
 
 # =========================================================
-# 亮度：RGB 帧 -> 单帧平均亮度；根据 dtype 得到理论最大亮度
+# Compute mean frame luminance relative to the dtype maximum.
 # =========================================================
 def _max_brightness_from_frame(frame):
-    """根据帧数组的 dtype 返回理论最大亮度（如 uint8->255, uint16->65535）。"""
+    """Return the theoretical maximum value for the frame dtype."""
     if np.issubdtype(frame.dtype, np.integer):
         return float(np.iinfo(frame.dtype).max)
     if np.issubdtype(frame.dtype, np.floating):
@@ -60,13 +58,13 @@ def _max_brightness_from_frame(frame):
 
 
 def _frame_brightness(rgb_frame):
-    """RGB 帧 (H,W,3) 转为灰度后求整图平均亮度。"""
+    """Return mean luminance for an RGB frame shaped ``[H,W,3]``."""
     gray = cv2.cvtColor(rgb_frame, cv2.COLOR_RGB2GRAY)
     return float(np.mean(gray))
 
 
 # =========================================================
-# 视频处理主类
+# Video processing pipeline.
 # =========================================================
 class VideoProcessor:
     def __init__(self, model_dir):
@@ -114,7 +112,7 @@ class VideoProcessor:
         temp_output = os.path.join(directory, f"{name}_temp_24fps{ext}")
         os.makedirs(TMP_DIR, exist_ok=True)
         tmp_path = os.path.join(TMP_DIR, f"{name}_temp_24fps{ext}.tmp")
-        # GPU 解码 + CPU 编码（H20 无 NVENC）
+        # Decode on GPU and encode on CPU because H20 lacks NVENC.
         cmd = [
             "ffmpeg", "-y", "-hwaccel", "cuda", "-i", video_path, "-r", "24",
             "-c:v", "libx264", "-crf", "18", "-preset", "fast",
@@ -157,9 +155,9 @@ class VideoProcessor:
     def extract_shot_to_mp4(self, video_path, start_frame, end_frame, output_path, fps=24):
         start_sec = start_frame / fps
         duration_sec = (end_frame - start_frame + 1) / fps
-        # 先写到临时文件再重命名，避免在部分文件系统(如 vePFS)上 "writing trailer" 时 I/O 错误
+        # Write a temporary file and rename atomically after its trailer completes.
         tmp_path = output_path + ".tmp"
-        # GPU 解码 + CPU 编码（H20 无 NVENC）
+        # Decode on GPU and encode on CPU because H20 lacks NVENC.
         cmd = [
             "ffmpeg", "-y", "-hwaccel", "cuda", "-i", video_path,
             "-ss", str(start_sec), "-t", str(duration_sec),
@@ -189,7 +187,7 @@ class VideoProcessor:
             raise RuntimeError(f"无法将临时文件重命名为 {output_path}: {e}")
 
     def extract_target_frames_sequentially(self, video_path, frame_indices):
-        """顺序读取视频，提取目标帧"""
+        """Read the video sequentially and return requested frames."""
         print(f"[Preprocess] 正在使用 OpenCV 从视频中提取 {len(frame_indices)} 张关键帧...")
         target_indices = sorted(list(set(frame_indices)))
         if not target_indices: return {}
@@ -214,19 +212,19 @@ class VideoProcessor:
         return frames_dict
 
 def _video_id_from_filename(filepath):
-    """文件名第一个.前的部分作为 video 标识，如 Top013.xxx.mp4 -> Top013。"""
+    """Return the filename prefix before the first dot as the video ID."""
     basename = os.path.basename(filepath)
     name_no_ext = os.path.splitext(basename)[0]
     return name_no_ext.split(".")[0] if name_no_ext else basename
 
 
 def _is_valid_video_id(video_id):
-    """是否为合法标识：Top + 三位数字。"""
+    """Return whether the ID is ``Top`` followed by three digits."""
     return bool(video_id and VIDEO_ID_PATTERN.match(video_id))
 
 
 def _process_one_video(video_path, processor, skip_convert_24fps=False):
-    """处理单个视频，返回 (shot_groups, filtered_shot_groups, filtered_shot_groups_avg_brightness_ge_1_8, fps)。"""
+    """Return detected, filtered, brightness-filtered groups, and FPS."""
     if not skip_convert_24fps:
         processor.convert_to_24fps(video_path)
         fps = 24.0
@@ -247,7 +245,7 @@ def _process_one_video(video_path, processor, skip_convert_24fps=False):
         max_brightness = _max_brightness_from_frame(next(iter(frames_dict.values())))
     else:
         max_brightness = 255.0
-    t_1_8 = max_brightness / 8.0  # 二次过滤：平均亮度 >= max/8
+    t_1_8 = max_brightness / 8.0  # Require at least one eighth of the dtype maximum.
 
     shot_avg_brightness = []
     for start_f, end_f in filtered_shot_groups:
@@ -262,15 +260,11 @@ def _process_one_video(video_path, processor, skip_convert_24fps=False):
     return shot_groups, filtered_shot_groups, filtered_avg_brightness_ge_1_8, fps
 
 
-CLIP_FRAMES = 81  # 每段 clip 的帧数（首段到第81帧，第二段81~161，以此类推）
+CLIP_FRAMES = 81  # Adjacent clips share one boundary frame.
 
 
 def _build_clip_ranges(filtered_ge_1_8):
-    """
-    根据 filtered_ge_1_8 的每个 (start_f, end_f) 按 81 帧一段切分，返回可序列化为 JSON 的结构。
-    与 _export_group_clips 的切分规则一致。
-    注意：首尾重叠，即每个 clip 的首帧 = 上一个 clip 的尾帧。
-    """
+    """Serialize brightness-filtered ranges as overlapping 81-frame clips."""
     groups = []
     for g_idx, (start_f, end_f) in enumerate(filtered_ge_1_8):
         clips = []
@@ -285,7 +279,7 @@ def _build_clip_ranges(filtered_ge_1_8):
             else:
                 name = "last_clip"
             clips.append({"name": name, "start_frame": s, "end_frame": e})
-            s = e  # 首尾重叠：下一个 clip 的首帧 = 当前 clip 的尾帧
+            s = e  # The next clip begins on the current clip's final frame.
             if num_frames < CLIP_FRAMES:
                 break
         groups.append({
@@ -297,10 +291,7 @@ def _build_clip_ranges(filtered_ge_1_8):
 
 
 def _export_group_clips(processor, video_path, start_f, end_f, group_dir, fps=24):
-    """
-    将单个 group (start_f, end_f) 按 81 帧一段切分为 clip1.mp4, clip2.mp4, ... 最后一段不足 81 帧为 last_clip.mp4。
-    注意：首尾重叠，即每个 clip 的首帧 = 上一个 clip 的尾帧。
-    """
+    """Export overlapping 81-frame clips and name a short remainder ``last_clip``."""
     os.makedirs(group_dir, exist_ok=True)
     order = 0
     s = start_f
@@ -314,15 +305,13 @@ def _export_group_clips(processor, video_path, start_f, end_f, group_dir, fps=24
             out_name = "last_clip.mp4"
         out_path = os.path.join(group_dir, out_name)
         processor.extract_shot_to_mp4(video_path, s, e, out_path, fps=fps)
-        s = e  # 首尾重叠：下一个 clip 的首帧 = 当前 clip 的尾帧
+        s = e  # The next clip begins on the current clip's final frame.
         if num_frames < CLIP_FRAMES:
             break
 
 
 def _process_one_video_standalone(video_path, filename, model_path, output_dir, no_convert_24fps, export_clips):
-    """
-    单条数据全流程（供并行 worker 调用）。返回 (row_dict, None) 成功，(None, video_path) 失败。
-    """
+    """Process one video, returning either its row or failed path."""
     video_id = _video_id_from_filename(video_path)
     processor = VideoProcessor(model_path)
     try:
@@ -335,7 +324,7 @@ def _process_one_video_standalone(video_path, filename, model_path, output_dir, 
             "filtered_shot_groups": str([(s, e) for s, e in filtered_shot_groups]),
             "filtered_shot_groups_avg_brightness_ge_1_8": str(filtered_ge_1_8),
         }
-        # 无论是否 export_clips，都将每个 clip 的 start/end frame 写入 clips_record
+        # Record clip boundaries regardless of whether clips are exported.
         clips_record_dir = os.path.join(output_dir, "clips_record")
         os.makedirs(clips_record_dir, exist_ok=True)
         clip_ranges = _build_clip_ranges(filtered_ge_1_8)
@@ -394,7 +383,7 @@ def main():
         print(f"未在 {input_dir} 下找到 .mp4 文件")
         return 0
 
-    # 异常：标识不符合 Top{3位数字} 的，用整段路径记录
+            # Log the full path when the video ID is invalid.
     abnormal_paths = []
     for f in mp4_files:
         video_path = os.path.join(input_dir, f)
@@ -407,7 +396,7 @@ def main():
                 log.write(p + "\n")
         print(f"[Abnormal] 共 {len(abnormal_paths)} 个文件标识不符合 Top{{3位数字}}，已写入: {abnormal_log_path}")
 
-    # 仅处理标识合法的 mp4，从 start_index 开始；不设 max_videos 则遍历完整文件夹
+    # Process valid IDs from start_index, with no limit when max_videos is unset.
     to_process = [f for f in mp4_files if os.path.join(input_dir, f) not in abnormal_paths]
     to_process = to_process[args.start_index:]
     if args.max_videos is not None:

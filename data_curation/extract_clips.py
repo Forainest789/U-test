@@ -1,13 +1,7 @@
-"""
-根据 clips_record 下的 *_clips.json 快速导出视频切片，目录结构与 batch 脚本一致：
-  output_dir / {video_id} / group_{i} / clip1.mp4, clip2.mp4, ... last_clip.mp4
+"""Export clip-record JSON into grouped MP4 files.
 
-优化策略（按 group 处理）：
-1. 对于每个 group，使用一次 ffmpeg 调用处理所有 clips
-2. 使用 -ss 在 -i 之前实现 demuxer 级别 seek，跳到 group 起始位置
-3. 使用 -t 限制读取范围为 group 的帧范围
-4. 使用 filter_complex + trim 将解码后的帧分割成多个输出
-5. 由于 group 内 clips 帧范围连续，trim 的时间范围很小，效率高
+Each group uses one ffmpeg invocation: input-side seek skips preceding media,
+``-t`` bounds decoding, and ``filter_complex`` trims contiguous clip outputs.
 """
 import argparse
 import json
@@ -17,14 +11,15 @@ import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-# 可选：GPU 解码（无 NVENC 时用 CPU 编码），由 --ffmpeg_hwaccel 设置。
+# CUDA decoding is optional and selected explicitly with ``--ffmpeg_hwaccel``;
+# encoding always uses CPU-based ``libx264``.
 FFMPEG_DECODE = []
-# 旧版按 batch 分批时的大小（现在按 group 处理，此参数仅供 fallback 函数使用）
+# Batch size retained for the per-clip fallback path.
 BATCH_SIZE = 20
 
 
 def _find_video_for_id(video_dir, video_id):
-    """在 video_dir 下查找文件名第一个点前为 video_id 的 mp4。"""
+    """Find the MP4 whose filename prefix matches ``video_id``."""
     if not os.path.isdir(video_dir):
         return None
     for f in os.listdir(video_dir):
@@ -37,19 +32,13 @@ def _find_video_for_id(video_dir, video_id):
 
 
 def _extract_single_clip(video_path, start_frame, end_frame, output_path, fps, gpu_id=None):
-    """
-    使用 ffmpeg -ss 输入端 seek 提取单个 clip。
-    -ss 在 -i 之前可以实现 demuxer 级别的 seek，避免解码不需要的帧。
-    
-    Args:
-        gpu_id: 指定使用的 GPU ID，None 表示使用默认 GPU
-    """
+    """Extract one clip using input-side seek to avoid decoding preceding frames."""
     start_sec = start_frame / fps
     duration_sec = (end_frame - start_frame + 1) / fps
     
     tmp_path = output_path + ".tmp"
     
-    # -ss 放在 -i 之前实现输入端 seek（关键！）
+    # Place ``-ss`` before ``-i`` for demuxer-level seeking.
     cmd = (
         ["ffmpeg", "-y"]
         + FFMPEG_DECODE
@@ -61,7 +50,7 @@ def _extract_single_clip(video_path, start_frame, end_frame, output_path, fps, g
         + [tmp_path]
     )
     
-    # 设置环境变量指定 GPU
+    # Select the decode GPU through the environment.
     env = os.environ.copy()
     if gpu_id is not None:
         env["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
@@ -69,7 +58,7 @@ def _extract_single_clip(video_path, start_frame, end_frame, output_path, fps, g
     ret = subprocess.run(cmd, capture_output=True, text=True, env=env)
     
     if ret.returncode != 0:
-        # 清理临时文件
+        # Remove a failed temporary output.
         for p in (tmp_path, output_path):
             if os.path.exists(p):
                 try:
@@ -78,7 +67,7 @@ def _extract_single_clip(video_path, start_frame, end_frame, output_path, fps, g
                     pass
         raise RuntimeError(f"ffmpeg 切片失败 {output_path}: {ret.stderr or ret.returncode}")
     
-    # 重命名临时文件
+    # Rename the completed temporary output atomically.
     try:
         os.replace(tmp_path, output_path)
     except OSError as e:
@@ -91,34 +80,16 @@ def _extract_single_clip(video_path, start_frame, end_frame, output_path, fps, g
 
 
 def _extract_clips_batch(video_path, clips_info, fps, gpu_id=None):
-    """
-    逐个提取 clips，每个 clip 使用 -ss 输入端 seek。
-    clips_info: list of (start_frame, end_frame, output_path)
-    gpu_id: 指定使用的 GPU ID
-    """
+    """Extract clips individually with input-side seek."""
     for start_f, end_f, out_path in clips_info:
         _extract_single_clip(video_path, start_f, end_f, out_path, fps, gpu_id)
 
 
 def _extract_group_clips(video_path, group_clips, shot_range, fps, gpu_id=None):
-    """
-    使用一次 ffmpeg 调用提取一个 group 内的所有 clips。
-    
-    原理：
-    1. 使用 -ss 跳到 group 的起始位置（demuxer 级别 seek，跳过不需要的数据）
-    2. 使用 -t 限制读取范围为 group 的长度
-    3. 使用 filter_complex + trim 将解码后的帧分割成多个输出
-    4. 由于已经 seek 到 group 开始，trim 的时间范围很小，效率高
-    
-    Args:
-        video_path: 源视频路径
-        group_clips: list of dict，每个 dict 包含 name, start_frame, end_frame, output_path
-        shot_range: [start_frame, end_frame] group 的整体帧范围
-        fps: 视频帧率
-        gpu_id: 指定使用的 GPU ID
-    
-    Returns:
-        处理的 clip 数量
+    """Extract every clip in one group with a single bounded ffmpeg decode.
+
+    Input-side seek and a group-level duration avoid decoding unrelated media;
+    trims are relative to the seek point. Returns the number of clips produced.
     """
     if not group_clips:
         return 0
@@ -127,38 +98,36 @@ def _extract_group_clips(video_path, group_clips, shot_range, fps, gpu_id=None):
     group_start_frame = shot_range[0]
     group_end_frame = shot_range[1]
     
-    # 计算 seek 位置和读取时长
+    # Compute the group seek point and bounded decode duration.
     seek_sec = group_start_frame / fps
     duration_sec = (group_end_frame - group_start_frame + 1) / fps
     
-    # 构建 filter_complex
-    # 每个 clip 的 trim 时间是相对于 seek 点（group_start_frame）的
+    # Build trims relative to the group seek point.
     filter_parts = []
     for i, clip_info in enumerate(group_clips):
         start_f = clip_info["start_frame"]
         end_f = clip_info["end_frame"]
         
-        # 相对于 seek 点的时间（秒）
+        # Times are in seconds relative to the seek point.
         rel_start_sec = (start_f - group_start_frame) / fps
         rel_end_sec = (end_f - group_start_frame + 1) / fps
         
-        # 构建 trim filter
-        # [0:v] -> trim -> setpts 重置时间戳 -> [v{i}]
+        # Trim and reset timestamps for each output stream.
         filter_parts.append(
             f"[0:v]trim=start={rel_start_sec:.6f}:end={rel_end_sec:.6f},setpts=PTS-STARTPTS[v{i}]"
         )
     
     filter_complex = "; ".join(filter_parts)
     
-    # 构建 ffmpeg 命令
+    # Build the ffmpeg command.
     cmd = ["ffmpeg", "-y"]
     cmd += FFMPEG_DECODE
-    cmd += ["-ss", f"{seek_sec:.6f}"]  # 输入端 seek（关键！）
+    cmd += ["-ss", f"{seek_sec:.6f}"]  # Input-side seek.
     cmd += ["-i", video_path]
-    cmd += ["-t", f"{duration_sec:.6f}"]  # 限制读取范围
+    cmd += ["-t", f"{duration_sec:.6f}"]  # Bound the decode range.
     cmd += ["-filter_complex", filter_complex]
     
-    # 为每个输出添加 -map 和编码参数
+    # Add stream mapping and encoding options for each output.
     tmp_paths = []
     for i, clip_info in enumerate(group_clips):
         out_path = clip_info["output_path"]
@@ -172,16 +141,16 @@ def _extract_group_clips(video_path, group_clips, shot_range, fps, gpu_id=None):
             tmp_path
         ]
     
-    # 设置环境变量指定 GPU
+    # Select the decode GPU through the environment.
     env = os.environ.copy()
     if gpu_id is not None:
         env["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
     
-    # 执行 ffmpeg
+    # Run ffmpeg.
     ret = subprocess.run(cmd, capture_output=True, text=True, env=env)
     
     if ret.returncode != 0:
-        # 清理所有临时文件
+        # Remove every temporary output after failure.
         for tmp_path, out_path in tmp_paths:
             for p in (tmp_path, out_path):
                 if os.path.exists(p):
@@ -194,12 +163,12 @@ def _extract_group_clips(video_path, group_clips, shot_range, fps, gpu_id=None):
             f"{ret.stderr or ret.returncode}"
         )
     
-    # 重命名所有临时文件
+    # Atomically rename completed temporary outputs.
     for tmp_path, out_path in tmp_paths:
         try:
             os.replace(tmp_path, out_path)
         except OSError as e:
-            # 清理已创建的文件
+            # Remove outputs created before the rename failure.
             if os.path.exists(tmp_path):
                 try:
                     os.remove(tmp_path)
@@ -254,13 +223,12 @@ def main():
                 vid = f.replace("_clips.json", "")
                 json_files.append((vid, os.path.join(record_dir, f)))
 
-    # 收集所有 movie 任务
-    # (video_id, video_path, json_path) - gpu_id 稍后分配
+    # Collect movie tasks; GPU assignment happens later.
     movie_tasks_raw = []
     for video_id, json_path in json_files:
         video_path = _find_video_for_id(video_dir, video_id)
         if not video_path:
-            # 调试信息：脚本用「文件名第一个点前的部分」匹配 video_id，便于排查路径/命名问题
+            # Video IDs match the filename prefix before the first dot.
             mp4_in_dir = [f for f in os.listdir(video_dir) if f.lower().endswith(".mp4")] if os.path.isdir(video_dir) else []
             prefixes = [f.split(".")[0] for f in mp4_in_dir[:5]]
             print(f"[Skip] 未找到视频: {video_id} (需要 prefix=={repr(video_id)}); "
@@ -272,18 +240,18 @@ def main():
         print("无 movie 需要导出。")
         return 0
 
-    # 获取可用的 GPU 列表
+    # Resolve available GPU IDs.
     cuda_devices = os.environ.get("CUDA_VISIBLE_DEVICES", "")
     if cuda_devices:
         gpu_list = [g.strip() for g in cuda_devices.split(",") if g.strip()]
     else:
-        # 如果没有设置 CUDA_VISIBLE_DEVICES，尝试检测可用 GPU 数量
-        gpu_list = ["0"]  # 默认使用 GPU 0
+        # Default to GPU 0 when CUDA_VISIBLE_DEVICES is unset.
+        gpu_list = ["0"]
     
     n_gpus = len(gpu_list)
     n_workers = min(args.workers, len(movie_tasks_raw))
     
-    # 给每个任务分配 GPU（轮询方式）
+    # Assign tasks to GPUs round-robin.
     movie_tasks = []
     for i, (video_id, video_path, json_path) in enumerate(movie_tasks_raw):
         gpu_id = gpu_list[i % n_gpus]
@@ -302,12 +270,11 @@ def main():
         if not groups:
             return video_id, 0, 0, "skipped_empty", 0, 0
 
-        # === 断点续传检查 ===
-        # 找到最后一个 group 的索引
+        # Inspect completed groups for resume state.
         last_group_idx = max(g.get("group_index", 0) for g in groups)
         last_group_dir = os.path.join(video_out, f"group_{last_group_idx}")
 
-        # 检查最后一个 group 是否存在 last_clip.mp4，存在则认为该 movie 已完成
+        # A last_clip in the final group marks the movie complete.
         if os.path.isdir(last_group_dir):
             last_clip_path = os.path.join(last_group_dir, "last_clip.mp4")
             if os.path.isfile(last_clip_path):
@@ -315,12 +282,12 @@ def main():
                 n_clips = sum(len(g.get("clips", [])) for g in groups)
                 return video_id, n_groups, n_clips, "skipped_complete", n_clips, 0
 
-        # 检查 group_0 是否存在，决定是否需要断点续传
+        # Existing group_0 indicates resumable output.
         group_0_dir = os.path.join(video_out, "group_0")
         resume_from_group = 0
 
         if os.path.isdir(group_0_dir):
-            # 找到有 last_clip.mp4 的最后一个 group，从下一个 group 开始继续
+            # Resume after the last group containing last_clip.
             sorted_groups = sorted(groups, key=lambda g: g.get("group_index", 0))
             last_complete_group = -1
 
@@ -336,7 +303,7 @@ def main():
 
             resume_from_group = last_complete_group + 1
 
-        # 统计需要处理的 groups
+        # Count groups still requiring work.
         sorted_groups = sorted(groups, key=lambda g: g.get("group_index", 0))
         groups_to_process = []
         skipped_clips = 0
@@ -347,20 +314,20 @@ def main():
             g_idx = group.get("group_index", 0)
             group_dir = os.path.join(video_out, f"group_{g_idx}")
             
-            # 跳过已完成的 group（以 last_clip.mp4 为标志）
+            # Skip groups marked complete by last_clip.
             if g_idx < resume_from_group:
                 skipped_clips += len(group.get("clips", []))
                 skipped_groups += 1
                 continue
             
-            # 构建 group 信息
+            # Read group boundaries.
             shot_range = group.get("shot_range", [0, 0])
             clips_in_group = group.get("clips", [])
             
             if not clips_in_group:
                 continue
             
-            # 构建 group_clips 列表
+            # Build group clip descriptors.
             group_clips = []
             for clip in clips_in_group:
                 start_f = clip["start_frame"]
@@ -387,10 +354,10 @@ def main():
         n_groups_to_process = len(groups_to_process)
         
         if n_groups_to_process == 0:
-            # 没有需要处理的 group
+            # Nothing remains for this movie.
             return video_id, 0, 0, "skipped_empty", skipped_clips, 0
         
-        # 按 group 处理，每个 group 一次 ffmpeg 调用
+        # Process each group with one ffmpeg invocation.
         start_time = time.time()
         processed_clips = 0
         processed_groups = 0
@@ -401,12 +368,12 @@ def main():
             shot_range = group_info["shot_range"]
             group_clips = group_info["clips"]
             
-            # 创建 group 目录
+            # Create the group output directory.
             os.makedirs(group_dir, exist_ok=True)
             
             group_start_time = time.time()
             
-            # 使用优化的 group 处理函数
+            # Extract the group in one bounded decode.
             clips_processed = _extract_group_clips(
                 video_path, group_clips, shot_range, fps, gpu_id
             )
@@ -417,13 +384,13 @@ def main():
             processed_clips += clips_processed
             processed_groups += 1
             
-            # 计算速率和预计剩余时间
+            # Estimate throughput and remaining time.
             elapsed = group_end_time - start_time
             clips_per_sec = processed_clips / elapsed if elapsed > 0 else 0
             remaining_clips = total_clips_to_process - processed_clips
             eta_sec = remaining_clips / clips_per_sec if clips_per_sec > 0 else 0
             
-            # 输出进度（按 group 显示）
+            # Report group-level progress.
             group_speed = clips_processed / group_duration if group_duration > 0 else 0
             print(f"    [{video_id}@GPU{gpu_id}] group {processed_groups}/{n_groups_to_process} (g{g_idx}): "
                   f"{processed_clips}/{total_clips_to_process} clips ({100*processed_clips/total_clips_to_process:.1f}%), "

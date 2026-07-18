@@ -1,8 +1,8 @@
-"""
-适配 shot detection 生成的 clip 结构进行多镜头标注。
-目录结构：clips_dir / {video_id} / group_{i} / clip1.mp4, clip2.mp4, ..., last_clip.mp4
-每个 group 作为一个 shot group，忽略 last_clip，每个 clip 采样 5 帧（0, 20, 40, 60, 80）。
-高并发模式使用 OpenAI-compatible chat/completions API，边请求边写入。
+"""Caption shot groups produced by the clip-extraction pipeline.
+
+Groups contain numbered clips plus an ignored ``last_clip`` remainder. Sampled
+frames are sent to an OpenAI-compatible chat-completions API and persisted as
+requests complete.
 """
 import os
 import re
@@ -25,17 +25,17 @@ try:
 except ImportError:
     HAS_AIOHTTP = False
 
-# 每个 clip 采样的帧索引（81 帧视频等间隔采样）
-# 第一个 clip 采样 5 帧，后续 clip 采样 4 帧（跳过第 0 帧，因为与前一个 clip 的第 80 帧重复）
+# Sample 81-frame clips uniformly. Later clips skip frame zero because it
+# duplicates the preceding clip's frame 80.
 FIRST_CLIP_SAMPLE_FRAMES = [0, 40, 80]
 OTHER_CLIP_SAMPLE_FRAMES = [40, 80]
-# 每个 shot group 最多用于 global caption 的帧数
+# Maximum frames used for a group-level caption.
 MAX_GLOBAL_FRAMES = 11
-# test 模式下每个 group 最多处理的 clip 数量
+# Maximum clips per group in test mode.
 MAX_CLIPS_IN_TEST = 3
-# 非 test 时每个 group 最多取前 N 个非 last_clip（控制请求量与 503）
+# Bound production requests per group to reduce gateway 503 responses.
 MAX_CLIPS_PER_GROUP = 5
-# 图像缩放尺寸
+# Image resize dimensions.
 RESIZE_WIDTH = 672
 RESIZE_HEIGHT = 384
 DEFAULT_PROMPT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "prompts")
@@ -65,7 +65,7 @@ def load_caption_prompts(global_prompt_path, chunk_prompt_path):
 
 
 def get_clip_frame_count(clip_path):
-    """返回视频总帧数，失败返回 0。"""
+    """Return the video frame count, or zero on failure."""
     cap = cv2.VideoCapture(clip_path)
     if not cap.isOpened():
         return 0
@@ -75,7 +75,7 @@ def get_clip_frame_count(clip_path):
 
 
 def extract_frames_from_clip(clip_path, frame_indices):
-    """从单个 clip 视频中采样指定帧，返回 base64 编码列表。无法打开时返回 []（常见原因：MP4 不完整/损坏，如 moov atom not found）。"""
+    """Return requested frames as base64, or ``[]`` for an unreadable MP4."""
     frames_base64 = []
     cap = cv2.VideoCapture(clip_path)
     if not cap.isOpened():
@@ -94,14 +94,14 @@ def extract_frames_from_clip(clip_path, frame_indices):
 
 
 def get_sorted_clips(group_dir):
-    """获取 group 目录下的 clip 文件列表，忽略 last_clip，按数字排序。"""
+    """Return numerically sorted clips, excluding ``last_clip``."""
     clips = []
     for f in os.listdir(group_dir):
         if not f.endswith(".mp4"):
             continue
         if f == "last_clip.mp4":
             continue
-        # 提取 clip 编号用于排序
+        # Extract the numeric clip index for sorting.
         match = re.match(r"clip(\d+)\.mp4", f)
         if match:
             clips.append((int(match.group(1)), os.path.join(group_dir, f)))
@@ -110,7 +110,7 @@ def get_sorted_clips(group_dir):
 
 
 def get_sorted_groups(video_dir):
-    """获取 video 目录下的 group 文件夹列表，按数字排序。"""
+    """Return group directories in numeric order."""
     groups = []
     for d in os.listdir(video_dir):
         if not d.startswith("group_"):
@@ -123,29 +123,24 @@ def get_sorted_groups(video_dir):
 
 
 def process_video_clips(video_dir, test_mode=False, max_groups_per_video=50):
-    """
-    处理一个 video_id 目录下的 group 和 clip。
-    返回:
-        all_shots_data: list of dict，每个 dict 包含 group_index, clips_base64, group_global_frames_base64（该 group 用于 global caption 的采样帧，最多 MAX_GLOBAL_FRAMES 帧）
-    
-    Args:
-        video_dir: video_id 目录路径
-        test_mode: 测试模式，只处理第三个 group 的前 MAX_CLIPS_IN_TEST 个 clip
-        max_groups_per_video: 非 test 时在排除首尾后最多随机选取的 group 数（保留原 group_index）
+    """Collect sampled clip and group-caption frames for one video directory.
+
+    Test mode limits work to the third group. Production sampling excludes edge
+    groups, preserves original group indices, and caps the selected group count.
     """
     groups = get_sorted_groups(video_dir)
     all_shots_data = []
 
-    # test 模式下只处理第三个 group
+    # Test mode processes only the third group.
     if test_mode:
         groups = groups[2:3]
     else:
-        # 强制排除前 2 个和最后 2 个 group
+        # Exclude the first and last two groups.
         if len(groups) > 4:
             groups = groups[2:-2]
         else:
             groups = []
-        # 最多随机选取 max_groups_per_video 个，保留原 group_index（抽样后按 group_index 排序）
+        # Sample at most the configured count while preserving original indices.
         if len(groups) > max_groups_per_video:
             groups = sorted(random.sample(groups, max_groups_per_video), key=lambda x: x[0])
 
@@ -154,7 +149,7 @@ def process_video_clips(video_dir, test_mode=False, max_groups_per_video=50):
         if not clips:
             continue
 
-        # test 模式下只处理前 MAX_CLIPS_IN_TEST 个 clip；非 test 时每个 group 最多 MAX_CLIPS_PER_GROUP 个
+        # Apply separate test and production clip limits.
         if test_mode:
             clips = clips[:MAX_CLIPS_IN_TEST]
         else:
@@ -162,11 +157,11 @@ def process_video_clips(video_dir, test_mode=False, max_groups_per_video=50):
 
         clips_base64 = []
         for clip_idx, clip_path in enumerate(clips):
-            # test 模式下打印每个 clip 的视频总帧数和实际采样帧数
+            # Test mode reports source and sampled frame counts.
             if test_mode:
                 total_frames = get_clip_frame_count(clip_path)
                 logging.info(f"[test] group_{group_idx} clip{clip_idx + 1} ({os.path.basename(clip_path)}): 视频总帧数={total_frames}")
-            # 第一个 clip 采样 5 帧，后续 clip 采样 4 帧（跳过与前一个 clip 重复的首帧）
+            # Skip the duplicated first frame after the first clip.
             frame_indices = FIRST_CLIP_SAMPLE_FRAMES if clip_idx == 0 else OTHER_CLIP_SAMPLE_FRAMES
             frames = extract_frames_from_clip(clip_path, frame_indices)
             if test_mode:
@@ -174,12 +169,12 @@ def process_video_clips(video_dir, test_mode=False, max_groups_per_video=50):
             if frames:
                 clips_base64.append(frames)
 
-        # 若该 group 内有 clip 无法打开（如 moov atom not found），则整组跳过，避免缺帧的 group 进入标注
+        # Skip the entire group if any MP4 is corrupt or unreadable.
         if len(clips_base64) < len(clips):
             logging.warning(f"跳过 group_{group_idx}：{len(clips) - len(clips_base64)} 个 clip 无法打开，可能为损坏/不完整 MP4")
             continue
         if clips_base64:
-            # 该 group 内用于 global caption 的采样帧：从本 group 所有 clip 帧中等间隔取最多 MAX_GLOBAL_FRAMES 帧
+            # Uniformly sample group-level caption frames across all valid clip frames.
             all_frames = []
             for clip_frames in clips_base64:
                 all_frames.extend(clip_frames)
@@ -200,10 +195,7 @@ def process_video_clips(video_dir, test_mode=False, max_groups_per_video=50):
 
 
 def process_video_clips_for_groups(video_dir, group_indices, test_mode=False):
-    """
-    仅处理指定的 group 列表（用于断点续传时保持与已有 JSON 的 group 一致，不重新随机抽样）。
-    group_indices: 已有 JSON 中 shots 的 group_index 列表，顺序会被保留。
-    """
+    """Process existing group indices in order for deterministic resume behavior."""
     all_groups = get_sorted_groups(video_dir)
     group_dir_by_idx = {idx: path for idx, path in all_groups}
     all_shots_data = []
@@ -247,7 +239,7 @@ def process_video_clips_for_groups(video_dir, group_indices, test_mode=False):
 
 
 def save_frames_base64_to_dir(frames_base64, dir_path):
-    """将 base64 编码的帧保存为 dir_path 下的 frame_000.jpg, frame_001.jpg, ..."""
+    """Save base64 frames as sequential JPEG files."""
     os.makedirs(dir_path, exist_ok=True)
     for i, b64 in enumerate(frames_base64):
         raw = base64.b64decode(b64)
@@ -256,16 +248,15 @@ def save_frames_base64_to_dir(frames_base64, dir_path):
             f.write(raw)
 
 
-# 断点续传：若 JSON 中某 group 的任意 clip 含此错误，则对该 group 重新 caption
+# Retry a whole group when any stored clip contains this API error.
 ERROR_403_MARKER = "Error code: 403"
 
 
 def _load_existing_and_groups_with_403(save_path):
-    """
-    若 save_path 存在且为合法 JSON，返回 (已有 data 的 dict, 需要重试的 group_index 集合)。
-    - 文件不存在或解析失败: 返回 (None, None)，表示不做续传、从头跑。
-    - 存在且无 403: 返回 (data, set())，调用方据此可完全跳过。
-    - 存在且有 403: 返回 (data, {group_index, ...})，对对应 group 重新 caption 后合并写回。
+    """Load resume data and return group indices requiring a 403 retry.
+
+    Missing or invalid JSON returns ``(None, None)``. Complete data returns an
+    empty retry set; stored 403 failures return their group indices for merging.
     """
     if not os.path.exists(save_path):
         return (None, None)
@@ -285,7 +276,7 @@ def _load_existing_and_groups_with_403(save_path):
 
 
 def _format_api_error_detail(e, max_body_len=500):
-    """从 API 异常中提取详细信息（如 503 的 status_code、response body），便于排查。"""
+    """Extract status and response details from an API exception."""
     parts = [str(e)]
     code = getattr(e, "status_code", None)
     if code is not None:
@@ -305,7 +296,7 @@ def _format_api_error_detail(e, max_body_len=500):
 
 
 def _process_one_video(video_id, clips_dir, output_dir, api_key, base_url, model_name, max_groups_per_video, test, caption_prompts, request_delay=0):
-    """处理单个 movie 的 caption，返回 (video_id, status)。每线程独立创建 client。request_delay：每次 API 调用后等待秒数，用于减轻网关 503。"""
+    """Caption one movie with a thread-local client and optional 503 pacing."""
     video_dir = os.path.join(clips_dir, video_id)
     if not os.path.isdir(video_dir):
         logging.warning(f"跳过不存在的目录: {video_dir}")
@@ -373,7 +364,7 @@ def _process_one_video(video_id, clips_dir, output_dir, api_key, base_url, model
         clips_base64 = shot_data["clips_base64"]
         group_global_frames_base64 = shot_data["group_global_frames_base64"]
 
-        # 保存该 group 的 global 请求用采样帧到 output_dir/sampled_frames/{video_id}/group_{i}/
+            # Save group-caption samples under the corresponding group directory.
         group_frames_dir = os.path.join(frames_root, f"group_{group_index}")
         save_frames_base64_to_dir(group_global_frames_base64, group_frames_dir)
 
@@ -449,12 +440,12 @@ def _process_one_video(video_id, clips_dir, output_dir, api_key, base_url, model
         return (video_id, "error_save")
 
 
-# ---------- 高并发模式（aiohttp + asyncio） ----------
+# Concurrent aiohttp/asyncio request path.
 # POST {BASE_URL}/chat/completions with OpenAI-compatible payload:
 # headers: Authorization: Bearer {API_KEY}, Content-Type: application/json.
 
 def _chat_completion_payload(model, messages, temperature=0, max_tokens=2048):
-    """构建与 OpenAI 兼容的 chat/completions 请求体（与 sync 路径 client.chat.completions.create 行为对齐）。"""
+    """Build a chat-completions payload matching the synchronous client path."""
     return {
         "model": model,
         "messages": messages,
@@ -465,10 +456,7 @@ def _chat_completion_payload(model, messages, temperature=0, max_tokens=2048):
 
 
 async def _chat_completion_aio(session, base_url, api_key, model, messages, timeout_sec, semaphore):
-    """
-    使用 aiohttp 异步请求 chat/completions，受 semaphore 限制并发。
-    请求格式与 OpenAI-compatible chat/completions API 一致；返回 (content_str, error_str)，成功时 error_str 为 ""。
-    """
+    """Send a semaphore-limited chat-completions request with aiohttp."""
     url = base_url.rstrip("/") + "/chat/completions"
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -480,7 +468,7 @@ async def _chat_completion_aio(session, base_url, api_key, model, messages, time
             async with session.post(url, json=payload, headers=headers, timeout=aiohttp.ClientTimeout(total=timeout_sec)) as resp:
                 if resp.status != 200:
                     text = await resp.text()
-                    # 5xx 时多保留一些 body 便于排查（如 503 网关原因）
+                    # Retain more response body for diagnosing 5xx gateway failures.
                     max_len = 500 if resp.status >= 500 else 200
                     return ("", f"HTTP {resp.status} | body={text[:max_len]}")
                 data = await resp.json()
@@ -494,9 +482,7 @@ async def _chat_completion_aio(session, base_url, api_key, model, messages, time
 
 async def _process_one_video_async(session, video_id, clips_dir, output_dir, api_key, base_url, model_name,
                                    max_groups_per_video, test, caption_prompts, semaphore, executor, loop):
-    """
-    异步处理单个 movie：按 group 做 global caption，保存每组采样帧，再对 group 内 clip 并发请求。
-    """
+    """Caption one movie asynchronously, with concurrent clip requests per group."""
     video_dir = os.path.join(clips_dir, video_id)
     if not os.path.isdir(video_dir):
         logging.warning(f"跳过不存在的目录: {video_dir}")
@@ -624,7 +610,7 @@ async def _process_one_video_async(session, video_id, clips_dir, output_dir, api
 
 async def _run_async_concurrent(video_ids, clips_dir, output_dir, api_key, base_url, model_name,
                                 max_groups_per_video, test, caption_prompts, max_concurrent_requests):
-    """使用 aiohttp 高并发：多 movie 并发，单 movie 内多 clip 请求也并发，受 semaphore 限制。"""
+    """Run semaphore-limited concurrency across movies and clips."""
     semaphore = asyncio.Semaphore(max_concurrent_requests)
     loop = asyncio.get_event_loop()
     executor = ThreadPoolExecutor(max_workers=4)
@@ -702,7 +688,7 @@ if __name__ == "__main__":
         ]
     )
 
-    # 获取要处理的 video_id 列表
+    # Collect video IDs to process.
     if args.video_id:
         video_ids = [args.video_id]
     else:
@@ -711,17 +697,17 @@ if __name__ == "__main__":
             if os.path.isdir(os.path.join(clips_dir, d)) and d.startswith("Top")
         ])
 
-    # test 模式下只处理前两个 video_id
+        # Test mode processes only the first two video IDs.
     if args.test:
         video_ids = video_ids[:2]
         logging.info(f"测试模式：只处理前两个 video_id: {video_ids}")
 
-    # test_movie：只取前两个 movie，顺序处理以免网关 503
+        # Process two test movies serially to reduce gateway 503 responses.
     if args.test_movie:
         video_ids = video_ids[:2]
         logging.info(f"test_movie：测试前两个 movie（顺序）: {video_ids}")
 
-    # 统一使用线程池 + OpenAI 客户端（与 test_movie 相同），movie 间并发、movie 内串行，稳定可靠
+    # Run movies concurrently while keeping requests within each movie serial.
     if args.workers > 1 or args.test_movie:
         n_workers = max(2, args.workers) if args.test_movie else args.workers
         n_workers = min(n_workers, len(video_ids))

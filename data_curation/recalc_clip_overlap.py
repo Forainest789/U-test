@@ -1,11 +1,8 @@
 #!/usr/bin/env python3
-"""
-重新计算 clips_record 下所有 JSON 的 clips 划分，改为首尾重叠模式。
-每个 clip 的首帧 = 上一个 clip 的尾帧。
-输出到新的 clips_record_cross 文件夹。
+"""Rebuild clip records with one-frame overlap between adjacent 81-frame clips.
 
-可选：对 candidate_groups.csv 与 character_lists 做 81 帧过滤——
-仅保留实际视频帧数为 81 的 candidate 与 overlap clip，并从 CSV 和 JSON 中移除其余项。
+Optionally keep CSV and character-list JSON entries synchronized while removing
+candidate and overlap clips whose decoded frame count is not 81.
 """
 import os
 import json
@@ -17,7 +14,7 @@ CLIP_FRAMES = 81
 
 
 def get_video_num_frames(path):
-    """ffprobe 获取视频帧数，失败或异常返回 None。"""
+    """Return the ffprobe frame count, or ``None`` on failure."""
     if not path or not os.path.isfile(path):
         return None
     cmd = [
@@ -56,7 +53,7 @@ def get_video_num_frames(path):
 
 
 def build_valid_81_frame_set(video_root, video_ids, group_clip_tuples):
-    """对 (video_id, group_index, clip_index) 列表检查视频是否为 81 帧，返回满足的集合。"""
+    """Return clip keys whose videos contain exactly ``CLIP_FRAMES`` (81) frames."""
     valid = set()
     try:
         from tqdm import tqdm
@@ -79,14 +76,11 @@ def filter_candidate_and_overlap_by_81_frames(
     video_root,
     required_frames=CLIP_FRAMES,
 ):
-    """
-    从 CSV 与 character_lists JSON 中收集所有 (video_id, group_index, clip_index)，
-    仅保留实际视频帧数 == required_frames 的 clip，写回 CSV 和 JSON。
-    """
+    """Filter CSV and character-list JSON to clips with the required frame count."""
     video_root = os.path.abspath(video_root)
     character_lists_dir = os.path.abspath(character_lists_dir)
 
-    # 1) 从 CSV 收集所有 (video_id, group_index, clip_index)
+    # Collect clip keys from CSV.
     csv_rows = []
     group_clip_tuples = set()
     with open(candidate_groups_csv, "r", encoding="utf-8") as f:
@@ -106,7 +100,7 @@ def filter_candidate_and_overlap_by_81_frames(
             for ci in indices:
                 group_clip_tuples.add((video_id, g, ci))
 
-    # 2) 从 JSON 收集所有 (video_id, group_index, clip_index)
+    # Collect clip keys from character-list JSON.
     video_ids_from_csv = {r[0] for r in csv_rows}
     json_files = [f for f in os.listdir(character_lists_dir) if f.endswith(".json")]
     for jf in json_files:
@@ -126,13 +120,13 @@ def filter_candidate_and_overlap_by_81_frames(
                 if ci is not None:
                     group_clip_tuples.add((video_id, g, ci))
 
-    # 3) 检查每个 clip 视频帧数，得到合法集合
+    # Determine which clip videos have the required frame count.
     tuples_list = list(group_clip_tuples)
     video_ids_all = list({t[0] for t in tuples_list})
     valid_set = build_valid_81_frame_set(video_root, video_ids_all, tuples_list)
     print(f"[81帧过滤] 检查 {len(tuples_list)} 个 clip，其中 {len(valid_set)} 个为 {required_frames} 帧")
 
-    # 4) 过滤每个 character_list JSON
+    # Apply the valid set to each character-list JSON.
     for jf in json_files:
         path = os.path.join(character_lists_dir, jf)
         video_id = jf.replace(".json", "")
@@ -146,13 +140,13 @@ def filter_candidate_and_overlap_by_81_frames(
             g = shot.get("group_index")
             if g is None:
                 continue
-            # 只保留帧数合法的 clip
+            # Keep clips with valid frame counts.
             new_clips = [c for c in shot.get("clips", []) if (video_id, g, c.get("clip_index")) in valid_set]
             for c in new_clips:
-                # 只保留 overlap 中帧数合法的
+                # Keep only valid overlap clips.
                 overlap = c.get("overlapping_clip_indices") or []
                 c["overlapping_clip_indices"] = [x for x in overlap if (video_id, g, x) in valid_set]
-            # candidate_clips 只保留仍存在的 clip 且帧数合法
+            # Keep candidates that remain present and valid.
             cand = shot.get("candidate_clips") or []
             new_cand = [x for x in cand if (video_id, g, x) in valid_set and any(c.get("clip_index") == x for c in new_clips)]
             shot["clips"] = new_clips
@@ -166,7 +160,7 @@ def filter_candidate_and_overlap_by_81_frames(
         if len(new_shots) != orig_len:
             print(f"  [JSON] {jf}: shots {orig_len} -> {len(new_shots)}")
 
-    # 5) 过滤 CSV：每行 candidate_clips 只保留在 valid_set 中的 clip，空行删除
+    # Apply the same valid set to CSV and drop empty rows.
     new_csv_rows = []
     for (video_id, g, indices) in csv_rows:
         kept = [ci for ci in indices if (video_id, g, ci) in valid_set]
@@ -185,13 +179,7 @@ def filter_candidate_and_overlap_by_81_frames(
 
 
 def build_overlapping_clips(start_f, end_f):
-    """
-    根据 shot_range 按首尾重叠方式切分 clips。
-    clip1: start_f ~ start_f+80
-    clip2: start_f+80 ~ start_f+160
-    clip3: start_f+160 ~ start_f+240
-    ...
-    """
+    """Split a shot range into 81-frame clips with one shared boundary frame."""
     clips = []
     s = start_f
     order = 0
@@ -204,7 +192,7 @@ def build_overlapping_clips(start_f, end_f):
         else:
             name = "last_clip"
         clips.append({"name": name, "start_frame": s, "end_frame": e})
-        # 首尾重叠：下一个 clip 的首帧 = 当前 clip 的尾帧
+        # The next clip begins on the current clip's final frame.
         s = e
         if num_frames < CLIP_FRAMES:
             break
@@ -212,7 +200,7 @@ def build_overlapping_clips(start_f, end_f):
 
 
 def process_json(input_path, output_path):
-    """处理单个 JSON 文件，重新计算 clips 并保存到新路径。"""
+    """Recalculate one JSON record and save it to the destination path."""
     with open(input_path, "r", encoding="utf-8") as f:
         data = json.load(f)
 
@@ -229,11 +217,9 @@ def process_json(input_path, output_path):
 
 
 def remove_empty_overlap_from_candidate_and_stats(candidate_groups_csv, character_lists_dir):
-    """
-    从 candidate_clips 中移除 overlapping_clip_indices 为空的 clip；
-    按 JSON 重新生成 CSV（只保留 candidate_clips 非空的 group）；
-    统计并打印处理前后可用 data group 数量。
-    返回 (处理前 group 数, 处理后 group 数, 更新后的 CSV 行数)。
+    """Drop candidates without overlap and regenerate synchronized CSV rows.
+
+    Returns group counts before and after filtering plus the updated CSV row count.
     """
     character_lists_dir = os.path.abspath(character_lists_dir)
     json_files = [f for f in os.listdir(character_lists_dir) if f.endswith(".json")]
@@ -262,7 +248,7 @@ def remove_empty_overlap_from_candidate_and_stats(candidate_groups_csv, characte
             if candidate_clips:
                 total_before += 1
 
-            # 只保留 overlap 非空的 clip 作为 candidate
+            # Candidates must have at least one overlap clip.
             new_candidate_clips = [
                 ci for ci in candidate_clips
                 if clip_by_index.get(ci) and (clip_by_index[ci].get("overlapping_clip_indices") or [])
@@ -276,7 +262,7 @@ def remove_empty_overlap_from_candidate_and_stats(candidate_groups_csv, characte
         with open(path, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
 
-    # 写回 CSV
+    # Rewrite CSV from the synchronized JSON state.
     fieldnames = ["video_id", "group_index", "candidate_clips"]
     with open(candidate_groups_csv, "w", encoding="utf-8", newline="") as f:
         w = csv.writer(f)
@@ -306,7 +292,7 @@ def main():
                         help="从 candidate_clips 中移除 overlap 为空的 clip，并统计可用 group 数")
     args = parser.parse_args()
 
-    # 移除 overlap 为空的 candidate 并统计可用 group（仅需 csv + character_lists_dir）
+    # Remove candidates without overlap and summarize usable groups.
     if args.remove_empty_overlap and args.candidate_groups_csv and args.character_lists_dir:
         if not os.path.isfile(args.candidate_groups_csv):
             print(f"错误: candidate_groups_csv 不存在: {args.candidate_groups_csv}")
@@ -321,7 +307,7 @@ def main():
         )
         print("完成。")
 
-    # 81 帧过滤：从 CSV 和 character_lists JSON 中忽略帧数不为 81 的 candidate 与 overlap
+    # Keep CSV and JSON synchronized while enforcing 81-frame clips.
     if args.candidate_groups_csv and args.character_lists_dir and args.video_root:
         if not os.path.isfile(args.candidate_groups_csv):
             print(f"错误: candidate_groups_csv 不存在: {args.candidate_groups_csv}")
