@@ -202,11 +202,14 @@ See [`data_curation/README.md`](data_curation/README.md) for the full pipeline a
 If you find SlotMem useful for your research, please cite:
 
 ```bibtex
-@article{liu2026slotmem,
-  title={SlotMem: Character-Addressable Internal Memory for Narrative Long Video Generation},
-  author={Liu, Yilai and Zhang, Xin and Zhang, Shiyuan and Du, Hongyang},
-  journal={arXiv preprint arXiv:2607.15772},
-  year={2026}
+@misc{liu2026slotmemcharacteraddressableinternalmemory,
+      title={SlotMem: Character-Addressable Internal Memory for Narrative Long Video Generation},
+      author={Yilai Liu and Xin Zhang and Shiyuan Zhang and Hongyang Du},
+      year={2026},
+      eprint={2607.15772},
+      archivePrefix={arXiv},
+      primaryClass={cs.CV},
+      url={https://arxiv.org/abs/2607.15772},
 }
 ```
 
