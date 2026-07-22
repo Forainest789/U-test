@@ -197,6 +197,19 @@ Detailed benchmark usage, repository checkouts, and environment setup are provid
 
 See [`data_curation/README.md`](data_curation/README.md) for the full pipeline and generated data format.
 
+## Citation
+
+If you find SlotMem useful for your research, please cite:
+
+```bibtex
+@article{liu2026slotmem,
+  title={SlotMem: Character-Addressable Internal Memory for Narrative Long Video Generation},
+  author={Liu, Yilai and Zhang, Xin and Zhang, Shiyuan and Du, Hongyang},
+  journal={arXiv preprint arXiv:2607.15772},
+  year={2026}
+}
+```
+
 ## Acknowledgements
 
 Big thanks to [Wan2.2](https://github.com/Wan-Video/Wan2.2) and [Stable-Video-Infinity](https://github.com/vita-epfl/Stable-Video-Infinity) for their inspiring open-source work.
