@@ -1,0 +1,129 @@
+#!/usr/bin/env bash
+# Fetch the frozen platform: Wan2.2-I2V-A14B base + SlotMem Stage-2 checkpoints, then
+# record exactly what was fetched. No code is cloned -- this repo IS the SlotMem fork.
+#
+#   UTEST_ENV=utest bash scripts/fetch_weights.sh
+#
+# Disk: ~126 GB base + ~21 GB checkpoints. VRAM at inference is a separate budget; see
+# docs/research-plan.md.
+set -euo pipefail
+
+REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+CKPT_ROOT="${CKPT_ROOT:-${REPO_DIR}}"
+WAN22_DIR="${WAN22_DIR:-${REPO_DIR}/../wan_models/Wan2.2-I2V-A14B}"
+WAN22_REPO="${WAN22_REPO:-Wan-AI/Wan2.2-I2V-A14B}"
+PYTHON_BIN="${PYTHON_BIN:-python}"
+
+if [[ -z "${UTEST_ENV:-}" && "${ALLOW_SHARED_ENV:-0}" != "1" ]]; then
+  echo "[utest] refusing to install into the current env." >&2
+  echo "[utest]   conda create -n utest python=3.10 -y && UTEST_ENV=utest bash $0" >&2
+  echo "[utest]   (SlotMem pins torch 2.7.1/cu128 and flash_attn 2.8.0.post2; installing" >&2
+  echo "[utest]    that over another project's env breaks the other project.)" >&2
+  exit 1
+fi
+if [[ -n "${UTEST_ENV:-}" ]] && command -v conda >/dev/null 2>&1; then
+  eval "$(conda shell.bash hook)"
+  conda activate "${UTEST_ENV}"
+  PYTHON_BIN="python"
+fi
+
+ensure_hf_cli() {
+  command -v hf >/dev/null 2>&1 && return
+  "${PYTHON_BIN}" -m pip install -U "huggingface_hub[cli]"
+}
+
+# 1. Dependencies (SlotMem's own pins).
+if [[ "${SKIP_PIP:-0}" != "1" ]]; then
+  "${PYTHON_BIN}" -m pip install torch==2.7.1 torchvision==0.22.1 torchaudio==2.7.1 \
+    --index-url https://download.pytorch.org/whl/cu128
+  ( cd "${REPO_DIR}" && "${PYTHON_BIN}" -m pip install -e . \
+      && "${PYTHON_BIN}" -m pip install -r requirements_slotmem.txt )
+fi
+
+# 2. SlotMem checkpoints. Stage-2 is the platform, so Stage-1 alone is not "present":
+# checking only stage1 skips the download and the run then dies inside the launcher.
+if compgen -G "${CKPT_ROOT}/ckpt/stage1/*.pt" >/dev/null \
+   && compgen -G "${CKPT_ROOT}/ckpt/stage2/*.pt" >/dev/null; then
+  echo "[utest] ckpt present (stage1 + stage2)"
+else
+  echo "[utest] fetching ckpt/* (~21 GB) -> ${CKPT_ROOT}"
+  ensure_hf_cli
+  hf download YilaiLiu-HKU/SlotMem --local-dir "${CKPT_ROOT}" --include "ckpt/*"
+fi
+for required in stage2/stage2_low.pt stage2/stage2_high.pt; do
+  [[ -f "${CKPT_ROOT}/ckpt/${required}" ]] || {
+    echo "[utest] FATAL: missing ckpt/${required}; Stage-2 is the frozen platform" >&2
+    exit 1
+  }
+done
+
+# 3. Wan2.2 base.
+if [[ -d "${WAN22_DIR}/low_noise_model" && -d "${WAN22_DIR}/high_noise_model" ]]; then
+  echo "[utest] base model present: ${WAN22_DIR}"
+else
+  echo "[utest] downloading ${WAN22_REPO} (~126 GB) -> ${WAN22_DIR}"
+  mkdir -p "${WAN22_DIR}"
+  ensure_hf_cli
+  hf download "${WAN22_REPO}" --local-dir "${WAN22_DIR}"
+fi
+
+# 4. Provenance. A commit hash describes the tree only when the tree is clean, which is
+# why a bare git_commit has misled this project before; the dirty flag and the checkpoint
+# hashes are what make a result attributable.
+MANIFEST="${REPO_DIR}/platform.manifest.json"
+echo "[utest] hashing checkpoints -> ${MANIFEST} (a few minutes for ~21 GB)"
+CKPT_ROOT="${CKPT_ROOT}" WAN22_DIR="${WAN22_DIR}" REPO_DIR="${REPO_DIR}" \
+MANIFEST="${MANIFEST}" "${PYTHON_BIN}" - <<'PY'
+import hashlib, json, os, subprocess
+from pathlib import Path
+
+ckpt = Path(os.environ["CKPT_ROOT"]) / "ckpt"
+wan = Path(os.environ["WAN22_DIR"])
+repo = os.environ["REPO_DIR"]
+
+def sha256(path: Path) -> str:
+    h = hashlib.sha256()
+    with path.open("rb") as f:
+        for block in iter(lambda: f.read(1 << 22), b""):
+            h.update(block)
+    return h.hexdigest()
+
+def git(*args: str) -> str:
+    return subprocess.run(["git", "-C", repo, *args],
+                          capture_output=True, text=True).stdout.strip()
+
+Path(os.environ["MANIFEST"]).write_text(json.dumps({
+    "repo_commit": git("rev-parse", "HEAD"),
+    "repo_dirty": bool(git("status", "--porcelain")),
+    "checkpoints": {
+        str(p.relative_to(ckpt)): {"sha256": sha256(p), "bytes": p.stat().st_size}
+        for p in sorted(ckpt.rglob("*.pt"))
+    },
+    # The 126 GB base is listed by size only: hashing it on every setup costs more than
+    # it tells us, and the upstream release is versioned.
+    "wan22_files": {
+        str(p.relative_to(wan)): p.stat().st_size
+        for p in sorted(wan.rglob("*")) if p.is_file()
+    },
+}, indent=2), encoding="utf-8")
+print("[utest] manifest written")
+PY
+
+"${PYTHON_BIN}" -m utest.content_audit --self-check
+"${PYTHON_BIN}" -m utest.eligibility --self-check
+
+cat <<EOF
+
+[utest] ready. manifest -> ${MANIFEST}
+
+  M0a (official sample, Stage-2) -- record wall time and peak VRAM:
+    CONDA_ENV=${UTEST_ENV:-utest} CUDA_VISIBLE_DEVICES=0 \\
+    DUAL_EXPERT_LOAD_MODE=active DUAL_EXPERT_MANAGE_AUX_MODELS=1 \\
+    CKPT_DIR=${WAN22_DIR} \\
+    JSON_PATH=${REPO_DIR}/sample/test/3_271/rewrite_caption.json \\
+    REF_IMAGE_PATH=${REPO_DIR}/sample/test/3_271/frame.jpg \\
+    time bash ${REPO_DIR}/test_slotmem_stage2.sh
+
+  E0 (zero GPU, run this FIRST -- it gates the whole method line):
+    python -m utest.eligibility --data-root <narrastream-scripts> --out runs/e0.json
+EOF
