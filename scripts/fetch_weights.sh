@@ -66,6 +66,24 @@ else
   ensure_hf_cli
   hf download "${WAN22_REPO}" --local-dir "${WAN22_DIR}"
 fi
+# Assert AFTER the fetch, not only before it. hf download returns 0 on a resumed or
+# partial pull, and a base model that is present-but-short fails deep inside the first
+# denoising step instead of here. The floor is deliberately loose: it catches "a few
+# files landed", not "one shard is truncated" -- the manifest sizes are for that.
+wan_bytes=$(du -sb "${WAN22_DIR}" 2>/dev/null | cut -f1)
+wan_shards=$(find "${WAN22_DIR}" \( -name '*.safetensors' -o -name '*.pth' \) | wc -l)
+echo "[utest] base model: $((wan_bytes / 1024 / 1024 / 1024)) GiB in ${wan_shards} weight files"
+for expert in low_noise_model high_noise_model; do
+  [[ -d "${WAN22_DIR}/${expert}" ]] && [[ -n "$(ls -A "${WAN22_DIR}/${expert}" 2>/dev/null)" ]] || {
+    echo "[utest] FATAL: ${WAN22_DIR}/${expert} missing or empty" >&2
+    exit 1
+  }
+done
+if (( wan_bytes < 100 * 1024 * 1024 * 1024 )); then
+  echo "[utest] FATAL: base model is $((wan_bytes / 1024 / 1024 / 1024)) GiB, expected ~126." >&2
+  echo "[utest] Re-run this script; hf download resumes. Set HF_TOKEN for higher rate limits." >&2
+  exit 1
+fi
 
 # 4. Provenance. A commit hash describes the tree only when the tree is clean, which is
 # why a bare git_commit has misled this project before; the dirty flag and the checkpoint
