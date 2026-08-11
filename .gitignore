@@ -75,5 +75,13 @@ venv/
 *.concat.txt
 *.log
 
+# Run artifacts stay on the data disk beside the repo, never in /tmp: /tmp is on the root
+# filesystem on this box and a run's VRAM trace plus a few hundred GB of rollouts fills
+# it. log/<date>/<experiment>/ keeps one run's stdout, VRAM trace and manifest together,
+# so a reported number can be traced back to the run that produced it.
+/log/
+/runs/
+/platform.manifest.json
+
 # OS/editor noise
 .DS_Store
