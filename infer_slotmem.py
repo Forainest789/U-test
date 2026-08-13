@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import hashlib
 import io
 import importlib.util
 import json
@@ -282,6 +283,52 @@ def _summarize_memory_manager_bytes(mem_manager):
                 payload["tensor_bytes"] += _nested_tensor_bytes(tokens)
     payload["tensor_mb"] = float(payload["tensor_bytes"] / (1024 ** 2))
     return payload
+
+
+def _hash_nested_tensors(digest, value):
+    if isinstance(value, torch.Tensor):
+        tensor = value.detach().contiguous().to(device="cpu")
+        digest.update(str(tensor.dtype).encode("utf-8"))
+        digest.update(str(tuple(tensor.shape)).encode("utf-8"))
+        digest.update(tensor.view(torch.uint8).numpy().tobytes())
+    elif isinstance(value, dict):
+        for key in sorted(value, key=lambda item: str(item)):
+            digest.update(str(key).encode("utf-8"))
+            _hash_nested_tensors(digest, value[key])
+    elif isinstance(value, (list, tuple)):
+        for item in value:
+            _hash_nested_tensors(digest, item)
+
+
+def _memory_bank_sha256(mem_manager):
+    digest = hashlib.sha256()
+    _hash_nested_tensors(digest, getattr(mem_manager, "memory_bank", {}))
+    return digest.hexdigest()
+
+
+def _runtime_evidence(records, engine):
+    reads = [row.get("memory_read", {}) for row in records if isinstance(row, dict)]
+    nonempty_reads = sum(1 for row in reads if bool(row.get("nonempty", False)))
+    hash_changes = sum(
+        1 for row in records
+        if isinstance(row, dict) and bool(row.get("memory_bank_hash_changed", False))
+    )
+    writer_updates = [
+        update
+        for row in records if isinstance(row, dict)
+        for update in list(row.get("writer_updates", []) or [])
+    ]
+    return {
+        "memory_read_attempts": len(reads),
+        "nonempty_memory_reads": int(nonempty_reads),
+        "memory_reads": reads,
+        "writer_updates": writer_updates,
+        "writer_update_count": len(writer_updates),
+        "writer_bank_hash_changes": int(hash_changes),
+        "loaded_checkpoint_domains": sorted(
+            str(value) for value in getattr(engine, "loaded_checkpoint_domains", set())
+        ),
+    }
 
 
 def _analytic_role_wise_slot_memory_bank_bytes(args, engine, num_characters):
@@ -3637,6 +3684,34 @@ def main():
         if len(chunk_memory_banks) > 0 and not _is_layerwise_container(final_memory_banks):
             first_bank_key = sorted(chunk_memory_banks.keys())[0]
             memory_token_lengths_per_character = [m.shape[0] for m in chunk_memory_banks[first_bank_key]]
+        if _is_layerwise_container(final_memory_banks):
+            read_layer_count = 0
+            read_slot_count = 0
+            for _, bank_map in _iter_layerwise_items(final_memory_banks):
+                layer_has_tensor = False
+                if isinstance(bank_map, dict):
+                    for value in bank_map.values():
+                        if isinstance(value, torch.Tensor):
+                            layer_has_tensor = True
+                            read_slot_count += int(value.shape[0]) if value.ndim >= 1 else 0
+                read_layer_count += int(layer_has_tensor)
+        else:
+            read_layer_count = int(any(isinstance(value, torch.Tensor) for value in final_memory_banks.values()))
+            read_slot_count = sum(
+                int(value.shape[0]) if value.ndim >= 1 else 0
+                for value in final_memory_banks.values()
+                if isinstance(value, torch.Tensor)
+            )
+        memory_read_record = {
+            "chunk_idx": int(chunk_idx),
+            "attempted_roles": [str(value) for value in chars],
+            "known_roles": list(known_roles_for_chunk),
+            "first_roles": list(first_roles_for_chunk),
+            "nonempty": bool(read_layer_count > 0 and read_slot_count > 0),
+            "payload_layers": int(read_layer_count),
+            "payload_slots": int(read_slot_count),
+        }
+        memory_bank_hash_before_write = _memory_bank_sha256(mem_manager)
 
         full_buffer_status_before_generate = _full_buffer_status(
             args,
@@ -3737,6 +3812,7 @@ def main():
         prev_frames_pil = video_frames[start_idx:]
 
         memory_write_enabled = True
+        chunk_writer_updates = []
         if not memory_write_enabled:
             pass
         else:
@@ -3775,6 +3851,12 @@ def main():
                                 )[:2000],
                                 flush=True,
                             )
+                        chunk_writer_updates.append({
+                            "chunk_idx": int(chunk_idx),
+                            "character": str(char),
+                            "bank": int(bank_id),
+                            "stats": stage2_store_stats,
+                        })
                         mem_manager.add_memory(
                             char,
                             stored_mem,
@@ -3785,6 +3867,7 @@ def main():
                             first_appearance_only=bool(args.use_first_appearance_memory_only),
                         )
         memory_bank_stats = _summarize_memory_manager_bytes(mem_manager)
+        memory_bank_hash_after_write = _memory_bank_sha256(mem_manager)
         full_buffer_status_after_write = _full_buffer_status(
             args,
             engine,
@@ -3822,8 +3905,17 @@ def main():
             "last_sparse_role_memory_stats_by_layer": getattr(engine, "_last_sparse_role_memory_stats_by_layer", {}),
             "last_jigsaw_stage2_writer_stats": getattr(engine, "_last_jigsaw_stage2_writer_stats", {}),
             "role_state": role_state_payload,
+            "memory_read": memory_read_record,
+            "writer_updates": chunk_writer_updates,
+            "memory_bank_sha256_before_write": memory_bank_hash_before_write,
+            "memory_bank_sha256_after_write": memory_bank_hash_after_write,
+            "memory_bank_hash_changed": memory_bank_hash_before_write != memory_bank_hash_after_write,
         }
         efficiency_chunk_records.append(chunk_efficiency_record)
+        slotmem_inference_manifest["runtime_evidence"] = _runtime_evidence(
+            efficiency_chunk_records, engine
+        )
+        _write_slotmem_inference_manifest(bench_manifest_path, slotmem_inference_manifest)
         _append_efficiency_jsonl(getattr(args, "efficiency_runtime_log", None), chunk_efficiency_record)
         if getattr(args, "efficiency_runtime_log", None):
             print(
@@ -3977,6 +4069,7 @@ def main():
             "full_buffer_target_frames": int(full_buffer_target_record.get("frames", 0)) if isinstance(full_buffer_target_record, dict) else None,
             "full_buffer_target_video": full_buffer_target_record.get("video_path") if isinstance(full_buffer_target_record, dict) else None,
             "full_buffer_target_chunk": full_buffer_target_record,
+            "runtime_evidence": _runtime_evidence(efficiency_chunk_records, engine),
             "chunks": efficiency_chunk_records,
         }
         _write_efficiency_json(getattr(args, "efficiency_metrics_path", None), summary)
