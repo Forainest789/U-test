@@ -5,17 +5,36 @@ import pytest
 
 from utest.bootstrap import cluster_bootstrap_mean_ci, wilson_interval
 from utest.memory_utility import (
-    DYNAMIC_DEGREE, HARMFUL, HELPFUL, IDENTITY, NEUTRAL, gate_a_pass, label_event,
-    utility_census,
+    ANATOMY, BACKGROUND, BOUNDARY, DYNAMIC_DEGREE, FLICKER, HARMFUL, HELPFUL,
+    IDENTITY, MOTION_SMOOTHNESS, NEUTRAL, NON_TARGET, PROMPT_ALIGNMENT,
+    gate_a_pass, label_event, utility_census,
 )
 
-MARGINS = {"Q_bg": 0.02, "Q_flicker": 0.02}
+MARGINS = {
+    PROMPT_ALIGNMENT: 0.02,
+    BACKGROUND: 0.02,
+    MOTION_SMOOTHNESS: 0.02,
+    FLICKER: 0.02,
+    BOUNDARY: 0.02,
+    ANATOMY: 0.02,
+    NON_TARGET: 0.02,
+}
 FLOORS = {IDENTITY: 0.3, DYNAMIC_DEGREE: 0.2}
 
 
 def _outcomes(identity: float, dynamic: float = 0.8, **rest) -> dict[str, float]:
-    return {IDENTITY: identity, DYNAMIC_DEGREE: dynamic, "Q_bg": 0.9,
-            "Q_flicker": 0.9, **rest}
+    return {
+        IDENTITY: identity,
+        PROMPT_ALIGNMENT: 0.9,
+        BACKGROUND: 0.9,
+        MOTION_SMOOTHNESS: 0.9,
+        DYNAMIC_DEGREE: dynamic,
+        FLICKER: 0.9,
+        BOUNDARY: 0.9,
+        ANATOMY: 0.9,
+        NON_TARGET: 0.9,
+        **rest,
+    }
 
 
 def _record(story, event, arm, seed, identity, dynamic=0.8, **rest):
@@ -127,3 +146,41 @@ def test_wilson_interval_stays_inside_the_unit_range() -> None:
     assert rate == 1.0 and hi <= 1.0 and lo < 1.0
     rate, lo, hi = wilson_interval(4, 8)
     assert lo < 0.5 < hi
+
+
+def test_incomplete_metric_vector_has_no_utility_label() -> None:
+    records = [
+        {"story_id": "A", "event_id": "e0", "arm": "no_memory", "seed": 7,
+         "outcomes": {IDENTITY: 0.5, DYNAMIC_DEGREE: 0.8}},
+        {"story_id": "A", "event_id": "e0", "arm": "correct", "seed": 7,
+         "outcomes": {IDENTITY: 0.6, DYNAMIC_DEGREE: 0.8}},
+    ]
+    report = utility_census(
+        records, delta_id=0.01, quality_margins=MARGINS,
+        dynamic_degree_floor=0.2, gate_a_floors=FLOORS,
+        qualification_seeds=[1], formal_seeds=[7], content_causal=True, n_boot=20,
+    )
+    row = report["events"][0]
+    assert row["status"] == "measurement_incomplete"
+    assert "label" not in row
+    assert PROMPT_ALIGNMENT in row["missing_metrics"]
+
+
+def test_all_control_arms_are_reported_against_no_memory() -> None:
+    records = []
+    for arm, identity in {
+        "no_memory": 0.50,
+        "correct": 0.60,
+        "wrong": 0.45,
+        "zero": 0.51,
+        "random": 0.48,
+    }.items():
+        records.append(_record("A", "e0", arm, 7, identity))
+    records.append(_record("A", "e0", "no_memory", 1, 0.50))
+    report = utility_census(
+        records, delta_id=0.01, quality_margins=MARGINS,
+        dynamic_degree_floor=0.2, gate_a_floors=FLOORS,
+        qualification_seeds=[1], formal_seeds=[7], content_causal=True, n_boot=20,
+    )
+    assert set(report["arm_populations"]) == {"correct", "wrong", "zero", "random"}
+    assert report["arm_populations"]["wrong"]["all_eligible"]["delta_identity"]["mean"] < 0

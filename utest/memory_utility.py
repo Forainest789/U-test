@@ -29,10 +29,51 @@ from typing import Iterable, Mapping, Sequence
 from .bootstrap import cluster_bootstrap_mean_ci, wilson_interval
 
 IDENTITY = "C_id"
+PROMPT_ALIGNMENT = "A_prompt"
+BACKGROUND = "Q_bg"
+MOTION_SMOOTHNESS = "Q_motion_smoothness"
 DYNAMIC_DEGREE = "Q_motion_dynamic_degree"
+FLICKER = "Q_flicker"
+BOUNDARY = "Q_boundary"
+ANATOMY = "Q_anatomy"
+NON_TARGET = "Q_non_target"
 """Gated on its own absolute value -- see the module docstring."""
 
+REQUIRED_OUTCOMES = (
+    IDENTITY,
+    PROMPT_ALIGNMENT,
+    BACKGROUND,
+    MOTION_SMOOTHNESS,
+    DYNAMIC_DEGREE,
+    FLICKER,
+    BOUNDARY,
+    ANATOMY,
+    NON_TARGET,
+)
+QUALITY_MARGIN_OUTCOMES = (
+    PROMPT_ALIGNMENT,
+    BACKGROUND,
+    MOTION_SMOOTHNESS,
+    FLICKER,
+    BOUNDARY,
+    ANATOMY,
+    NON_TARGET,
+)
+
 HELPFUL, NEUTRAL, HARMFUL = "helpful", "neutral", "harmful"
+
+
+def measurement_completeness(outcomes: Mapping[str, float | None]) -> tuple[bool, list[str]]:
+    """Require the frozen decoded vector; anatomy may be N/A only when declared."""
+    missing: list[str] = []
+    for name in REQUIRED_OUTCOMES:
+        if name not in outcomes:
+            missing.append(name)
+        elif outcomes[name] is None and not (
+            name == ANATOMY and outcomes.get("Q_anatomy_applicable") is False
+        ):
+            missing.append(name)
+    return not missing, missing
 
 
 def label_event(
@@ -89,7 +130,11 @@ def gate_a_pass(
 
 
 def _delta(arm: Mapping[str, float], none: Mapping[str, float]) -> dict[str, float]:
-    return {k: float(arm[k]) - float(none.get(k, 0.0)) for k in arm}
+    return {
+        key: float(arm[key]) - float(none[key])
+        for key in REQUIRED_OUTCOMES
+        if arm.get(key) is not None and none.get(key) is not None
+    }
 
 
 def utility_census(
@@ -104,6 +149,7 @@ def utility_census(
     treatment_arm: str = "correct",
     baseline_arm: str = "no_memory",
     content_causal: bool | None = None,
+    comparison_arms: Sequence[str] = ("correct", "wrong", "zero", "random"),
     n_boot: int = 10000,
     seed: int = 0,
 ) -> dict:
@@ -139,23 +185,49 @@ def utility_census(
         was_ok, prior = story_gate.get(story, (True, []))
         story_gate[story] = (was_ok and passed, prior + failed)
 
-    labelled: list[dict] = []
-    for (story, event, seed_id), arms in sorted(by_key.items()):
-        if seed_id not in formal:
-            continue
-        if treatment_arm not in arms or baseline_arm not in arms:
-            continue
-        delta = _delta(arms[treatment_arm], arms[baseline_arm])
-        label, reasons = label_event(
-            delta, arms[treatment_arm],
-            delta_id=delta_id, quality_margins=quality_margins,
-            dynamic_degree_floor=dynamic_degree_floor,
-        )
-        labelled.append({
-            "story_id": story, "event_id": event, "seed": seed_id,
-            "delta": delta, "label": label, "reasons": reasons,
-            "gate_a": story_gate.get(story, (True, []))[0],
-        })
+    missing_margins = sorted(set(QUALITY_MARGIN_OUTCOMES) - set(quality_margins))
+
+    def label_arm(arm_name: str) -> list[dict]:
+        labelled: list[dict] = []
+        for (story, event, seed_id), arms in sorted(by_key.items()):
+            if seed_id not in formal or arm_name not in arms or baseline_arm not in arms:
+                continue
+            _arm_complete, arm_missing = measurement_completeness(arms[arm_name])
+            _base_complete, base_missing = measurement_completeness(arms[baseline_arm])
+            missing = sorted(set(arm_missing + base_missing + [f"margin:{x}" for x in missing_margins]))
+            base = {
+                "story_id": story,
+                "event_id": event,
+                "seed": seed_id,
+                "arm": arm_name,
+                "gate_a": story_gate.get(story, (True, []))[0],
+            }
+            if missing:
+                labelled.append({
+                    **base,
+                    "status": "measurement_incomplete",
+                    "missing_metrics": missing,
+                })
+                continue
+            delta = _delta(arms[arm_name], arms[baseline_arm])
+            label, reasons = label_event(
+                delta,
+                arms[arm_name],
+                delta_id=delta_id,
+                quality_margins=quality_margins,
+                dynamic_degree_floor=dynamic_degree_floor,
+            )
+            labelled.append({
+                **base,
+                "status": "complete",
+                "delta": delta,
+                "label": label,
+                "reasons": reasons,
+            })
+        return labelled
+
+    arm_rows = {arm: label_arm(arm) for arm in comparison_arms}
+    labelled = arm_rows.get(treatment_arm, label_arm(treatment_arm))
 
     populations = {
         "all_eligible": labelled,
@@ -167,6 +239,15 @@ def utility_census(
         "populations": {
             name: _population_summary(rows, n_boot=n_boot, seed=seed)
             for name, rows in populations.items()
+        },
+        "arm_populations": {
+            arm: {
+                "all_eligible": _population_summary(rows, n_boot=n_boot, seed=seed),
+                "gate_a_qualified": _population_summary(
+                    [row for row in rows if row["gate_a"]], n_boot=n_boot, seed=seed
+                ),
+            }
+            for arm, rows in arm_rows.items()
         },
         "gate_a_disqualified": sorted(
             {story: reasons for story, (ok, reasons) in story_gate.items() if not ok}.items()
@@ -185,8 +266,17 @@ def utility_census(
 def _population_summary(rows: Sequence[Mapping], *, n_boot: int, seed: int) -> dict:
     if not rows:
         return {"n_stories": 0, "n_events": 0}
+    complete = [row for row in rows if row.get("status", "complete") == "complete"]
+    if not complete:
+        return {
+            "n_stories": len({str(row["story_id"]) for row in rows}),
+            "n_events": len(rows),
+            "n_complete": 0,
+            "n_incomplete": len(rows),
+            "status": "measurement_incomplete",
+        }
     by_story: dict[str, list[float]] = defaultdict(list)
-    for row in rows:
+    for row in complete:
         by_story[row["story_id"]].append(float(row["delta"].get(IDENTITY, 0.0)))
     mean, lo, hi = cluster_bootstrap_mean_ci(
         list(by_story.values()), n_boot=n_boot, seed=seed,
@@ -195,9 +285,10 @@ def _population_summary(rows: Sequence[Mapping], *, n_boot: int, seed: int) -> d
     # Rates are story-level too: a story contributes its own fraction, so a story with
     # many events cannot dominate the proportion.
     story_labels: dict[str, list[str]] = defaultdict(list)
-    for row in rows:
+    for row in complete:
         story_labels[row["story_id"]].append(row["label"])
     summary = {"n_stories": n_stories, "n_events": len(rows),
+               "n_complete": len(complete), "n_incomplete": len(rows) - len(complete),
                "delta_identity": {"mean": mean, "lo": lo, "hi": hi}}
     for label in (HELPFUL, NEUTRAL, HARMFUL):
         # A story counts toward a label when that label is its majority outcome across
