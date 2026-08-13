@@ -3392,14 +3392,16 @@ def _load_resume_state(path):
         return None
     state_path = Path(path)
     if not state_path.is_file():
-        raise FileNotFoundError(f"resume state not found: {state_path}")
+        print(f"[ResumeState] initialize new state at path={state_path}", flush=True)
+        return None
     return torch.load(state_path, map_location="cpu")
 
 
 def main():
     args = parse_args()
     os.makedirs(args.output_path, exist_ok=True)
-    resume_requested = bool(str(getattr(args, "resume_state_path", "") or "").strip()) or int(getattr(args, "start_chunk_idx", -1)) > 0
+    resume_path = Path(str(getattr(args, "resume_state_path", "") or "").strip())
+    resume_requested = bool(resume_path.is_file()) or int(getattr(args, "start_chunk_idx", -1)) > 0
     if not getattr(args, "efficiency_runtime_log", None) and getattr(args, "efficiency_metrics_path", None):
         args.efficiency_runtime_log = str(Path(args.efficiency_metrics_path).with_suffix(".jsonl"))
     if getattr(args, "efficiency_runtime_log", None):

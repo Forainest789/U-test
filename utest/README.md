@@ -91,6 +91,22 @@ CUDA_VISIBLE_DEVICES=0 \
 bash scripts/run_slotmem_stage_gates.sh
 ```
 
+For a roughly 60 GB GPU, keep the default `DUAL_EXPERT_LOAD_MODE=active`. `standard`
+needs both approximately 28 GB experts plus VAE/text/SlotMem working memory and is likely
+to OOM; managed layer offload is safer but slower. The stage runner keeps the official
+50 denoising steps and bf16, writes `m0a/resume_state.pt` after each chunk, and can resume
+without repeating completed chunks or rehashing checkpoints:
+
+```bash
+RUN_ID=20260813T120000Z RESUME_RUN=1 \
+NARRASTREAM_INPUT_ROOT=/data/benchmarks/narrastream/slotmem_inputs \
+WAN22_DIR=/data/long_term_data/shixiao/videomem/wan_models/Wan2.2-I2V-A14B \
+CKPT_ROOT=/data/long_term_data/shixiao/videomem/U-test \
+RUN_ROOT=/data/long_term_data/shixiao/videomem/U-test/runs/stage_gates \
+UTEST_ENV=utest CUDA_VISIBLE_DEVICES=0 \
+bash scripts/run_slotmem_stage_gates.sh
+```
+
 The run writes `e0.json`, `platform.manifest.json`, all seven M0a chunks,
 `efficiency.json`, `m0a_report.json`, `m0b_report.json`, and `stage_summary.json` under
 one timestamped directory. M0b is deliberately `non-comparable` unless all four official

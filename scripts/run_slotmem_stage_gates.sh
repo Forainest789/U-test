@@ -27,18 +27,26 @@ fi
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 RUN_ID="${RUN_ID:-$(date -u +%Y%m%dT%H%M%SZ)}"
 RUN_DIR="${RUN_ROOT%/}/${RUN_ID}"
-[[ ! -e "${RUN_DIR}" ]] || { echo "[stage] run directory already exists: ${RUN_DIR}" >&2; exit 2; }
+if [[ -e "${RUN_DIR}" && "${RESUME_RUN:-0}" != "1" ]]; then
+  echo "[stage] run directory already exists: ${RUN_DIR}; set RESUME_RUN=1 with the same RUN_ID" >&2
+  exit 2
+fi
 mkdir -p "${RUN_DIR}"
 cd "${REPO_DIR}"
 
-echo "[stage] E0 -> ${RUN_DIR}/e0.json"
-"${PYTHON_BIN}" -m utest.eligibility \
-  --data-root "${NARRASTREAM_INPUT_ROOT}" \
-  --out "${RUN_DIR}/e0.json" | tee "${RUN_DIR}/e0.log"
+if [[ ! -s "${RUN_DIR}/e0.json" ]]; then
+  echo "[stage] E0 -> ${RUN_DIR}/e0.json"
+  "${PYTHON_BIN}" -m utest.eligibility \
+    --data-root "${NARRASTREAM_INPUT_ROOT}" \
+    --out "${RUN_DIR}/e0.json" | tee "${RUN_DIR}/e0.log"
+else
+  echo "[stage] reuse E0: ${RUN_DIR}/e0.json"
+fi
 
 PLATFORM_MANIFEST="${RUN_DIR}/platform.manifest.json"
-echo "[stage] platform manifest -> ${PLATFORM_MANIFEST}"
-"${PYTHON_BIN}" - "${REPO_DIR}" "${CKPT_ROOT}" "${WAN22_DIR}" "${PLATFORM_MANIFEST}" <<'PY'
+if [[ ! -s "${PLATFORM_MANIFEST}" ]]; then
+  echo "[stage] platform manifest -> ${PLATFORM_MANIFEST}"
+  "${PYTHON_BIN}" - "${REPO_DIR}" "${CKPT_ROOT}" "${WAN22_DIR}" "${PLATFORM_MANIFEST}" <<'PY'
 import hashlib, json, os, platform, subprocess, sys
 from pathlib import Path
 
@@ -85,6 +93,9 @@ payload = {
 }
 output.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 PY
+else
+  echo "[stage] reuse platform manifest: ${PLATFORM_MANIFEST}"
+fi
 
 GPU_INDEX="${CUDA_VISIBLE_DEVICES:-0}"
 GPU_INDEX="${GPU_INDEX%%,*}"
@@ -99,11 +110,12 @@ fi
 M0A_DIR="${RUN_DIR}/m0a"
 mkdir -p "${M0A_DIR}"
 echo "[stage] M0a seven chunks -> ${M0A_DIR}"
+echo "[stage] 60GB profile: active expert switching, bf16, 50 steps, resumable per chunk"
 set +e
 CONDA_ENV="${UTEST_ENV}" \
 CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}" \
 DUAL_EXPERT_LOAD_MODE="${DUAL_EXPERT_LOAD_MODE:-active}" \
-DUAL_EXPERT_MANAGE_AUX_MODELS="${DUAL_EXPERT_MANAGE_AUX_MODELS:-1}" \
+DUAL_EXPERT_MANAGE_AUX_MODELS="${DUAL_EXPERT_MANAGE_AUX_MODELS:-0}" \
 CKPT_DIR="${WAN22_DIR}" \
 STAGE1_LOW_CKPT_PATH="${CKPT_ROOT}/ckpt/stage1/stage1_low.pt" \
 STAGE1_HIGH_CKPT_PATH="${CKPT_ROOT}/ckpt/stage1/stage1_high.pt" \
@@ -115,6 +127,7 @@ OUTPUT_ROOT="${M0A_DIR}" \
 MAX_CHUNKS=7 \
 EFFICIENCY_METRICS_PATH="${M0A_DIR}/efficiency.json" \
 EFFICIENCY_RUNTIME_LOG="${M0A_DIR}/efficiency.jsonl" \
+RESUME_STATE_PATH="${M0A_DIR}/resume_state.pt" \
 bash "${REPO_DIR}/test_slotmem_stage2.sh" >"${M0A_DIR}/run.log" 2>&1
 inference_status=$?
 "${PYTHON_BIN}" -m utest.stage_reports m0a \
