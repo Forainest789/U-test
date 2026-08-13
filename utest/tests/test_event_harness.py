@@ -1,8 +1,16 @@
 from __future__ import annotations
 
+import argparse
+import json
 from pathlib import Path
 
-from utest.event_harness import _writer_evidence, build_arm_commands, validate_audit_group
+from utest.event_harness import (
+    _writer_evidence,
+    build_arm_commands,
+    score_event,
+    validate_audit_group,
+)
+from utest.memory_utility import REQUIRED_OUTCOMES
 
 
 def test_arm_commands_share_snapshot_seed_and_target_window(tmp_path: Path) -> None:
@@ -72,3 +80,45 @@ def test_writer_evidence_is_scoped_to_target_and_requires_residual() -> None:
         "positive_residual_count": 1,
         "bank_hash_change_count": 1,
     }
+
+
+def test_score_command_writes_complete_five_arm_report(tmp_path: Path) -> None:
+    event_run = tmp_path / "arms"
+    event_run.mkdir()
+    records = []
+    for seed, arms in {
+        1: {"no_memory": 0.5},
+        7: {"no_memory": 0.5, "correct": 0.6, "wrong": 0.4, "zero": 0.5, "random": 0.48},
+    }.items():
+        for arm, identity in arms.items():
+            outcomes = {name: 0.9 for name in REQUIRED_OUTCOMES}
+            outcomes["C_id"] = identity
+            outcomes["Q_motion_dynamic_degree"] = 0.8
+            records.append({
+                "story_id": "s1", "event_id": "e1", "arm": arm,
+                "seed": seed, "outcomes": outcomes,
+            })
+    quality = {
+        name: 0.02
+        for name in REQUIRED_OUTCOMES
+        if name not in {"C_id", "Q_motion_dynamic_degree"}
+    }
+    records_path = tmp_path / "records.json"
+    rules_path = tmp_path / "rules.json"
+    records_path.write_text(json.dumps(records), encoding="utf-8")
+    rules_path.write_text(json.dumps({
+        "delta_id": 0.01,
+        "quality_margins": quality,
+        "dynamic_degree_floor": 0.2,
+        "gate_a_floors": {"C_id": 0.3, "Q_motion_dynamic_degree": 0.2},
+        "qualification_seeds": [1],
+        "formal_seeds": [7],
+        "content_causal": True,
+        "n_boot": 20,
+    }), encoding="utf-8")
+    args = argparse.Namespace(event_run=event_run, records=records_path, rules=rules_path)
+
+    assert score_event(args) == 0
+    report = json.loads((event_run / "utility_report.json").read_text(encoding="utf-8"))
+    assert report["status"] == "complete"
+    assert set(report["arm_populations"]) == {"correct", "wrong", "zero", "random"}

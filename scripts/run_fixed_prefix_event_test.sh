@@ -39,4 +39,14 @@ cd "${REPO_DIR}"
 "${PYTHON_BIN}" -m utest.event_harness validate \
   --event-run "${EVENT_RUN_ROOT}/prefix/arms"
 
+if [[ -n "${OUTCOME_RECORDS:-}" || -n "${UTILITY_RULES:-}" ]]; then
+  : "${OUTCOME_RECORDS:?set both OUTCOME_RECORDS and UTILITY_RULES}"
+  : "${UTILITY_RULES:?set both OUTCOME_RECORDS and UTILITY_RULES}"
+  "${PYTHON_BIN}" -m utest.event_harness score \
+    --event-run "${EVENT_RUN_ROOT}/prefix/arms" \
+    --records "${OUTCOME_RECORDS}" \
+    --rules "${UTILITY_RULES}"
+fi
+
 echo "[event] contract: ${EVENT_RUN_ROOT}/prefix/arms/intervention_contract.json"
+echo "[event] utility: ${EVENT_RUN_ROOT}/prefix/arms/utility_report.json"

@@ -169,6 +169,36 @@ bash scripts/run_fixed_prefix_event_test.sh
 The scientific gate is `prefix/arms/intervention_contract.json`. It contains snapshot
 hash checks, target addressing, read/transform counts, the same-condition technical
 repeat floor, and decoded frame-L1 contrasts. Hook counts alone are not a passing result.
+The adjacent `utility_report.json` is `measurement_incomplete` until normalized decoded
+outcome records and frozen rule JSON are supplied as `OUTCOME_RECORDS` and
+`UTILITY_RULES`; missing evaluator dimensions are never treated as zero.
+
+Each outcome record has `story_id`, `event_id`, `arm`, `seed`, and an `outcomes` object
+containing `C_id`, `A_prompt`, `Q_bg`, `Q_motion_smoothness`,
+`Q_motion_dynamic_degree`, `Q_flicker`, `Q_boundary`, `Q_anatomy`, and `Q_non_target`.
+The frozen rules file has this shape (replace the numeric margins with W2 values):
+
+```json
+{
+  "delta_id": 0.01,
+  "quality_margins": {
+    "A_prompt": 0.02,
+    "Q_bg": 0.02,
+    "Q_motion_smoothness": 0.02,
+    "Q_flicker": 0.02,
+    "Q_boundary": 0.02,
+    "Q_anatomy": 0.02,
+    "Q_non_target": 0.02
+  },
+  "dynamic_degree_floor": 0.2,
+  "gate_a_floors": {"C_id": 0.3, "Q_motion_dynamic_degree": 0.2},
+  "qualification_seeds": [1],
+  "formal_seeds": [7],
+  "content_causal": true,
+  "n_boot": 10000,
+  "bootstrap_seed": 0
+}
+```
 
 ## Setup
 

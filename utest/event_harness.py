@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Iterable, Mapping, Sequence
 
 from .content_audit import ARMS
+from .memory_utility import REQUIRED_OUTCOMES, utility_census
 from .prefix_contract import build_contract, sha256_file, validate_contract
 
 
@@ -217,6 +218,17 @@ def validate_event_run(event_run: Path) -> dict:
     }
     _write_json(event_run / "intervention_contract.json", report)
     _write_json(event_run / "failure_ledger.json", {"failures": errors})
+    utility_path = event_run / "utility_report.json"
+    if not utility_path.is_file():
+        _write_json(
+            utility_path,
+            {
+                "status": "measurement_incomplete",
+                "reason": "decoded_outcome_records_not_provided",
+                "required_outcomes": list(REQUIRED_OUTCOMES),
+                "utility_label_emitted": False,
+            },
+        )
     return report
 
 
@@ -341,6 +353,30 @@ def dump_donor(args: argparse.Namespace) -> int:
     return 0
 
 
+def score_event(args: argparse.Namespace) -> int:
+    payload = json.loads(args.records.read_text(encoding="utf-8"))
+    records = payload.get("records", payload) if isinstance(payload, dict) else payload
+    rules = json.loads(args.rules.read_text(encoding="utf-8"))
+    report = utility_census(
+        records,
+        delta_id=float(rules["delta_id"]),
+        quality_margins=rules["quality_margins"],
+        dynamic_degree_floor=float(rules["dynamic_degree_floor"]),
+        gate_a_floors=rules["gate_a_floors"],
+        qualification_seeds=rules["qualification_seeds"],
+        formal_seeds=rules["formal_seeds"],
+        content_causal=rules.get("content_causal"),
+        n_boot=int(rules.get("n_boot", 10000)),
+        seed=int(rules.get("bootstrap_seed", 0)),
+    )
+    rows = list(report.get("events", []))
+    incomplete = [row for row in rows if row.get("status") == "measurement_incomplete"]
+    report["status"] = "measurement_incomplete" if incomplete or not rows else "complete"
+    report["utility_label_emitted"] = bool(rows and not incomplete)
+    _write_json(args.event_run / "utility_report.json", report)
+    return 0 if report["status"] == "complete" else 2
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -374,6 +410,12 @@ def main() -> int:
     validate = sub.add_parser("validate")
     validate.add_argument("--event-run", type=Path, required=True)
     validate.set_defaults(handler=lambda ns: 0 if validate_event_run(ns.event_run)["status"] == "passed" else 2)
+
+    score = sub.add_parser("score")
+    score.add_argument("--event-run", type=Path, required=True)
+    score.add_argument("--records", type=Path, required=True)
+    score.add_argument("--rules", type=Path, required=True)
+    score.set_defaults(handler=score_event)
     args = parser.parse_args()
     return int(args.handler(args))
 
