@@ -77,10 +77,13 @@ def validate_m0a(
 
     efficiency = _read_json(efficiency_path) if efficiency_path and efficiency_path.is_file() else {}
     total_elapsed = float(efficiency.get("total_elapsed_s", 0.0) or 0.0)
+    num_inference_steps = int(efficiency.get("num_inference_steps", 0) or 0)
     peak_allocated = float(efficiency.get("peak_allocated_gb", 0.0) or 0.0)
     peak_reserved = float(efficiency.get("peak_reserved_gb", 0.0) or 0.0)
     if total_elapsed <= 0:
         reasons.append("wall_time_missing")
+    if num_inference_steps != 50:
+        reasons.append(f"num_inference_steps:{num_inference_steps}/50")
     if peak_allocated <= 0 or peak_reserved <= 0:
         reasons.append("vram_evidence_missing")
 
@@ -103,6 +106,7 @@ def validate_m0a(
             "writer_positive_residual_count": writer_residuals,
             "loaded_checkpoint_domains": loaded_domains,
             "total_elapsed_s": total_elapsed,
+            "num_inference_steps": num_inference_steps,
             "peak_allocated_gb": peak_allocated,
             "peak_reserved_gb": peak_reserved,
             "platform_manifest": str(platform_manifest.resolve()) if platform_manifest else None,

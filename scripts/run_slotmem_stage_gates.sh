@@ -125,6 +125,7 @@ JSON_PATH="${REPO_DIR}/sample/test/3_271/rewrite_caption.json" \
 REF_IMAGE_PATH="${REPO_DIR}/sample/test/3_271/frame.jpg" \
 OUTPUT_ROOT="${M0A_DIR}" \
 MAX_CHUNKS=7 \
+NUM_INFERENCE_STEPS=50 \
 EFFICIENCY_METRICS_PATH="${M0A_DIR}/efficiency.json" \
 EFFICIENCY_RUNTIME_LOG="${M0A_DIR}/efficiency.jsonl" \
 RESUME_STATE_PATH="${M0A_DIR}/resume_state.pt" \

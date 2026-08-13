@@ -37,6 +37,7 @@ def _make_m0_tree(root: Path, *, chunks: int, memory_reads: int) -> tuple[Path, 
         efficiency,
         {
             "total_elapsed_s": 100.0,
+            "num_inference_steps": 50,
             "peak_allocated_gb": 31.0,
             "peak_reserved_gb": 35.0,
             "measured_chunks": chunks,
