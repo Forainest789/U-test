@@ -318,12 +318,23 @@ def _runtime_evidence(records, engine):
         for row in records if isinstance(row, dict)
         for update in list(row.get("writer_updates", []) or [])
     ]
+    def positive_residual(value):
+        if isinstance(value, dict):
+            if float(value.get("residual_norm", 0.0) or 0.0) > 0.0:
+                return True
+            return any(positive_residual(item) for item in value.values())
+        if isinstance(value, (list, tuple)):
+            return any(positive_residual(item) for item in value)
+        return False
     return {
         "memory_read_attempts": len(reads),
         "nonempty_memory_reads": int(nonempty_reads),
         "memory_reads": reads,
         "writer_updates": writer_updates,
         "writer_update_count": len(writer_updates),
+        "writer_positive_residual_count": sum(
+            1 for update in writer_updates if positive_residual(update.get("stats", {}))
+        ),
         "writer_bank_hash_changes": int(hash_changes),
         "loaded_checkpoint_domains": sorted(
             str(value) for value in getattr(engine, "loaded_checkpoint_domains", set())
@@ -673,6 +684,14 @@ class RoleWiseSlotMemoryBank(MemoryManager):
                 "token_meta": _make_layerwise_container(layer_meta),
             }
         return super().get_memory_payload(char_id, bank_idx)
+
+    def get_memory_payload_for_read(self, char_id, bank_idx=0):
+        """Reader-only boundary used by counterfactual interventions.
+
+        Writer updates intentionally keep calling get_memory_payload() so changing one
+        target read cannot rewrite the bank state that the writer consumes.
+        """
+        return self.get_memory_payload(char_id, bank_idx)
 
 class _NullImageEncoder:
     def to(self, *args, **kwargs):
@@ -1373,6 +1392,12 @@ class SlotMemInferenceEngine(ReferenceInferenceEngine):
             update_slots.to(device=writer_device, dtype=writer_dtype).unsqueeze(0),
         )
         stats = dict(writer_stats)
+        stats["residual_norm"] = float(
+            (updated_slots.detach().float() - old_slots.to(device=updated_slots.device).detach().float())
+            .norm(dim=-1)
+            .mean()
+            .item()
+        )
         stats["old_encode"] = old_stats
         stats["update_encode"] = update_stats
         return updated_slots.detach().cpu(), old_slot_meta, stats
@@ -3601,7 +3626,7 @@ def main():
         for char in chars:
             has_any_bank = False
             for bank_idx in bank_indices_to_read:
-                payload = mem_manager.get_memory_payload(char, bank_idx)
+                payload = mem_manager.get_memory_payload_for_read(char, bank_idx)
                 if payload is not None and payload.get("tokens", None) is not None:
                     has_any_bank = True
                     payload_tokens = payload["tokens"]

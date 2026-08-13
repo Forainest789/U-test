@@ -64,9 +64,14 @@ def validate_m0a(
     writer_changes = int(runtime.get("writer_bank_hash_changes", 0) or 0)
     if writer_changes <= 0:
         reasons.append("no_writer_bank_hash_change")
+    writer_residuals = int(runtime.get("writer_positive_residual_count", 0) or 0)
+    if writer_residuals <= 0:
+        reasons.append("no_positive_writer_residual")
 
     args_path = output_dir / "inference_args.yaml"
     inference_args = _read_json(args_path) if args_path.is_file() else {}
+    if isinstance(inference_args.get("args"), dict):
+        inference_args = inference_args["args"]
     if str(inference_args.get("train_stage", "")) != "stage2":
         reasons.append("not_stage2_inference")
 
@@ -95,6 +100,7 @@ def validate_m0a(
             "expected_chunks": expected_chunks,
             "nonempty_memory_reads": nonempty_reads,
             "writer_bank_hash_changes": writer_changes,
+            "writer_positive_residual_count": writer_residuals,
             "loaded_checkpoint_domains": loaded_domains,
             "total_elapsed_s": total_elapsed,
             "peak_allocated_gb": peak_allocated,

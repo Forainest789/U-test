@@ -187,3 +187,14 @@ Gate A disqualification is not an exclusion: those stories stay in the eligible 
 ## 14. Claim Rules
 
 The method claim requires content causality, utility heterogeneity, held-out predictive calibration, policy improvement over all-memory/relevance, quality non-inferiority, and external-distribution direction consistency. Without those, report the strongest lower claim permitted by `plan/stage-gates.md`.
+
+## 15. Executable Fixed-Prefix Contract
+
+The executable implementation uses the native SlotMem resume state. It generates chunks
+before a recurrence target once, hashes the resulting state in `prefix_contract.json`,
+and launches `no_memory`, `zero`, `correct`, matched `wrong`, moment-matched Gaussian
+`random`, and a same-condition `correct_repeat` from that exact file. The snapshot hash
+is checked before and after every arm. `scripts/run_fixed_prefix_event_test.sh` is the
+remote one-event entry point; `scripts/run_slotmem_stage_gates.sh` is the real-data E0 and
+seven-chunk M0 entry point. Neither script treats missing decoded metrics as zero or calls
+an incomplete vector utility.

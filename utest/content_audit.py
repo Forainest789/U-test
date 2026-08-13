@@ -5,9 +5,10 @@ SlotMem reports consistency scores only, which cannot separate "the memory of TH
 character is doing the work" from "any memory-shaped side signal smooths the video".
 This is the FU-MD five-arm apparatus pointed at the frozen SlotMem checkpoint.
 
-It does not fork their code. All memory reads funnel through one method --
-``RoleWiseSlotMemoryBank.get_memory_payload`` -- so we patch that and call their
-``main()`` with their own argv.
+It does not fork their code. Generation reads funnel through the dedicated
+``RoleWiseSlotMemoryBank.get_memory_payload_for_read`` boundary, while writer updates
+continue using the unmodified bank accessor. We patch only the reader boundary and call
+their ``main()`` with its own argv.
 
 Arms:
   no_memory return no payload at the reader boundary.
@@ -141,7 +142,8 @@ def validate_donor_manifest(entry: dict, event: dict, donor_path: Path) -> dict:
     """Validate one pre-frozen target/donor pair before loading its tensors."""
     required = {
         "target_story_id", "target_entity_uid", "donor_story_id", "donor_entity_uid",
-        "payload_path", "payload_sha256",
+        "payload_path", "payload_sha256", "coarse_class", "colour", "character_count",
+        "source_visible", "gap_bucket", "slot_shape", "selection_seed",
     }
     missing = sorted(required - set(entry))
     if missing:
@@ -244,7 +246,7 @@ def install(
         "read_records": [],
     }
 
-    original = infer_slotmem.RoleWiseSlotMemoryBank.get_memory_payload
+    original = infer_slotmem.RoleWiseSlotMemoryBank.get_memory_payload_for_read
 
     def patched(self, char_id, bank_idx=0):
         payload = original(self, char_id, bank_idx)
@@ -267,7 +269,11 @@ def install(
         key = f"{char_id}|{bank_idx}"
         if dump_path is not None:
             dumped.setdefault(key, _cpu_clone(payload.get("tokens")))
-        new_payload, n = transform_payload(payload, arm, gen, selected_donor)
+        is_target = not target_character or str(char_id) == target_character
+        if arm == "no_memory" or is_target:
+            new_payload, n = transform_payload(payload, arm, gen, selected_donor)
+        else:
+            new_payload, n = payload, 0
         stats["layers_transformed"] += n
         returned = _payload_summary(new_payload)
         record["returned_present"] = new_payload is not None and int(returned["layers"]) > 0
@@ -277,7 +283,7 @@ def install(
         stats["read_records"].append(record)
         return new_payload
 
-    infer_slotmem.RoleWiseSlotMemoryBank.get_memory_payload = patched
+    infer_slotmem.RoleWiseSlotMemoryBank.get_memory_payload_for_read = patched
 
     def flush():
         if dump_path is not None and dumped:
@@ -349,7 +355,7 @@ def self_check():
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--arm", choices=ARMS, default="correct")
-    ap.add_argument("--seed", type=int, default=0, help="scramble permutation seed; NOT the sampler seed")
+    ap.add_argument("--seed", type=int, default=0, help="random-arm seed; NOT the sampler seed")
     ap.add_argument("--donor", help="payload dump from a --dump-donor run of a different video")
     ap.add_argument("--donor-manifest", help="frozen JSON donor pair for --arm wrong")
     ap.add_argument("--event-json", help="JSON recurrence event used for addressing and donor validation")

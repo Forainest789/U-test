@@ -27,6 +27,7 @@ def _make_m0_tree(root: Path, *, chunks: int, memory_reads: int) -> tuple[Path, 
                 "nonempty_memory_reads": memory_reads,
                 "loaded_checkpoint_domains": ["high_noise", "low_noise"],
                 "writer_bank_hash_changes": 1,
+                "writer_positive_residual_count": 1,
             },
         },
     )

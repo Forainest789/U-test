@@ -75,6 +75,101 @@ them was written down once before and lost in a rewrite:
 Statistics are clustered on story: recurrence events and seeds are repeated measurements
 nested inside it, never independent samples.
 
+## Remote stage test
+
+Run E0 on real converted NarraStream inputs and the complete seven-chunk M0a on a
+14B-capable server:
+
+```bash
+cd /data/long_term_data/shixiao/videomem/U-test
+NARRASTREAM_INPUT_ROOT=/data/benchmarks/narrastream/slotmem_inputs \
+WAN22_DIR=/data/long_term_data/shixiao/videomem/wan_models/Wan2.2-I2V-A14B \
+CKPT_ROOT=/data/long_term_data/shixiao/videomem/U-test \
+RUN_ROOT=/data/long_term_data/shixiao/videomem/U-test/runs/stage_gates \
+UTEST_ENV=utest \
+CUDA_VISIBLE_DEVICES=0 \
+bash scripts/run_slotmem_stage_gates.sh
+```
+
+The run writes `e0.json`, `platform.manifest.json`, all seven M0a chunks,
+`efficiency.json`, `m0a_report.json`, `m0b_report.json`, and `stage_summary.json` under
+one timestamped directory. M0b is deliberately `non-comparable` unless all four official
+comparability flags and a normalized metric JSON are supplied:
+
+```bash
+M0B_OFFICIAL_INPUTS=1 \
+M0B_OFFICIAL_PREPROCESSING=1 \
+M0B_OFFICIAL_CHECKPOINT=1 \
+M0B_OFFICIAL_EVALUATOR=1 \
+M0B_METRIC_JSON=/data/results/official_narrastream_subject_consistency.json \
+bash scripts/run_slotmem_stage_gates.sh
+```
+
+The normalized metric file contains `subject_consistency` and optional bootstrap bounds:
+
+```json
+{"subject_consistency": 0.8771, "ci_low": 0.861, "ci_high": 0.889}
+```
+
+## Fixed-prefix five-arm event test
+
+Copy one event from `e0.json` into its own JSON file. Use a different eligible story to
+prepare a donor prefix, then dump the native correct payload:
+
+```bash
+python -m utest.event_harness prepare-prefix \
+  --event /data/events/donor_event.json \
+  --output /data/runs/donor_prefix \
+  --platform-manifest /data/runs/stage/platform.manifest.json \
+  --inference-args-file /data/runs/stage/m0a/inference_args.yaml
+
+python -m utest.event_harness dump-donor \
+  --prefix /data/runs/donor_prefix \
+  --output /data/runs/donor_dump \
+  --donor-payload /data/runs/donor_payload.pt
+```
+
+Freeze the target/donor pairing as JSON. `payload_key` must be one of the keys written to
+`donor_payload_info.json`; no arbitrary fallback is allowed:
+
+```json
+{
+  "pairs": [{
+    "target_story_id": "story_017",
+    "target_entity_uid": "story_017::the white sedan",
+    "donor_story_id": "story_042",
+    "donor_entity_uid": "story_042::the white sedan",
+    "payload_path": "/data/runs/donor_payload.pt",
+    "payload_sha256": "64-character SHA256 from donor_payload_info.json",
+    "payload_key": "the white sedan|0",
+    "coarse_class": "car",
+    "colour": "white",
+    "character_count": 1,
+    "source_visible": true,
+    "gap_bucket": "1-2",
+    "slot_shape": "from donor payload audit",
+    "selection_seed": 0
+  }]
+}
+```
+
+Run all arms from one immutable target prefix:
+
+```bash
+EVENT_JSON=/data/events/target_event.json \
+BASE_INFERENCE_ARGS=/data/runs/stage/m0a/inference_args.yaml \
+PLATFORM_MANIFEST=/data/runs/stage/platform.manifest.json \
+DONOR_PAYLOAD=/data/runs/donor_payload.pt \
+DONOR_MANIFEST=/data/events/donor_manifest.json \
+EVENT_RUN_ROOT=/data/runs/fixed_prefix_story_017 \
+UTEST_ENV=utest \
+bash scripts/run_fixed_prefix_event_test.sh
+```
+
+The scientific gate is `prefix/arms/intervention_contract.json`. It contains snapshot
+hash checks, target addressing, read/transform counts, the same-condition technical
+repeat floor, and decoded frame-L1 contrasts. Hook counts alone are not a passing result.
+
 ## Setup
 
 ```bash

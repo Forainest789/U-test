@@ -98,6 +98,13 @@ def test_donor_manifest_rejects_same_entity_story_and_bad_hash(tmp_path: Path) -
         "donor_entity_uid": "donor::ana",
         "payload_path": str(donor),
         "payload_sha256": _sha256(donor),
+        "coarse_class": "person",
+        "colour": "brown hair",
+        "character_count": 1,
+        "source_visible": True,
+        "gap_bucket": "1-2",
+        "slot_shape": [4],
+        "selection_seed": 0,
     }
 
     same_entity = {**base, "donor_entity_uid": "target::ana"}

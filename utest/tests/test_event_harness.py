@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from utest.event_harness import build_arm_commands, validate_audit_group
+from utest.event_harness import _writer_evidence, build_arm_commands, validate_audit_group
 
 
 def test_arm_commands_share_snapshot_seed_and_target_window(tmp_path: Path) -> None:
@@ -50,3 +50,25 @@ def test_audit_group_requires_real_target_hits_and_transformations() -> None:
 
     reports["wrong"]["target_read_hits"] = 0
     assert validate_audit_group(reports) == ["wrong:target_address_miss"]
+
+
+def test_writer_evidence_is_scoped_to_target_and_requires_residual() -> None:
+    efficiency = {
+        "chunks": [
+            {
+                "chunk_idx": 1,
+                "writer_updates": [{"stats": {"residual_norm": 3.0}}],
+                "memory_bank_hash_changed": True,
+            },
+            {
+                "chunk_idx": 4,
+                "writer_updates": [{"stats": {"layers": {"0": {"residual_norm": 0.2}}}}],
+                "memory_bank_hash_changed": True,
+            },
+        ]
+    }
+    assert _writer_evidence(efficiency, 4) == {
+        "update_count": 1,
+        "positive_residual_count": 1,
+        "bank_hash_change_count": 1,
+    }

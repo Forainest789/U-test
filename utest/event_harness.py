@@ -41,6 +41,7 @@ def build_arm_commands(
     python: str = sys.executable,
     donor: Path | None = None,
     donor_manifest: Path | None = None,
+    dump_correct_donor: Path | None = None,
 ) -> dict[str, list[str]]:
     requested = tuple(str(arm) for arm in arms)
     unknown = sorted(set(requested) - set(ARMS))
@@ -72,6 +73,8 @@ def build_arm_commands(
             "--report",
             str(arm_dir / "audit.json"),
         ]
+        if arm == "correct" and run_name == "correct" and dump_correct_donor is not None:
+            command.extend(["--dump-donor", str(dump_correct_donor.resolve())])
         if arm == "wrong":
             if donor is None or donor_manifest is None:
                 raise ValueError("wrong arm requires donor and donor_manifest")
@@ -123,6 +126,35 @@ def _frame_l1_median(left: Path, right: Path) -> float:
     return float(np.median(np.asarray(distances, dtype=np.float64)))
 
 
+def _has_positive_residual(value) -> bool:
+    if isinstance(value, dict):
+        if float(value.get("residual_norm", 0.0) or 0.0) > 0.0:
+            return True
+        return any(_has_positive_residual(item) for item in value.values())
+    if isinstance(value, (list, tuple)):
+        return any(_has_positive_residual(item) for item in value)
+    return False
+
+
+def _writer_evidence(efficiency: Mapping, target_idx: int) -> dict:
+    chunks = [
+        row for row in list(efficiency.get("chunks", []) or [])
+        if int(row.get("chunk_idx", -1)) >= target_idx
+    ]
+    updates = [
+        update for row in chunks for update in list(row.get("writer_updates", []) or [])
+    ]
+    return {
+        "update_count": len(updates),
+        "positive_residual_count": sum(
+            1 for update in updates if _has_positive_residual(update.get("stats", {}))
+        ),
+        "bank_hash_change_count": sum(
+            1 for row in chunks if bool(row.get("memory_bank_hash_changed", False))
+        ),
+    }
+
+
 def validate_event_run(event_run: Path) -> dict:
     contract_path = event_run / "prefix_contract.json"
     if not contract_path.is_file():
@@ -131,6 +163,7 @@ def validate_event_run(event_run: Path) -> dict:
     snapshot = Path(contract["snapshot"]["path"])
     errors = validate_contract(contract, snapshot, contract["runtime_contract"])
     reports: dict[str, dict] = {}
+    writer_evidence: dict[str, dict] = {}
     for arm in ARMS:
         report_path = event_run / arm / "audit.json"
         if report_path.is_file():
@@ -138,6 +171,20 @@ def validate_event_run(event_run: Path) -> dict:
     errors.extend(validate_audit_group(reports))
 
     target_idx = int(contract["event"]["target_chunk_idx"])
+    for arm in ARMS:
+        efficiency_path = event_run / arm / "efficiency.json"
+        if not efficiency_path.is_file():
+            errors.append(f"{arm}:efficiency_missing")
+            continue
+        efficiency = json.loads(efficiency_path.read_text(encoding="utf-8"))
+        evidence = _writer_evidence(efficiency, target_idx)
+        writer_evidence[arm] = evidence
+        if evidence["update_count"] <= 0:
+            errors.append(f"{arm}:writer_update_missing")
+        if evidence["positive_residual_count"] <= 0:
+            errors.append(f"{arm}:writer_residual_not_positive")
+        if evidence["bank_hash_change_count"] <= 0:
+            errors.append(f"{arm}:bank_hash_unchanged")
     filename = f"chunk_{target_idx:03d}.mp4"
     video_paths = {name: event_run / name / filename for name in (*ARMS, "correct_repeat")}
     decoded: dict[str, object] = {}
@@ -165,6 +212,7 @@ def validate_event_run(event_run: Path) -> dict:
         "snapshot_sha256": sha256_file(snapshot) if snapshot.is_file() else None,
         "errors": errors,
         "decoded_l1": decoded,
+        "writer_evidence": writer_evidence,
         "arms": reports,
     }
     _write_json(event_run / "intervention_contract.json", report)
@@ -188,9 +236,20 @@ def prepare_prefix(args: argparse.Namespace) -> int:
     _write_json(event_copy, event)
     snapshot = output / "prefix_state.pt"
     prefix_output = output / "prefix_generation"
-    inference_args = list(args.inference_args)
+    if args.inference_args_file:
+        saved = json.loads(args.inference_args_file.read_text(encoding="utf-8"))
+        inference_args = list(saved.get("argv", []))
+        if inference_args and not str(inference_args[0]).startswith("--"):
+            inference_args = inference_args[1:]
+    else:
+        inference_args = list(args.inference_args)
     if inference_args[:1] == ["--"]:
         inference_args = inference_args[1:]
+    inference_args = _set_option(inference_args, "--json_path", str(Path(event["source_json_path"]).resolve()))
+    if event.get("reference_path"):
+        inference_args = _set_option(
+            inference_args, "--ref_image_path", str(Path(event["reference_path"]).resolve())
+        )
     inference_args = _set_option(inference_args, "--max_chunks", str(int(event["target_chunk_idx"])))
     inference_args = _set_option(inference_args, "--resume_state_path", str(snapshot))
     inference_args = _set_option(inference_args, "--output_path", str(prefix_output))
@@ -232,6 +291,7 @@ def run_arms(args: argparse.Namespace) -> int:
         python=args.python,
         donor=args.donor,
         donor_manifest=args.donor_manifest,
+        dump_correct_donor=args.dump_correct_donor,
     )
     expected_hash = contract["snapshot"]["sha256"]
     for name, command in commands.items():
@@ -244,6 +304,43 @@ def run_arms(args: argparse.Namespace) -> int:
     return 0 if report["status"] == "passed" else 2
 
 
+def dump_donor(args: argparse.Namespace) -> int:
+    prefix = args.prefix.resolve()
+    contract = json.loads((prefix / "prefix_contract.json").read_text(encoding="utf-8"))
+    snapshot = Path(contract["snapshot"]["path"])
+    event_json = Path(contract.get("event_json", prefix / "event.json"))
+    output = args.output.resolve()
+    output.mkdir(parents=True, exist_ok=True)
+    commands = build_arm_commands(
+        contract,
+        output_root=output,
+        event_json=event_json,
+        arms=("correct",),
+        python=args.python,
+        dump_correct_donor=args.donor_payload,
+    )
+    expected_hash = contract["snapshot"]["sha256"]
+    _run(commands["correct"], output / "correct" / "run.log")
+    if sha256_file(snapshot) != expected_hash:
+        raise RuntimeError("snapshot changed while dumping donor")
+    report = json.loads((output / "correct" / "audit.json").read_text(encoding="utf-8"))
+    if int(report.get("target_read_hits", 0)) <= 0 or not report.get("intervention_effective"):
+        raise RuntimeError("donor correct run did not resolve the target character")
+    import torch
+
+    payload = torch.load(args.donor_payload, map_location="cpu", weights_only=False)
+    keys = sorted(str(key) for key in payload.get("payloads", {}))
+    info = {
+        "format": payload.get("format"),
+        "payload_path": str(args.donor_payload.resolve()),
+        "payload_sha256": sha256_file(args.donor_payload),
+        "payload_keys": keys,
+        "event": contract["event"],
+    }
+    _write_json(output / "donor_payload_info.json", info)
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -251,6 +348,7 @@ def main() -> int:
     prepare.add_argument("--event", type=Path, required=True)
     prepare.add_argument("--output", type=Path, required=True)
     prepare.add_argument("--platform-manifest", type=Path, required=True)
+    prepare.add_argument("--inference-args-file", type=Path)
     prepare.add_argument("--arm-seed", type=int, default=0)
     prepare.add_argument("--python", default=sys.executable)
     prepare.add_argument("inference_args", nargs=argparse.REMAINDER)
@@ -262,8 +360,16 @@ def main() -> int:
     run.add_argument("--arms", default=",".join(ARMS))
     run.add_argument("--donor", type=Path)
     run.add_argument("--donor-manifest", type=Path)
+    run.add_argument("--dump-correct-donor", type=Path)
     run.add_argument("--python", default=sys.executable)
     run.set_defaults(handler=run_arms)
+
+    donor = sub.add_parser("dump-donor")
+    donor.add_argument("--prefix", type=Path, required=True)
+    donor.add_argument("--output", type=Path, required=True)
+    donor.add_argument("--donor-payload", type=Path, required=True)
+    donor.add_argument("--python", default=sys.executable)
+    donor.set_defaults(handler=dump_donor)
 
     validate = sub.add_parser("validate")
     validate.add_argument("--event-run", type=Path, required=True)
