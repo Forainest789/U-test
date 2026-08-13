@@ -162,11 +162,15 @@ def audit(data_root: Path, *, require_reference: bool = True) -> dict:
             continue
         # The reference image is the I2V identity anchor; without it C_id has nothing to
         # score against and the story cannot enter the outcome vector.
-        has_reference = any(
-            (caption.parent / candidate).exists()
-            for candidate in ("frame.jpg", "frame.png", "subject_references")
+        reference = next(
+            (
+                caption.parent / candidate
+                for candidate in ("frame.jpg", "frame.png", "subject_references")
+                if (caption.parent / candidate).exists()
+            ),
+            None,
         )
-        if require_reference and not has_reference:
+        if require_reference and reference is None:
             rejected["no_reference_image"] += 1
             examples.setdefault("no_reference_image", story_id)
             continue
@@ -183,6 +187,9 @@ def audit(data_root: Path, *, require_reference: bool = True) -> dict:
             continue
         for event in events:
             event["entity_uid"] = f"{story_id}::{event['character_name']}"
+            event["story_id"] = story_id
+            event["source_json_path"] = str(caption.resolve())
+            event["reference_path"] = str(reference.resolve()) if reference is not None else None
         stories.append({
             "story_id": story_id,
             "n_chunks": len(story["chunks"]),
@@ -268,10 +275,15 @@ def _self_check() -> None:
         assert report["n_eligible_stories"] == 1, report["n_eligible_stories"]
         assert report["stories"][0]["story_id"] == "ok"
         event = report["stories"][0]["events"][0]
-        assert event == {
+        assert {
+            key: event[key]
+            for key in ("character_name", "memory_chunk_idx", "target_chunk_idx", "gap_chunks", "entity_uid", "story_id")
+        } == {
             "character_name": "ana", "memory_chunk_idx": 0, "target_chunk_idx": 2,
-            "gap_chunks": 1, "entity_uid": "ok::ana",
+            "gap_chunks": 1, "entity_uid": "ok::ana", "story_id": "ok",
         }, event
+        assert Path(event["source_json_path"]).is_file()
+        assert Path(event["reference_path"]).is_file()
         assert report["rejected"]["generic_name"] == 1
         assert report["rejected"]["ambiguous_reference"] == 1
         assert report["rejected"]["no_reference_image"] == 1

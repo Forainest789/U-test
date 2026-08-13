@@ -1,0 +1,153 @@
+"""Immutable pre-target snapshot contracts for fixed-prefix SlotMem experiments."""
+from __future__ import annotations
+
+import hashlib
+import json
+import subprocess
+from pathlib import Path
+from typing import Mapping, Sequence
+
+
+RUNTIME_ONLY_ARGS = {
+    "output_path",
+    "resume_state_path",
+    "max_chunks",
+    "efficiency_metrics_path",
+    "efficiency_runtime_log",
+    "merge_chunks",
+    "merged_output_name",
+}
+
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for block in iter(lambda: handle.read(1 << 20), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def _arguments(argv: Sequence[str]) -> dict[str, str]:
+    parsed: dict[str, str] = {}
+    index = 0
+    while index < len(argv):
+        token = str(argv[index])
+        if not token.startswith("--"):
+            index += 1
+            continue
+        name = token[2:].replace("-", "_")
+        if index + 1 < len(argv) and not str(argv[index + 1]).startswith("--"):
+            parsed[name] = str(argv[index + 1])
+            index += 2
+        else:
+            parsed[name] = "true"
+            index += 1
+    return parsed
+
+
+def normalized_frozen_args(argv: Sequence[str]) -> dict[str, str]:
+    return {
+        key: value
+        for key, value in sorted(_arguments(argv).items())
+        if key not in RUNTIME_ONLY_ARGS
+    }
+
+
+def _git_state(repo: Path) -> tuple[str, bool]:
+    commit = subprocess.run(
+        ["git", "-C", str(repo), "rev-parse", "HEAD"],
+        capture_output=True,
+        text=True,
+        check=False,
+    ).stdout.strip()
+    dirty = bool(
+        subprocess.run(
+            ["git", "-C", str(repo), "status", "--porcelain"],
+            capture_output=True,
+            text=True,
+            check=False,
+        ).stdout.strip()
+    )
+    return commit, dirty
+
+
+def build_contract(
+    event: Mapping,
+    snapshot: Path,
+    inference_args: Sequence[str],
+    platform_manifest: Path,
+    *,
+    arm_seed: int = 0,
+) -> dict:
+    snapshot = snapshot.resolve()
+    platform_manifest = platform_manifest.resolve()
+    parsed = _arguments(inference_args)
+    source = Path(event.get("source_json_path") or parsed.get("json_path", "")).resolve()
+    reference_text = event.get("reference_path") or parsed.get("ref_image_path", "")
+    reference = Path(reference_text).resolve() if reference_text else None
+    target_idx = int(event["target_chunk_idx"])
+
+    story = json.loads(source.read_text(encoding="utf-8"))
+    chunks = story.get("chunks", story) if isinstance(story, dict) else story
+    target_prompt = str(chunks[target_idx].get("content") or chunks[target_idx].get("caption") or "")
+    seed_base = int(parsed.get("seed_base", 42))
+    repo = Path(__file__).resolve().parents[1]
+    code_commit, code_dirty = _git_state(repo)
+
+    inputs = {
+        "source_json_path": str(source),
+        "source_json_sha256": sha256_file(source),
+        "target_prompt_sha256": hashlib.sha256(target_prompt.encode("utf-8")).hexdigest(),
+        "target_prompt": target_prompt,
+        "reference_path": str(reference) if reference else None,
+        "reference_sha256": sha256_file(reference) if reference and reference.is_file() else None,
+    }
+    runtime_contract = {
+        "frozen_args": normalized_frozen_args(inference_args),
+        "source_json_sha256": inputs["source_json_sha256"],
+        "target_prompt_sha256": inputs["target_prompt_sha256"],
+        "reference_sha256": inputs["reference_sha256"],
+        "target_seed": seed_base + target_idx,
+    }
+    return {
+        "schema_version": 1,
+        "event": dict(event),
+        "snapshot": {
+            "path": str(snapshot),
+            "bytes": snapshot.stat().st_size,
+            "sha256": sha256_file(snapshot),
+        },
+        "platform_manifest": {
+            "path": str(platform_manifest),
+            "sha256": sha256_file(platform_manifest),
+        },
+        "code": {"commit": code_commit, "dirty": code_dirty},
+        "inputs": inputs,
+        "runtime_contract": runtime_contract,
+        "base_inference_args": [str(value) for value in inference_args],
+        "arm_seed": int(arm_seed),
+    }
+
+
+def validate_contract(
+    contract: Mapping, snapshot: Path, runtime: Mapping | None = None
+) -> list[str]:
+    errors: list[str] = []
+    snapshot = snapshot.resolve()
+    expected_snapshot = contract["snapshot"]
+    if not snapshot.is_file() or sha256_file(snapshot) != expected_snapshot["sha256"]:
+        errors.append("snapshot_sha256_mismatch")
+    if runtime is None:
+        return errors
+    expected_runtime = contract["runtime_contract"]
+    for key in (
+        "frozen_args",
+        "source_json_sha256",
+        "target_prompt_sha256",
+        "reference_sha256",
+        "target_seed",
+    ):
+        if runtime.get(key) != expected_runtime.get(key):
+            errors.append(f"{key}_mismatch")
+    return errors
+

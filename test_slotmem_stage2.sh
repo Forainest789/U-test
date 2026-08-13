@@ -29,6 +29,10 @@ EXP_PREFIX="${EXP_PREFIX:-}"
 TRAIN_NOISE_DOMAIN="${TRAIN_NOISE_DOMAIN:-low_noise}"
 NUM_INFERENCE_STEPS="${NUM_INFERENCE_STEPS:-50}"
 MAX_CHUNKS="${MAX_CHUNKS:--1}"
+SEED_BASE="${SEED_BASE:-42}"
+EFFICIENCY_METRICS_PATH="${EFFICIENCY_METRICS_PATH:-}"
+EFFICIENCY_RUNTIME_LOG="${EFFICIENCY_RUNTIME_LOG:-}"
+RESUME_STATE_PATH="${RESUME_STATE_PATH:-}"
 DUAL_EXPERT_LOAD_MODE="${DUAL_EXPERT_LOAD_MODE:-active}"
 DUAL_EXPERT_OFFLOAD_DTYPE="${DUAL_EXPERT_OFFLOAD_DTYPE:-bfloat16}"
 DUAL_EXPERT_VRAM_LIMIT="${DUAL_EXPERT_VRAM_LIMIT:--1}"
@@ -93,6 +97,7 @@ cmd=(
   --train_noise_domain "${TRAIN_NOISE_DOMAIN}"
   --noise_domain_boundary_ratio "${NOISE_DOMAIN_BOUNDARY_RATIO:-0.9}"
   --num_inference_steps "${NUM_INFERENCE_STEPS}"
+  --seed_base "${SEED_BASE}"
   --cfg_scale "${CFG_SCALE:-5.0}"
   --cfg_scale_extraction "${CFG_SCALE_EXTRACTION:-5.0}"
   --height "${HEIGHT:-480}"
@@ -142,6 +147,16 @@ cmd=(
   --enable_sparse_role_memory_attn
   --max_chunks "${MAX_CHUNKS}"
 )
+
+if [[ -n "${EFFICIENCY_METRICS_PATH}" ]]; then
+  cmd+=(--efficiency_metrics_path "${EFFICIENCY_METRICS_PATH}")
+fi
+if [[ -n "${EFFICIENCY_RUNTIME_LOG}" ]]; then
+  cmd+=(--efficiency_runtime_log "${EFFICIENCY_RUNTIME_LOG}")
+fi
+if [[ -n "${RESUME_STATE_PATH}" ]]; then
+  cmd+=(--resume_state_path "${RESUME_STATE_PATH}")
+fi
 
 if [[ -n "${NUM_MOTION_LATENT:-}" ]]; then
   cmd+=(--num_motion_latent "${NUM_MOTION_LATENT}")
