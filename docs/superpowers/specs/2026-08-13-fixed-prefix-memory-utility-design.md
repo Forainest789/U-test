@@ -1,7 +1,7 @@
 # Fixed-Prefix SlotMem Memory Utility Validation
 
-Date: 2026-08-13  
-Status: approved design, pending implementation
+Date: 2026-08-13; revised 2026-08-14
+Status: revised design, pending user review
 
 ## Objective
 
@@ -31,6 +31,36 @@ after a decoded-output self-check proves that it is not a no-op.
 - Do not collapse the decoded outcome vector into an invented scalar utility score.
 - Do not call an incomplete metric vector `memory_utility`.
 - Do not use `wrong` as a deployment action.
+- Do not modify the NVIDIA driver. Runtime compatibility work happens only in a new,
+  isolated environment and never mutates the existing SlotMem environment.
+- Do not call a CUDA failure OOM unless the exception or recorded free/peak memory
+  establishes exhaustion. `CUDA driver error: invalid argument` is not classified as
+  OOM by inference.
+
+## Readiness gates and execution order
+
+The implementation is released in three one-way stages:
+
+1. **Environment qualification.** Create an isolated Python 3.10 environment with
+   PyTorch 2.7.1/cu118 and FlashAttention 2.8.0.post2 built for that environment.
+   Record package versions and hashes, CUDA runtime, driver, GPU identity, free/total
+   memory, and a CPU-to-CUDA BF16 kernel smoke. The host driver and original environment
+   remain untouched. The same qualified environment is used for prefix generation and
+   every arm; changing it invalidates the prefix contract.
+2. **One-event M1 pilot.** Use one real eligible recurrence event that is excluded from
+   the confirmatory 12-story set. Run the five arms plus `correct_repeat`. Only contract,
+   addressing, transform, decoded-divergence, and resource evidence are inspected. A
+   single event cannot establish content causality or utility.
+3. **Frozen 12-story development run.** Freeze the event manifest, exact-shape donor
+   manifest, metric card, thresholds, qualification/formal seeds, GPU allocation, and
+   arm schedule before opening decoded outcomes. Operational QC may be monitored while
+   jobs run; outcomes must not change donors, thresholds, inclusion, or arm definitions.
+
+E0 below 128 blocks single-source controller label production and formal controller
+claims. It does not block M0 platform diagnostics or a clearly labelled M1 engineering
+pilot when at least one real eligible recurrence event exists. The 12-story run cannot
+start from the current one-story/no-event E0 artifact; it requires a separately frozen
+eligible-event manifest.
 
 ## Architecture
 
@@ -47,10 +77,11 @@ Formal-test events are not opened by the fixed-prefix development runner.
 
 ### Prefix preparation
 
-The harness reuses SlotMem's existing `resume_state` support instead of adding a second
-state format. For target chunk `k`, it runs native correct inference over chunks
-`0..k-1`, saves the state with `next_chunk_idx=k`, and never regenerates that prefix for
-another arm.
+The harness reuses SlotMem's existing state format instead of adding a second format.
+For target chunk `k`, it runs native correct inference over chunks `0..k-1` with
+`save_state_path=<immutable-prefix>`, verifies `next_chunk_idx=k`, marks the file
+read-only, and never regenerates that prefix for another arm. `resume_state_path` is a
+load path and is never relied upon to create the prefix.
 
 The saved state already contains the memory bank, memory metadata, first-appearance
 state, final local conditioning frames, and prior runtime records. Target noise is
@@ -68,42 +99,55 @@ The harness writes `prefix_contract.json` beside the snapshot. It records:
 - checkpoint paths and hashes from the platform manifest;
 - normalized inference arguments whose values must be identical across arms.
 
-Before and after every arm, the snapshot SHA256 must equal the contract. The harness
-also compares each arm's runtime contract against the frozen fields. A mismatch fails
-the entire event; it is not an exclusion that can be silently retried with a changed
+Before and after every arm, the snapshot SHA256 must equal the contract. Each arm loads
+the immutable prefix through `resume_state_path` and, if continuation state is needed,
+writes only to an arm-local `save_state_path`. Each arm emits its *actual* runtime
+contract from parsed runtime arguments and resolved inputs. Validation compares that
+artifact with the frozen expected fields; comparing an expected object with itself is
+not a check. A mismatch fails the entire event and cannot be retried with a changed
 prefix.
 
 ### Arm execution
 
 All arms use one read-point wrapper around
-`RoleWiseSlotMemoryBank.get_memory_payload`. The wrapper is installed only in the
-post-prefix process, so prefix generation is native and arm-independent.
+`RoleWiseSlotMemoryBank.get_memory_payload_for_read`. The inference loop exposes the
+current chunk index to the bank. The wrapper is installed only in the post-prefix
+process and activates only when both the character equals the frozen target entity and
+the current chunk equals `target_chunk_idx`; prefix generation, non-target characters,
+and later reads remain native.
 
 The wrapper records every attempted read with chunk, character, bank, payload presence,
 slot count, layer count, tensor shape, dtype, payload hash, and transformed hash. It
 separates `payload_layers_seen` from `layers_transformed`, so a native `correct` read is
 observable even though its token values are not rewritten.
 
-`no_memory` returns `None` at the reader boundary. It does not globally disable the
-writer or alter model construction. This keeps every non-read component identical and
-still records the read attempt.
+`no_memory` returns `None` only for the target entity's read on the target chunk. It
+does not suppress other characters, later chunks, the writer, or model construction.
+This keeps every non-read component identical and still records the source payload and
+read attempt.
 
 `zero` uses `zeros_like` on every tensor payload. `correct` returns the original payload.
-`random` generates values with a generator seeded from the frozen event seed, arm seed,
-and stable layer identifier. For each layer and feature channel it uses the correct
-tokens' mean and population standard deviation. Zero-variance channels remain at their
-mean. Shape, dtype, device, token metadata, query, prompt, and injection settings remain
-unchanged.
+`random` generates values from a generator seeded independently for the frozen event,
+target chunk, character, bank, arm seed, and stable layer identifier. It must not depend
+on incidental read iteration order; the seed is the low 64 bits of SHA256 over those
+canonical identifiers. For each layer and feature channel it uses the correct tokens'
+mean and population standard deviation. Moment matching is computed and audited in
+float32 before restoring the source dtype, with `atol=rtol=1e-5`; zero-variance channels
+remain at their mean. Shape, dtype, device, token metadata, query, prompt, and injection
+settings remain unchanged.
 
 `wrong` requires a donor manifest entry. The donor must have a different `entity_uid`,
-preferably a different story/source, and a compatible feature shape. The pairing table
+a different story, and exactly matching layer and tensor shapes. Confirmatory runs
+reject row tiling, truncation, padding, and missing layers. The pairing table
 also freezes coarse class, colour description, character count, source visibility, gap
 bucket, slot shape, selection seed, payload path, and payload SHA256. Missing keys or an
 incompatible donor fail loudly. There is no fallback to the first payload in a file.
 
 The primary output is the target chunk. The same run may continue through target+1 and
 records that chunk as a secondary delayed-effect endpoint, never as part of the primary
-endpoint.
+endpoint. The intervention is disabled on target+1, so its difference is the mediated
+consequence of the one target read and subsequent native writer/reader dynamics, not a
+second treatment.
 
 ### Intervention contract
 
@@ -132,6 +176,14 @@ An event group fails M1 when:
 Failed groups remain in a failure ledger with a reason; they cannot become neutral
 utility examples.
 
+The actual read audit includes chunk, character, bank, source/returned presence, exact
+layer shapes, source/transformed payload hashes, and transform count. It must prove that
+non-target characters and target+1 reads are byte-identical to native `correct` reads.
+For `correct`, returned hashes equal source hashes; for `zero`, every transformed tensor
+is zero; for `wrong`, returned shapes exactly match the source while donor provenance is
+frozen; for `random`, hashes are deterministic and channel moments match within the
+frozen tolerance.
+
 ## Measurement and utility output
 
 The decoded evaluator writes one normalized record per
@@ -154,6 +206,21 @@ is `measurement_incomplete` and has no utility label.
 The initial five-arm validation reports every arm. The later primary decoded census uses
 `correct` versus `no_memory`; `wrong`, `zero`, and `random` are mechanism/content
 controls.
+
+The 12-story run is a development screen/pilot, not a formal population claim. M2 uses
+story-level paired `correct` versus matched `wrong` contrasts with the pre-registered
+`10/12` favorable-sign rule and a median above a repeatability margin calibrated on a
+disjoint `dev-metric` set. Gate A uses a qualification target seed disjoint from formal
+outcome seeds. M3 uses at least two formal target seeds for the primary
+`correct`-versus-`no_memory` outcome. Target seeds vary only after loading the identical
+prefix through an explicit runtime-only `target_seed_override`; prefix-generation seeds
+never change. Frames and chunks are technical repeated
+measurements, while the story/event is the independent analysis unit.
+
+All arms for a story run on the same GPU, with at most one process per GPU. Stories may
+run in parallel across GPUs. The `correct`/`correct_repeat` pair is adjacent; the pair's
+position and the remaining arm order are generated from a frozen seed. GPU identity,
+run order, start time, and free/peak memory are recorded as nuisance/block variables.
 
 ## E0 and M0 stage runner
 
@@ -212,6 +279,13 @@ The stage runner writes machine-readable `e0.json`, `platform.manifest.json`,
 - Partial arm output does not count as a completed group.
 - CUDA OOM, missing weights, absent datasets, missing evaluator dependencies, and API
   failures are recorded separately from scientific null results.
+- CUDA failures record exception class, last error, free/total memory before model load,
+  allocated/reserved/peak memory when available, and other GPU processes. Only explicit
+  allocation exhaustion is labelled OOM. Infrastructure failures are never converted
+  into neutral or harmful utility observations.
+- If the load/offload profile changes after an environment or memory failure, the
+  prefix and every arm are rerun under a new platform contract. Profiles never differ
+  between arms.
 - Formal-test access requires an explicit frozen manifest and is refused by development
   commands.
 - A failed M0a stops arm generation. E0 below 128 permits M0/M1 deployment work but
@@ -226,6 +300,10 @@ Unit tests cover:
 - strict donor identity, manifest, hash, and shape validation;
 - `no_memory` read attempts and required addressing hits;
 - snapshot hash immutability and cross-arm contract comparison;
+- separate prefix save, immutable arm load, and arm-local continuation paths;
+- actual per-arm runtime contracts rather than expected-contract self-comparison;
+- target-character/target-chunk-only intervention and native target+1 reads;
+- exact-shape wrong donors and stable-key random generation independent of read order;
 - technical-repeat-floor and decoded-divergence decisions;
 - incomplete metric refusal, Gate A seed separation, population reporting, and utility
   naming;
