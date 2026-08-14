@@ -43,6 +43,49 @@ else
   echo "[stage] reuse E0: ${RUN_DIR}/e0.json"
 fi
 
+E0_PASSES="$("${PYTHON_BIN}" - "${RUN_DIR}/e0.json" <<'PY'
+import json, sys
+print("1" if json.load(open(sys.argv[1], encoding="utf-8")).get("passes_min_viable") else "0")
+PY
+)"
+if [[ "${E0_PASSES}" != "1" ]]; then
+  echo "[stage] WARNING: E0 blocked; continuing M0 as a platform-only diagnostic" >&2
+fi
+
+CUDA_PREFLIGHT="${RUN_DIR}/cuda_preflight.json"
+MIN_FREE_GPU_GB="${MIN_FREE_GPU_GB:-36}"
+echo "[stage] CUDA preflight -> ${CUDA_PREFLIGHT}"
+set +e
+"${PYTHON_BIN}" -m utest.cuda_preflight \
+  --out "${CUDA_PREFLIGHT}" \
+  --min-free-gb "${MIN_FREE_GPU_GB}" \
+  | tee "${RUN_DIR}/cuda_preflight.log"
+cuda_preflight_status=${PIPESTATUS[0]}
+set -e
+if (( cuda_preflight_status != 0 )); then
+  "${PYTHON_BIN}" - "${RUN_DIR}" "${cuda_preflight_status}" <<'PY'
+import json, sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+e0 = json.loads((root / "e0.json").read_text(encoding="utf-8"))
+preflight = json.loads((root / "cuda_preflight.json").read_text(encoding="utf-8"))
+summary = {
+    "E0": "passed" if e0.get("passes_min_viable") else "blocked",
+    "eligible_stories": e0.get("n_eligible_stories"),
+    "CUDA_preflight": preflight.get("status", "failed"),
+    "M0a": "blocked",
+    "M0b": "not_run",
+    "process_exit_codes": {"cuda_preflight": int(sys.argv[2])},
+    "blocking_error": preflight.get("error"),
+}
+(root / "stage_summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
+print(json.dumps(summary, indent=2))
+PY
+  echo "[stage] CUDA preflight failed; M0a was not attempted" >&2
+  exit "${cuda_preflight_status}"
+fi
+
 PLATFORM_MANIFEST="${RUN_DIR}/platform.manifest.json"
 if [[ ! -s "${PLATFORM_MANIFEST}" ]]; then
   echo "[stage] platform manifest -> ${PLATFORM_MANIFEST}"
@@ -110,7 +153,7 @@ fi
 M0A_DIR="${RUN_DIR}/m0a"
 mkdir -p "${M0A_DIR}"
 echo "[stage] M0a seven chunks -> ${M0A_DIR}"
-echo "[stage] 60GB profile: active expert switching, bf16, 50 steps, resumable per chunk"
+echo "[stage] active expert switching, bf16, 50 steps, resumable per chunk"
 set +e
 CONDA_ENV="${UTEST_ENV}" \
 CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}" \
@@ -173,9 +216,11 @@ root = Path(sys.argv[1])
 e0 = json.loads((root / "e0.json").read_text())
 m0a = json.loads((root / "m0a_report.json").read_text()) if (root / "m0a_report.json").exists() else {"status": "failed"}
 m0b = json.loads((root / "m0b_report.json").read_text()) if (root / "m0b_report.json").exists() else {"status": "failed"}
+cuda_preflight = json.loads((root / "cuda_preflight.json").read_text())
 summary = {
     "E0": "passed" if e0.get("passes_min_viable") else "blocked",
     "eligible_stories": e0.get("n_eligible_stories"),
+    "CUDA_preflight": cuda_preflight.get("status"),
     "M0a": m0a.get("status"),
     "M0b": m0b.get("status"),
     "process_exit_codes": {"inference": int(sys.argv[2]), "m0a": int(sys.argv[3]), "m0b": int(sys.argv[4])},

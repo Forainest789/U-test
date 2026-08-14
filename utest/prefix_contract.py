@@ -11,6 +11,9 @@ from typing import Mapping, Sequence
 RUNTIME_ONLY_ARGS = {
     "output_path",
     "resume_state_path",
+    "save_state_path",
+    "target_seed_override",
+    "start_chunk_idx",
     "max_chunks",
     "efficiency_metrics_path",
     "efficiency_runtime_log",
@@ -71,6 +74,36 @@ def _git_state(repo: Path) -> tuple[str, bool]:
     return commit, dirty
 
 
+def build_runtime_contract(event: Mapping, inference_args: Sequence[str]) -> dict:
+    """Resolve the contract fields from the arguments an arm will actually run."""
+    parsed = _arguments(inference_args)
+    source = Path(event.get("source_json_path") or parsed.get("json_path", "")).resolve()
+    reference_text = event.get("reference_path") or parsed.get("ref_image_path", "")
+    reference = Path(reference_text).resolve() if reference_text else None
+    target_idx = int(event["target_chunk_idx"])
+    story = json.loads(source.read_text(encoding="utf-8"))
+    chunks = story.get("chunks", story) if isinstance(story, dict) else story
+    target_prompt = str(
+        chunks[target_idx].get("content") or chunks[target_idx].get("caption") or ""
+    )
+    return {
+        "frozen_args": normalized_frozen_args(inference_args),
+        "source_json_sha256": sha256_file(source),
+        "target_prompt_sha256": hashlib.sha256(
+            target_prompt.encode("utf-8")
+        ).hexdigest(),
+        "reference_sha256": (
+            sha256_file(reference) if reference and reference.is_file() else None
+        ),
+        "target_seed": int(
+            parsed.get(
+                "target_seed_override",
+                int(parsed.get("seed_base", 42)) + target_idx,
+            )
+        ),
+    }
+
+
 def build_contract(
     event: Mapping,
     snapshot: Path,
@@ -90,7 +123,6 @@ def build_contract(
     story = json.loads(source.read_text(encoding="utf-8"))
     chunks = story.get("chunks", story) if isinstance(story, dict) else story
     target_prompt = str(chunks[target_idx].get("content") or chunks[target_idx].get("caption") or "")
-    seed_base = int(parsed.get("seed_base", 42))
     repo = Path(__file__).resolve().parents[1]
     code_commit, code_dirty = _git_state(repo)
 
@@ -102,13 +134,7 @@ def build_contract(
         "reference_path": str(reference) if reference else None,
         "reference_sha256": sha256_file(reference) if reference and reference.is_file() else None,
     }
-    runtime_contract = {
-        "frozen_args": normalized_frozen_args(inference_args),
-        "source_json_sha256": inputs["source_json_sha256"],
-        "target_prompt_sha256": inputs["target_prompt_sha256"],
-        "reference_sha256": inputs["reference_sha256"],
-        "target_seed": seed_base + target_idx,
-    }
+    runtime_contract = build_runtime_contract(event, inference_args)
     return {
         "schema_version": 1,
         "event": dict(event),
@@ -150,4 +176,3 @@ def validate_contract(
         if runtime.get(key) != expected_runtime.get(key):
             errors.append(f"{key}_mismatch")
     return errors
-

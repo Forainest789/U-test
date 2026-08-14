@@ -63,6 +63,18 @@ def test_m0a_passes_only_with_complete_runtime_evidence(tmp_path: Path) -> None:
     assert report["evidence"]["peak_reserved_gb"] == 35.0
 
 
+def test_m0a_failure_surfaces_run_log_error(tmp_path: Path) -> None:
+    efficiency, platform = _make_m0_tree(tmp_path, chunks=0, memory_reads=0)
+    (tmp_path / "run.log").write_text(
+        "Loading models...\nTraceback (most recent call last):\n"
+        "RuntimeError: CUDA driver error: invalid argument\n",
+        encoding="utf-8",
+    )
+    report = validate_m0a(tmp_path, efficiency_path=efficiency, platform_manifest=platform)
+    assert report["status"] == "failed"
+    assert report["evidence"]["run_log_error"] == "RuntimeError: CUDA driver error: invalid argument"
+
+
 def test_m0b_missing_official_inputs_is_non_comparable() -> None:
     report = evaluate_m0b(
         None,

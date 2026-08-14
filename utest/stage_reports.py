@@ -26,6 +26,17 @@ def _write_json(path: Path, payload: Mapping) -> None:
     path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
+def _last_error_line(log_path: Path) -> str | None:
+    """Last traceback/exception line of a run.log, so a failed gate says *why* without a manual grep."""
+    if not log_path.is_file():
+        return None
+    lines = [line.strip() for line in log_path.read_text(encoding="utf-8", errors="replace").splitlines() if line.strip()]
+    for line in reversed(lines):
+        if "Error" in line or "Exception" in line:
+            return line
+    return lines[-1] if lines else None
+
+
 def validate_m0a(
     output_dir: Path,
     *,
@@ -110,6 +121,7 @@ def validate_m0a(
             "peak_allocated_gb": peak_allocated,
             "peak_reserved_gb": peak_reserved,
             "platform_manifest": str(platform_manifest.resolve()) if platform_manifest else None,
+            "run_log_error": _last_error_line(output_dir / "run.log") if reasons else None,
         },
     }
 

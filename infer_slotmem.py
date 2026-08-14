@@ -36,6 +36,7 @@ sys.modules["utils"] = _utils_pkg
 
 import utils.image_process  # noqa: F401
 
+from utest.media_metadata import generated_timing
 from reference_inference_runtime import (
     ReferenceInferenceRuntime as ReferenceInferenceEngine,
     AttentionMapExtractorV8,
@@ -3070,6 +3071,12 @@ def parse_args():
     parser.add_argument("--sample_solver", type=str, default="flow_euler", choices=["flow_euler", "unipc"])
     parser.add_argument("--sample_shift", type=float, default=5.0)
     parser.add_argument("--seed_base", type=int, default=42)
+    parser.add_argument(
+        "--target_seed_override",
+        type=int,
+        default=None,
+        help="Override the sampler seed only for the first processed/resumed target chunk.",
+    )
     parser.add_argument("--inference_latents_fp32", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--cfg_scale", type=float, default=5.0)
     parser.add_argument("--cfg_uncond_with_memory", action=argparse.BooleanOptionalAction, default=True)
@@ -3556,6 +3563,9 @@ def main():
                     bench_chunk_records[int(row["chunk_idx"])] = row
                 except Exception:
                     pass
+    existing_generated_timing = generated_timing(
+        bench_chunk_records.values(), frames=0, fps=16
+    )
     slotmem_inference_manifest = {
         "schema_version": 1,
         "format": "slotmem_inference_metadata",
@@ -3567,6 +3577,7 @@ def main():
         "character_list": top_level_character_list,
         "chunk_count": int(len(chunks)),
         "merged_output_name": str(getattr(args, "merged_output_name", "merged_chunks.mp4")),
+        "generated_duration_s": existing_generated_timing["generated_timeline_end_s"],
         "chunks": [bench_chunk_records[idx] for idx in sorted(bench_chunk_records)],
     }
     _write_slotmem_inference_manifest(bench_manifest_path, slotmem_inference_manifest)
@@ -3602,6 +3613,7 @@ def main():
         print(f"[ResumeState] starting from chunk_idx={start_chunk_idx}", flush=True)
 
     for chunk_idx, chunk in enumerate(chunks_to_iterate, start=start_chunk_idx):
+        mem_manager.current_chunk_idx = int(chunk_idx)
         content = chunk["content"]
         chars = [] if bool(args.native_wan_inference) else list(chunk.get("character_list", []))
         if int(args.max_memory_characters) > 0:
@@ -3754,7 +3766,12 @@ def main():
                 flush=True,
             )
 
-        chunk_seed = int(getattr(args, "seed_base", 42)) + chunk_idx
+        target_seed_override = getattr(args, "target_seed_override", None)
+        chunk_seed = (
+            int(target_seed_override)
+            if target_seed_override is not None and chunk_idx == start_chunk_idx
+            else int(getattr(args, "seed_base", 42)) + chunk_idx
+        )
         print(f"  [RunSeed] chunk={chunk_idx} seed={chunk_seed}", flush=True)
         chunk_ref_images = prev_frames_pil
         chunk_random_ref_frame = fixed_random_ref_frame
@@ -3806,6 +3823,10 @@ def main():
                 "frames still feed conditioning and online memory.",
                 flush=True,
             )
+        saved_frame_count = int(len(frames_to_save)) if bool(save_current_video) else 0
+        media_timing = generated_timing(
+            bench_chunk_records.values(), frames=saved_frame_count, fps=16
+        )
         chunk_metadata = {
             "schema_version": 1,
             "sample_id": Path(args.output_path).resolve().name,
@@ -3817,21 +3838,28 @@ def main():
             "known_roles": list(known_roles_for_chunk),
             "first_roles": list(first_roles_for_chunk),
             "role_state": role_state_payload,
+            # start/end are the source-caption timeline, not the encoded media timeline.
             "start": chunk.get("start", None),
             "end": chunk.get("end", None),
+            "source_timeline_start_s": chunk.get("start", None),
+            "source_timeline_end_s": chunk.get("end", None),
             "seed": int(chunk_seed),
             "fps": 16,
-            "frames": int(len(frames_to_save)) if bool(save_current_video) else 0,
+            "frames": saved_frame_count,
             "raw_frames": int(len(video_frames)),
             "video_saved": bool(save_current_video),
             "video_path": str(Path(save_path).resolve()) if bool(save_current_video) else None,
             "source_json_path": str(Path(args.json_path).resolve()),
+            **media_timing,
         }
         chunk_json_path = Path(args.output_path) / f"chunk_{chunk_idx:03d}.metadata.json"
         _write_slotmem_inference_manifest(chunk_json_path, chunk_metadata)
         bench_chunk_records[int(chunk_idx)] = dict(chunk_metadata)
         slotmem_inference_manifest["chunks"] = [bench_chunk_records[idx] for idx in sorted(bench_chunk_records)]
         slotmem_inference_manifest["completed_chunk_count"] = int(len(bench_chunk_records))
+        slotmem_inference_manifest["generated_duration_s"] = media_timing[
+            "generated_timeline_end_s"
+        ]
         _write_slotmem_inference_manifest(bench_manifest_path, slotmem_inference_manifest)
         print(f"  [BenchMeta] Saved chunk metadata: {chunk_json_path}", flush=True)
 

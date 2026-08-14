@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import stat
 import subprocess
@@ -15,7 +16,7 @@ from .memory_utility import REQUIRED_OUTCOMES, utility_census
 from .prefix_contract import build_contract, sha256_file, validate_contract
 
 
-def _set_option(argv: Sequence[str], name: str, value: str) -> list[str]:
+def _set_option(argv: Sequence[str], name: str, value: str | None) -> list[str]:
     output: list[str] = []
     index = 0
     while index < len(argv):
@@ -24,13 +25,42 @@ def _set_option(argv: Sequence[str], name: str, value: str) -> list[str]:
             continue
         output.append(str(argv[index]))
         index += 1
-    output.extend([name, str(value)])
+    if value is not None:
+        output.extend([name, str(value)])
     return output
 
 
 def _write_json(path: Path, payload: Mapping | Sequence) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+def build_prefix_inference_args(
+    event: Mapping, output: Path, argv: Sequence[str]
+) -> list[str]:
+    """Build native inference args that create, rather than load, a prefix state."""
+    result = _set_option(
+        argv, "--json_path", str(Path(str(event["source_json_path"])).resolve())
+    )
+    if event.get("reference_path"):
+        result = _set_option(
+            result,
+            "--ref_image_path",
+            str(Path(str(event["reference_path"])).resolve()),
+        )
+    else:
+        result = _set_option(result, "--ref_image_path", None)
+    result = _set_option(result, "--max_chunks", str(int(event["target_chunk_idx"])))
+    result = _set_option(result, "--resume_state_path", None)
+    result = _set_option(result, "--start_chunk_idx", None)
+    result = _set_option(result, "--target_seed_override", None)
+    result = _set_option(result, "--save_state_path", str(output / "prefix_state.pt"))
+    result = _set_option(result, "--output_path", str(output / "prefix_generation"))
+    return _set_option(
+        result,
+        "--efficiency_metrics_path",
+        str(output / "prefix_generation" / "efficiency.json"),
+    )
 
 
 def build_arm_commands(
@@ -43,6 +73,7 @@ def build_arm_commands(
     donor: Path | None = None,
     donor_manifest: Path | None = None,
     dump_correct_donor: Path | None = None,
+    target_seed_override: int | None = None,
 ) -> dict[str, list[str]]:
     requested = tuple(str(arm) for arm in arms)
     unknown = sorted(set(requested) - set(ARMS))
@@ -52,10 +83,28 @@ def build_arm_commands(
     snapshot = str(contract["snapshot"]["path"])
     arm_seed = str(int(contract.get("arm_seed", 0)))
     commands: dict[str, list[str]] = {}
-    for run_name, arm in [*((arm, arm) for arm in requested), ("correct_repeat", "correct")]:
+    scheduled: list[tuple[str, str]] = []
+    for arm in requested:
+        scheduled.append((arm, arm))
+        if arm == "correct":
+            scheduled.append(("correct_repeat", "correct"))
+    if "correct" not in requested:
+        scheduled.append(("correct_repeat", "correct"))
+    for run_name, arm in scheduled:
         arm_dir = (output_root / run_name).resolve()
         inference_args = list(contract["base_inference_args"])
         inference_args = _set_option(inference_args, "--resume_state_path", snapshot)
+        inference_args = _set_option(
+            inference_args, "--start_chunk_idx", str(target_idx)
+        )
+        inference_args = _set_option(
+            inference_args, "--save_state_path", str(arm_dir / "resume_state.pt")
+        )
+        inference_args = _set_option(
+            inference_args,
+            "--target_seed_override",
+            str(target_seed_override) if target_seed_override is not None else None,
+        )
         inference_args = _set_option(inference_args, "--max_chunks", str(target_idx + 2))
         inference_args = _set_option(inference_args, "--output_path", str(arm_dir))
         inference_args = _set_option(
@@ -94,6 +143,9 @@ def validate_audit_group(reports: Mapping[str, Mapping]) -> list[str]:
         if report is None:
             errors.append(f"{arm}:missing_report")
             continue
+        if int(report.get("native_read_mismatches", 0)) != 0:
+            errors.append(f"{arm}:native_read_changed")
+            continue
         if int(report.get("target_read_hits", 0)) <= 0:
             errors.append(f"{arm}:target_address_miss")
             continue
@@ -101,15 +153,39 @@ def validate_audit_group(reports: Mapping[str, Mapping]) -> list[str]:
             errors.append(f"{arm}:intervention_not_effective")
             continue
         if arm == "no_memory":
-            if int(report.get("attempted_reads", 0)) <= 0:
+            if int(report.get("target_source_non_null_reads", 0)) <= 0:
                 errors.append("no_memory:no_read_attempt")
-            if int(report.get("returned_non_null_reads", 0)) != 0:
+            if int(report.get("target_returned_non_null_reads", 0)) != 0:
                 errors.append("no_memory:reader_returned_payload")
         elif arm == "correct":
             if int(report.get("payload_layers_seen", 0)) <= 0:
                 errors.append("correct:no_payload_layers")
+            elif int(report.get("target_read_mismatches", 0)) != 0:
+                errors.append("correct:passthrough_changed")
         elif int(report.get("layers_transformed", 0)) <= 0:
             errors.append(f"{arm}:no_layers_transformed")
+    return errors
+
+
+def validate_runtime_reports(
+    contract: Mapping, snapshot: Path, reports: Mapping[str, Mapping]
+) -> list[str]:
+    """Compare every executed arm's reported runtime with the frozen expectation."""
+    errors = validate_contract(contract, snapshot)
+    for run_name in (*ARMS, "correct_repeat"):
+        report = reports.get(run_name)
+        if report is None:
+            errors.append(f"{run_name}:missing_report")
+            continue
+        runtime = report.get("runtime_contract")
+        if not isinstance(runtime, Mapping):
+            errors.append(f"{run_name}:runtime_contract_missing")
+            continue
+        errors.extend(
+            f"{run_name}:{error}"
+            for error in validate_contract(contract, snapshot, runtime)
+            if error != "snapshot_sha256_mismatch"
+        )
     return errors
 
 
@@ -129,7 +205,8 @@ def _frame_l1_median(left: Path, right: Path) -> float:
 
 def _has_positive_residual(value) -> bool:
     if isinstance(value, dict):
-        if float(value.get("residual_norm", 0.0) or 0.0) > 0.0:
+        residual = float(value.get("residual_norm", 0.0) or 0.0)
+        if math.isfinite(residual) and residual > 0.0:
             return True
         return any(_has_positive_residual(item) for item in value.values())
     if isinstance(value, (list, tuple)):
@@ -162,13 +239,13 @@ def validate_event_run(event_run: Path) -> dict:
         contract_path = event_run.parent / "prefix_contract.json"
     contract = json.loads(contract_path.read_text(encoding="utf-8"))
     snapshot = Path(contract["snapshot"]["path"])
-    errors = validate_contract(contract, snapshot, contract["runtime_contract"])
     reports: dict[str, dict] = {}
     writer_evidence: dict[str, dict] = {}
-    for arm in ARMS:
-        report_path = event_run / arm / "audit.json"
+    for run_name in (*ARMS, "correct_repeat"):
+        report_path = event_run / run_name / "audit.json"
         if report_path.is_file():
-            reports[arm] = json.loads(report_path.read_text(encoding="utf-8"))
+            reports[run_name] = json.loads(report_path.read_text(encoding="utf-8"))
+    errors = validate_runtime_reports(contract, snapshot, reports)
     errors.extend(validate_audit_group(reports))
 
     target_idx = int(contract["event"]["target_chunk_idx"])
@@ -257,17 +334,7 @@ def prepare_prefix(args: argparse.Namespace) -> int:
         inference_args = list(args.inference_args)
     if inference_args[:1] == ["--"]:
         inference_args = inference_args[1:]
-    inference_args = _set_option(inference_args, "--json_path", str(Path(event["source_json_path"]).resolve()))
-    if event.get("reference_path"):
-        inference_args = _set_option(
-            inference_args, "--ref_image_path", str(Path(event["reference_path"]).resolve())
-        )
-    inference_args = _set_option(inference_args, "--max_chunks", str(int(event["target_chunk_idx"])))
-    inference_args = _set_option(inference_args, "--resume_state_path", str(snapshot))
-    inference_args = _set_option(inference_args, "--output_path", str(prefix_output))
-    inference_args = _set_option(
-        inference_args, "--efficiency_metrics_path", str(prefix_output / "efficiency.json")
-    )
+    inference_args = build_prefix_inference_args(event, output, inference_args)
     repo = Path(__file__).resolve().parents[1]
     _run([args.python, "-u", str(repo / "infer_slotmem.py"), *inference_args], output / "prepare.log")
     if not snapshot.is_file():
@@ -289,6 +356,14 @@ def prepare_prefix(args: argparse.Namespace) -> int:
 def run_arms(args: argparse.Namespace) -> int:
     prefix = args.prefix.resolve()
     contract = json.loads((prefix / "prefix_contract.json").read_text(encoding="utf-8"))
+    if args.target_seed_override is not None:
+        contract = {
+            **contract,
+            "runtime_contract": {
+                **contract["runtime_contract"],
+                "target_seed": int(args.target_seed_override),
+            },
+        }
     snapshot = Path(contract["snapshot"]["path"])
     event_json = Path(contract.get("event_json", prefix / "event.json"))
     output = (args.output or (prefix / "arms")).resolve()
@@ -304,6 +379,7 @@ def run_arms(args: argparse.Namespace) -> int:
         donor=args.donor,
         donor_manifest=args.donor_manifest,
         dump_correct_donor=args.dump_correct_donor,
+        target_seed_override=args.target_seed_override,
     )
     expected_hash = contract["snapshot"]["sha256"]
     for name, command in commands.items():
@@ -397,6 +473,7 @@ def main() -> int:
     run.add_argument("--donor", type=Path)
     run.add_argument("--donor-manifest", type=Path)
     run.add_argument("--dump-correct-donor", type=Path)
+    run.add_argument("--target-seed-override", type=int)
     run.add_argument("--python", default=sys.executable)
     run.set_defaults(handler=run_arms)
 

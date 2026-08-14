@@ -31,13 +31,55 @@ import hashlib
 import json
 import sys
 from pathlib import Path
+from typing import Callable, Mapping
 
 import torch
+
+from .prefix_contract import build_runtime_contract
 
 ARMS = ("no_memory", "zero", "correct", "wrong", "random")
 
 LAYERWISE_MARKER = "__layerwise__"
 LAYERS_KEY = "layers"
+
+
+def intervention_applies(
+    event: Mapping, character: object, chunk_idx: object
+) -> bool:
+    """Return whether this read is the one frozen treatment address."""
+    try:
+        return (
+            str(character) == str(event["character_name"])
+            and int(chunk_idx) == int(event["target_chunk_idx"])
+        )
+    except (KeyError, TypeError, ValueError):
+        return False
+
+
+def stable_transform_seed(
+    event: Mapping,
+    target_idx: int,
+    character: object,
+    bank_idx: int,
+    arm_seed: int,
+    layer: object,
+) -> int:
+    """Low 64 bits of a canonical SHA256 transform address."""
+    canonical = json.dumps(
+        [
+            event.get("story_id"),
+            event.get("event_id"),
+            int(target_idx),
+            str(character),
+            int(bank_idx),
+            int(arm_seed),
+            str(layer),
+        ],
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+    digest = hashlib.sha256(canonical.encode("utf-8")).digest()
+    return int.from_bytes(digest[-8:], "big")
 
 
 def _is_layerwise(value) -> bool:
@@ -49,19 +91,13 @@ def _is_layerwise(value) -> bool:
 
 
 def _match_rows(donor: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
-    """Reshape a donor's slot block to the target's row count. Feature dim must agree."""
-    if donor.shape[1:] != target.shape[1:]:
+    """Require the pre-frozen donor tensor to match the target exactly."""
+    if tuple(donor.shape) != tuple(target.shape):
         raise ValueError(
-            f"donor feature shape {tuple(donor.shape[1:])} != target {tuple(target.shape[1:])}; "
-            "the donor was dumped under a different memory-encoder config"
+            f"wrong donor must have exact shape {tuple(target.shape)}, "
+            f"got {tuple(donor.shape)}"
         )
-    n_d, n_t = int(donor.shape[0]), int(target.shape[0])
-    if n_d == n_t:
-        return donor
-    if n_d > n_t:
-        return donor[:n_t]
-    reps = -(-n_t // n_d)  # ceil
-    return donor.repeat(reps, *([1] * (donor.ndim - 1)))[:n_t]
+    return donor
 
 
 def _moment_matched_gaussian(tokens: torch.Tensor, gen: torch.Generator) -> torch.Tensor:
@@ -80,11 +116,17 @@ def _moment_matched_gaussian(tokens: torch.Tensor, gen: torch.Generator) -> torc
         normalized = (noise - noise_mean) / noise_std.clamp_min(torch.finfo(torch.float32).eps)
         matched = normalized * source_std + source_mean
         matched = torch.where(source_std > 0, matched, source_mean.expand_as(matched))
+    if not torch.allclose(matched.mean(dim=0), source_mean.squeeze(0), atol=1e-5, rtol=1e-5):
+        raise RuntimeError("random arm failed float32 channel-mean matching")
+    if not torch.allclose(
+        matched.std(dim=0, correction=0), source_std.squeeze(0), atol=1e-5, rtol=1e-5
+    ):
+        raise RuntimeError("random arm failed float32 channel-std matching")
     return matched.to(device=tokens.device, dtype=tokens.dtype)
 
 
 def transform_tokens(
-    tokens: torch.Tensor, arm: str, gen: torch.Generator, donor=None
+    tokens: torch.Tensor, arm: str, gen: torch.Generator | None, donor=None
 ) -> torch.Tensor | None:
     if arm == "no_memory":
         return None
@@ -93,6 +135,8 @@ def transform_tokens(
     if arm == "zero":
         return torch.zeros_like(tokens)
     if arm == "random":
+        if gen is None:
+            raise ValueError("random arm requires a generator")
         return _moment_matched_gaussian(tokens, gen)
     if arm == "wrong":
         if donor is None:
@@ -101,7 +145,14 @@ def transform_tokens(
     raise ValueError(f"unknown arm: {arm}")
 
 
-def transform_payload(payload, arm: str, gen: torch.Generator, donor_tokens=None):
+def transform_payload(
+    payload,
+    arm: str,
+    gen: torch.Generator | None,
+    donor_tokens=None,
+    *,
+    generator_for_layer: Callable[[str], torch.Generator] | None = None,
+):
     """Pure function over a get_memory_payload() return value. Returns (new_payload, n_layers)."""
     if payload is None or arm == "correct":
         return payload, 0
@@ -111,7 +162,8 @@ def transform_payload(payload, arm: str, gen: torch.Generator, donor_tokens=None
 
     if isinstance(tokens, torch.Tensor):
         donor = donor_tokens if isinstance(donor_tokens, torch.Tensor) else None
-        return {**payload, "tokens": transform_tokens(tokens, arm, gen, donor)}, 1
+        layer_gen = generator_for_layer("shared") if generator_for_layer else gen
+        return {**payload, "tokens": transform_tokens(tokens, arm, layer_gen, donor)}, 1
 
     if _is_layerwise(tokens):
         donor_layers = donor_tokens.get(LAYERS_KEY, {}) if _is_layerwise(donor_tokens) else {}
@@ -123,7 +175,8 @@ def transform_payload(payload, arm: str, gen: torch.Generator, donor_tokens=None
             layer_donor = donor_layers.get(layer)
             if arm == "wrong" and layer_donor is None:
                 raise ValueError(f"wrong arm donor has no tensor for layer {layer}")
-            out[layer] = transform_tokens(t, arm, gen, layer_donor)
+            layer_gen = generator_for_layer(str(layer)) if generator_for_layer else gen
+            out[layer] = transform_tokens(t, arm, layer_gen, layer_donor)
             n += 1
         return {**payload, "tokens": {LAYERWISE_MARKER: True, LAYERS_KEY: out}}, n
 
@@ -143,7 +196,7 @@ def validate_donor_manifest(entry: dict, event: dict, donor_path: Path) -> dict:
     required = {
         "target_story_id", "target_entity_uid", "donor_story_id", "donor_entity_uid",
         "payload_path", "payload_sha256", "coarse_class", "colour", "character_count",
-        "source_visible", "gap_bucket", "slot_shape", "selection_seed",
+        "source_visible", "gap_bucket", "slot_shape", "selection_seed", "payload_key",
     }
     missing = sorted(required - set(entry))
     if missing:
@@ -170,10 +223,30 @@ def _tensor_sha256(value: torch.Tensor) -> str:
     return hashlib.sha256(raw).hexdigest()
 
 
+def _payload_sha256(payload) -> str | None:
+    tokens = payload.get("tokens") if isinstance(payload, dict) else None
+    if isinstance(tokens, torch.Tensor):
+        return _tensor_sha256(tokens) if hasattr(tokens, "detach") else None
+    if _is_layerwise(tokens):
+        layer_hashes = {
+            str(layer): _tensor_sha256(tensor)
+            for layer, tensor in tokens.get(LAYERS_KEY, {}).items()
+            if isinstance(tensor, torch.Tensor) and hasattr(tensor, "detach")
+        }
+        encoded = json.dumps(layer_hashes, sort_keys=True, separators=(",", ":"))
+        return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+    return None
+
+
 def _payload_summary(payload) -> dict:
     tokens = payload.get("tokens") if isinstance(payload, dict) else None
     if isinstance(tokens, torch.Tensor):
-        return {"layers": 1, "slots": int(tokens.shape[0]), "shapes": {"shared": list(tokens.shape)}}
+        return {
+            "layers": 1,
+            "slots": int(tokens.shape[0]),
+            "shapes": {"shared": list(tokens.shape)},
+            "dtypes": {"shared": str(getattr(tokens, "dtype", "unknown"))},
+        }
     if _is_layerwise(tokens):
         tensors = {
             str(layer): tensor
@@ -184,8 +257,9 @@ def _payload_summary(payload) -> dict:
             "layers": len(tensors),
             "slots": sum(int(tensor.shape[0]) for tensor in tensors.values()),
             "shapes": {layer: list(tensor.shape) for layer, tensor in tensors.items()},
+            "dtypes": {layer: str(tensor.dtype) for layer, tensor in tensors.items()},
         }
-    return {"layers": 0, "slots": 0, "shapes": {}}
+    return {"layers": 0, "slots": 0, "shapes": {}, "dtypes": {}}
 
 
 def _cpu_clone(tokens):
@@ -211,11 +285,12 @@ def install(
     *,
     event: dict | None = None,
     donor_entry: dict | None = None,
+    runtime_contract: dict | None = None,
 ):
     """Patch SlotMem's single memory read point. Call before infer_slotmem.main()."""
     import infer_slotmem
 
-    gen = torch.Generator().manual_seed(seed)
+    gen = None
     loaded_donor = torch.load(donor_path, map_location="cpu", weights_only=False) if donor_path else {}
     donor = (
         loaded_donor.get("payloads", {})
@@ -224,8 +299,6 @@ def install(
     )
     donor_key = str(donor_entry.get("payload_key")) if donor_entry and donor_entry.get("payload_key") else None
     if arm == "wrong":
-        if donor_key is None and isinstance(donor, dict) and len(donor) == 1:
-            donor_key = str(next(iter(donor)))
         if donor_key is None or not isinstance(donor, dict) or donor_key not in donor:
             raise ValueError("wrong donor manifest must select one existing payload_key")
         selected_donor = donor[donor_key]
@@ -239,11 +312,17 @@ def install(
         "attempted_reads": 0,
         "source_non_null_reads": 0,
         "returned_non_null_reads": 0,
+        "target_source_non_null_reads": 0,
+        "target_returned_non_null_reads": 0,
         "payload_layers_seen": 0,
         "layers_transformed": 0,
         "target_character": target_character or None,
+        "target_chunk_idx": int((event or {}).get("target_chunk_idx", -1)),
         "target_read_hits": 0,
+        "native_read_mismatches": 0,
+        "target_read_mismatches": 0,
         "read_records": [],
+        "runtime_contract": dict(runtime_contract or {}),
     }
 
     original = infer_slotmem.RoleWiseSlotMemoryBank.get_memory_payload_for_read
@@ -251,35 +330,72 @@ def install(
     def patched(self, char_id, bank_idx=0):
         payload = original(self, char_id, bank_idx)
         stats["attempted_reads"] += 1
+        chunk_idx = getattr(self, "current_chunk_idx", None)
+        is_target = intervention_applies(event or {}, char_id, chunk_idx)
         summary = _payload_summary(payload)
         record = {
+            "chunk_idx": int(chunk_idx) if chunk_idx is not None else None,
             "character": str(char_id),
             "bank": int(bank_idx),
             "source_present": payload is not None and int(summary["layers"]) > 0,
+            "source_sha256": _payload_sha256(payload),
             **summary,
         }
+        if is_target:
+            stats["target_read_hits"] += 1
         if payload is None:
             record["returned_present"] = False
+            record["layers_transformed"] = 0
             stats["read_records"].append(record)
             return None
         stats["source_non_null_reads"] += 1
-        stats["payload_layers_seen"] += int(summary["layers"])
-        if target_character and str(char_id) == target_character:
-            stats["target_read_hits"] += 1
+        if is_target:
+            stats["target_source_non_null_reads"] += 1
+            stats["payload_layers_seen"] += int(summary["layers"])
         key = f"{char_id}|{bank_idx}"
-        if dump_path is not None:
+        if dump_path is not None and is_target:
             dumped.setdefault(key, _cpu_clone(payload.get("tokens")))
-        is_target = not target_character or str(char_id) == target_character
-        if arm == "no_memory" or is_target:
-            new_payload, n = transform_payload(payload, arm, gen, selected_donor)
+        if is_target:
+            generator_for_layer = None
+            if arm == "random":
+                generator_for_layer = lambda layer: torch.Generator().manual_seed(
+                    stable_transform_seed(
+                        event or {},
+                        int(chunk_idx),
+                        char_id,
+                        int(bank_idx),
+                        int(seed),
+                        layer,
+                    )
+                )
+            new_payload, n = transform_payload(
+                payload,
+                arm,
+                gen,
+                selected_donor,
+                generator_for_layer=generator_for_layer,
+            )
         else:
             new_payload, n = payload, 0
         stats["layers_transformed"] += n
+        record["layers_transformed"] = int(n)
         returned = _payload_summary(new_payload)
         record["returned_present"] = new_payload is not None and int(returned["layers"]) > 0
         record["returned_shapes"] = returned["shapes"]
+        record["returned_dtypes"] = returned["dtypes"]
+        record["returned_sha256"] = _payload_sha256(new_payload)
+        if not is_target and record["source_sha256"] != record["returned_sha256"]:
+            stats["native_read_mismatches"] += 1
+        if (
+            is_target
+            and arm == "correct"
+            and record["source_sha256"] != record["returned_sha256"]
+        ):
+            stats["target_read_mismatches"] += 1
         if record["returned_present"]:
             stats["returned_non_null_reads"] += 1
+            if is_target:
+                stats["target_returned_non_null_reads"] += 1
         stats["read_records"].append(record)
         return new_payload
 
@@ -298,9 +414,12 @@ def install(
             stats["donor_dumped"] = str(dump_path)
             stats["donor_sha256"] = sha256_file(Path(dump_path))
         if arm == "correct":
-            effective = stats["source_non_null_reads"] > 0
+            effective = stats["target_source_non_null_reads"] > 0
         elif arm == "no_memory":
-            effective = stats["source_non_null_reads"] > 0 and stats["returned_non_null_reads"] == 0
+            effective = (
+                stats["target_source_non_null_reads"] > 0
+                and stats["target_returned_non_null_reads"] == 0
+            )
         else:
             effective = stats["layers_transformed"] > 0
         if target_character:
@@ -330,11 +449,11 @@ def self_check():
     assert torch.allclose(random_tokens.std(0, correction=0), tok.std(0, correction=0), atol=1e-5)
     assert out["token_meta"] is meta
 
-    donor = {LAYERWISE_MARKER: True, LAYERS_KEY: {"0": torch.full((3, 4), 9.0), "7": torch.full((9, 4), 5.0)}}
+    donor = {LAYERWISE_MARKER: True, LAYERS_KEY: {"0": torch.full((6, 4), 9.0), "7": torch.full((6, 4), 5.0)}}
     out, _ = transform_payload(layerwise, "wrong", gen, donor)
-    assert out["tokens"][LAYERS_KEY]["0"].shape == (6, 4), "short donor must tile up"
+    assert out["tokens"][LAYERS_KEY]["0"].shape == (6, 4)
     assert torch.all(out["tokens"][LAYERS_KEY]["0"] == 9.0)
-    assert out["tokens"][LAYERS_KEY]["7"].shape == (6, 4), "long donor must truncate"
+    assert out["tokens"][LAYERS_KEY]["7"].shape == (6, 4)
 
     out, n = transform_payload({"tokens": tok, "token_meta": meta}, "zero", gen)
     assert n == 1 and torch.count_nonzero(out["tokens"]) == 0, "flat (non-layerwise) payload"
@@ -347,7 +466,7 @@ def self_check():
     except ValueError:
         pass
     else:
-        raise AssertionError("mismatched donor feature dim must raise, not silently pad")
+        raise AssertionError("non-exact donor shape must raise")
 
     print("[audit] self-check OK")
 
@@ -371,6 +490,8 @@ def main() -> int:
     if args.self_check:
         self_check()
         return 0
+    if not args.event_json:
+        ap.error("all arm runs need --event-json for frozen target addressing")
     if args.arm == "wrong" and not (args.donor and args.donor_manifest and args.event_json):
         ap.error("--arm wrong needs --donor, --donor-manifest, and --event-json")
 
@@ -395,6 +516,8 @@ def main() -> int:
         ap.error(f"no infer_slotmem.py under {slotmem_dir}; run this from the repo root")
     sys.path.insert(0, str(slotmem_dir))
 
+    rest = args.rest[1:] if args.rest[:1] == ["--"] else args.rest
+    actual_runtime = build_runtime_contract(event, rest)
     flush = install(
         args.arm,
         args.seed,
@@ -403,11 +526,11 @@ def main() -> int:
         args.report,
         event=event,
         donor_entry=donor_entry,
+        runtime_contract=actual_runtime,
     )
 
     import infer_slotmem
 
-    rest = args.rest[1:] if args.rest[:1] == ["--"] else args.rest
     sys.argv = ["infer_slotmem.py", *rest]
     try:
         infer_slotmem.main()
