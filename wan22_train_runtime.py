@@ -46,6 +46,24 @@ def _get_module_dtype_device(module, default_device="cpu", default_dtype=torch.b
         return default_dtype, torch.device(default_device)
 
 
+def _module_is_on(module, device):
+    """True if the module's real parameters already live on `device`.
+
+    Reads a parameter rather than a cached ``.device`` attribute: inference moves the
+    active expert to cpu before VAE decode without updating any such attribute.
+    """
+    if module is None:
+        return True
+    try:
+        current = next(module.parameters()).device
+    except StopIteration:
+        return True
+    target = torch.device(device)
+    if current.type != target.type:
+        return False
+    return target.index is None or current.index == target.index
+
+
 def _is_dtype_mismatch_error(exc):
     msg = str(exc)
     return (
@@ -717,7 +735,10 @@ class WanTrainPipelineAdapter:
         self.active_dit = self.high_noise_model if domain == "high_noise" else self.low_noise_model
         if self.active_dit is None:
             self.active_dit = self.high_noise_model if self.high_noise_model is not None else self.low_noise_model
-        if self.dual_expert_active_offload_enabled:
+        # ponytail: denoising_model() re-enters here 2-4x per denoise step and the domain
+        # never changes at inference, so this used to empty_cache() a ~38GB pool and re-walk
+        # a 14B expert on every call. Skip it when the wanted expert is already resident.
+        if self.dual_expert_active_offload_enabled and not _module_is_on(self.active_dit, self.device):
             for candidate in (self.high_noise_model, self.low_noise_model):
                 if candidate is not None and candidate is not self.active_dit:
                     self._force_model_to(candidate, "cpu")

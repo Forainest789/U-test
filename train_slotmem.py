@@ -1694,13 +1694,16 @@ class CharacterWiseCrossAttention(torch.nn.Module):
             return x
         orig_dtype = x.dtype
         use_d = d - (d % 2)
-        x_main = x[..., :use_d].to(dtype=torch.float64)
-        x_rest = x[..., use_d:].to(dtype=torch.float64)
+        # ponytail: angles stay float64 (that is the precision that matters), the rotation
+        # of q/k runs in float32. float64 elementwise math is ~1/32 rate on A100 and this
+        # runs 8x per query chunk per layer per denoise step.
+        x_main = x[..., :use_d].float()
+        x_rest = x[..., use_d:].float()
         half = use_d // 2
         inv_freq = 1.0 / (base ** (torch.arange(0, half, device=x.device, dtype=torch.float64) / float(max(half, 1))))
         theta = coord.to(device=x.device, dtype=torch.float64).unsqueeze(-1) * inv_freq
-        sin_t = torch.sin(theta)
-        cos_t = torch.cos(theta)
+        sin_t = torch.sin(theta).float()
+        cos_t = torch.cos(theta).float()
         x_even = x_main[..., 0::2]
         x_odd = x_main[..., 1::2]
         rot_even = x_even * cos_t - x_odd * sin_t
@@ -1933,10 +1936,12 @@ class CharacterWiseCrossAttention(torch.nn.Module):
             kh = k.permute(0, 2, 1, 3)
             vh = v.permute(0, 2, 1, 3)
 
-            role_head_norm_weighted = 0.0
-            plain_head_norm_weighted = 0.0
+            # ponytail: these accumulate on-device. Each .item() is a cudaStreamSynchronize
+            # and this loop runs query_chunks x roles x layers x cfg x steps times.
+            role_head_norm_weighted = tokens.new_zeros((), dtype=torch.float32)
+            plain_head_norm_weighted = tokens.new_zeros((), dtype=torch.float32)
             role_norm_weight = 0.0
-            role_winner_sum = 0
+            role_winner_sum = tokens.new_zeros((), dtype=torch.float32)
 
             for q_idx_chunk in self._iter_query_chunks(q_idx_real, query_chunk_size):
                 if q_idx_chunk is None or q_idx_chunk.numel() <= 0:
@@ -1986,9 +1991,9 @@ class CharacterWiseCrossAttention(torch.nn.Module):
                 chunk_weight = float(int(q_idx_chunk.numel()))
                 role_norm_weight += chunk_weight
                 if role_heads > 0:
-                    role_head_norm_weighted += float(out_h[:, :role_heads].detach().float().norm(dim=-1).mean().item()) * chunk_weight
+                    role_head_norm_weighted += out_h[:, :role_heads].detach().float().norm(dim=-1).mean() * chunk_weight
                 if plain_heads > 0:
-                    plain_head_norm_weighted += float(out_h[:, role_heads:].detach().float().norm(dim=-1).mean().item()) * chunk_weight
+                    plain_head_norm_weighted += out_h[:, role_heads:].detach().float().norm(dim=-1).mean() * chunk_weight
 
                 out_role = out_h.permute(0, 2, 1, 3).reshape(bsz, int(q_idx_chunk.numel()), self.inner_dim)
                 out_role = self.out_proj(out_role)
@@ -2002,20 +2007,20 @@ class CharacterWiseCrossAttention(torch.nn.Module):
                 merged_now = torch.where(winner_expand, out_role, merged_prev)
                 out_selected.index_copy_(1, q_local, merged_now)
                 best_selected.index_copy_(1, q_local, torch.where(winner, sim_role, prev_best))
-                role_winner_sum += int(winner.detach().sum().item())
+                role_winner_sum += winner.detach().sum().float()
 
             if role_norm_weight <= 0.0:
                 continue
 
             if role_heads > 0:
-                role_head_norm_sum += float(role_head_norm_weighted / role_norm_weight)
+                role_head_norm_sum += float(role_head_norm_weighted.item() / role_norm_weight)
             if plain_heads > 0:
-                plain_head_norm_sum += float(plain_head_norm_weighted / role_norm_weight)
+                plain_head_norm_sum += float(plain_head_norm_weighted.item() / role_norm_weight)
 
             role_names.append(role_key)
             debug['selected_query_tokens'] += int(q_idx_real.numel())
             debug['selected_memory_tokens'] += int(mem_idx.numel())
-            debug['winner_counts'][role_key] = int(role_winner_sum)
+            debug['winner_counts'][role_key] = int(role_winner_sum.item())
 
         if len(role_names) == 0:
             debug['enabled'] = 0.0
