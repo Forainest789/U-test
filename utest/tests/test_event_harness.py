@@ -54,6 +54,7 @@ def test_prefix_generation_saves_new_state_without_resuming(tmp_path: Path) -> N
     event = {
         "source_json_path": str(source),
         "reference_path": str(reference),
+        "character_name": "luca",
         "target_chunk_idx": 4,
     }
 
@@ -75,6 +76,7 @@ def test_prefix_generation_saves_new_state_without_resuming(tmp_path: Path) -> N
     assert args[args.index("--max_chunks") + 1] == "4"
     assert args[args.index("--json_path") + 1] == str(source.resolve())
     assert args[args.index("--ref_image_path") + 1] == str(reference.resolve())
+    assert args[args.index("--target_character") + 1] == "luca"
 
 
 def test_arm_commands_apply_one_target_seed_override(tmp_path: Path) -> None:

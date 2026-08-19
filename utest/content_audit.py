@@ -49,7 +49,7 @@ def intervention_applies(
     """Return whether this read is the one frozen treatment address."""
     try:
         return (
-            str(character) == str(event["character_name"])
+            str(character).strip().casefold() == str(event["character_name"]).strip().casefold()
             and int(chunk_idx) == int(event["target_chunk_idx"])
         )
     except (KeyError, TypeError, ValueError):

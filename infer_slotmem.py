@@ -3118,6 +3118,12 @@ def parse_args():
         help="Legacy-only bank percent list used when --slotmem_memory_bank_mode=legacy_multi.",
     )
     parser.add_argument("--max_memory_characters", type=int, default=2)
+    parser.add_argument(
+        "--target_character",
+        type=str,
+        default="",
+        help="Keep this character inside the per-chunk memory-read window when it appears.",
+    )
     parser.add_argument("--use_first_appearance_memory_only", action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument("--use_learnable_memory_pos", action="store_true")
     parser.add_argument("--use_segment_embed", action="store_true")
@@ -3616,6 +3622,13 @@ def main():
         mem_manager.current_chunk_idx = int(chunk_idx)
         content = chunk["content"]
         chars = [] if bool(args.native_wan_inference) else list(chunk.get("character_list", []))
+        target_character = str(getattr(args, "target_character", "") or "").strip()
+        if target_character:
+            target_key = target_character.casefold()
+            chars = sorted(
+                chars,
+                key=lambda char: 0 if str(char).casefold() == target_key else 1,
+            )
         if int(args.max_memory_characters) > 0:
             chars = chars[: int(args.max_memory_characters)]
         print(f"\n{'=' * 60}\nChunk {chunk_idx}/{len(chunks)}: {content}\n{'=' * 60}")

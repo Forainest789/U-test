@@ -51,6 +51,9 @@ def build_prefix_inference_args(
     else:
         result = _set_option(result, "--ref_image_path", None)
     result = _set_option(result, "--max_chunks", str(int(event["target_chunk_idx"])))
+    result = _set_option(
+        result, "--target_character", str(event.get("character_name") or "") or None
+    )
     result = _set_option(result, "--resume_state_path", None)
     result = _set_option(result, "--start_chunk_idx", None)
     result = _set_option(result, "--target_seed_override", None)
@@ -344,6 +347,21 @@ def prepare_prefix(args: argparse.Namespace) -> int:
     state = torch.load(snapshot, map_location="cpu", weights_only=False)
     if int(state.get("next_chunk_idx", -1)) != int(event["target_chunk_idx"]):
         raise RuntimeError("prefix resume state next_chunk_idx does not equal target_chunk_idx")
+    from .run_checks import validate_target_read, writer_delta_status
+
+    efficiency_path = output / "prefix_generation" / "efficiency.json"
+    if efficiency_path.is_file():
+        efficiency = json.loads(efficiency_path.read_text(encoding="utf-8"))
+        target_errors = validate_target_read(efficiency, event)
+        if target_errors:
+            raise RuntimeError("prefix target read check failed: " + ",".join(target_errors))
+        writer = writer_delta_status(efficiency)
+        if writer["writer_delta_branch_zero"]:
+            print(
+                "[prefix] writer delta branch is zero -> static-bank read, not dynamic memory: "
+                + json.dumps(writer, ensure_ascii=False),
+                flush=True,
+            )
     contract = build_contract(
         event, snapshot, inference_args, args.platform_manifest, arm_seed=args.arm_seed
     )
