@@ -6,6 +6,7 @@ import json
 import math
 import os
 import stat
+import shlex
 import subprocess
 import sys
 from itertools import zip_longest
@@ -475,6 +476,9 @@ def run_arms(args: argparse.Namespace) -> int:
         target_seed_override=args.target_seed_override,
         include_native=bool(args.include_native),
     )
+    _write_json(output / "arm_commands.json", commands)
+    for name, command in commands.items():
+        print(f"[arms] {name}: {shlex.join(command)}", flush=True)
     expected_hash = contract["snapshot"]["sha256"]
     for name, command in commands.items():
         if sha256_file(snapshot) != expected_hash:

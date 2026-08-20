@@ -138,6 +138,43 @@ supply an independently acquired 81-frame chunk-8 teacher video; an arm rollout 
 valid teacher target. The existing sample-5 chunk-0→chunk-5 recurrence remains the short
 `Delta=5` pilot, while this fixture is the `Delta=8` primary event.
 
+### Strict Q* seven-run command
+
+This is evaluation/inference, not weight training. It freezes one clean future target,
+one Gaussian noise tensor, one noisy latent, and the actual scheduler timestep for every
+confirmatory run. The primary value is `Q* = L_no_memory - L_correct`; positive Q* above
+the adjacent `correct_repeat` floor means the historical target memory reduced current
+flow-matching prediction error. `C_id` remains an optional rollout outcome.
+
+```bash
+EVENT_JSON=/data/events/sample_5_qstar.json \
+FUTURE_TARGET_VIDEO=/data/targets/sample_5_chunk_005.mp4 \
+BASE_INFERENCE_ARGS=/data/runs/stage_gates/slotmem_m0_001/m0a/inference_args.yaml \
+PLATFORM_MANIFEST=/data/runs/stage_gates/slotmem_m0_001/platform.manifest.json \
+DONOR_PAYLOAD=/data/events/donor_payload.pt \
+DONOR_MANIFEST=/data/events/donor_manifest.json \
+EVENT_RUN_ROOT=/data/runs/qstar_sample_5 \
+QSTAR_TIMESTEP_INDICES=0,12,25,37,49 \
+QSTAR_NOISE_SEED=0 \
+RUN_ROLLOUT=1 \
+CID_SCORER=/data/videomem/scripts/score_identity.py \
+SLOTMEM_OFFLOAD_MODELS=0 \
+UTEST_ENV=utest \
+bash scripts/run_slotmem_qstar_event.sh
+```
+
+Omit `CID_SCORER` when only Q* is required. Set `RUN_ROLLOUT=0` for the cheap
+teacher-forced stage, and set `DRY_RUN=1` to write/inspect `run_manifest.json` without
+loading weights. The runner rejects dirty source by default; `ALLOW_DIRTY_SOURCE=1` is a
+development-only override. `REQUIRE_DYNAMIC_WRITER=1` is optional: without it, a zero
+writer residual is truthfully reported as `static_prefix` and reader-memory Q* remains
+valid.
+
+The run writes `qstar/qstar_report.json`, `qstar/qstar_records.jsonl`, seven rollout
+directories under `arms/`, `arms/intervention_contract.json`, and `run_manifest.json`.
+The seven names are `correct`, `correct_repeat`, `no_memory`, `zero`, `random`, `wrong`,
+and diagnostic-only `native`.
+
 ### Legacy fixed-prefix five-arm rollout
 
 Copy one event from `e0.json` into its own JSON file. Use a different eligible story to
