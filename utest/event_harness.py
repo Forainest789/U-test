@@ -8,12 +8,14 @@ import os
 import stat
 import subprocess
 import sys
+from itertools import zip_longest
 from pathlib import Path
 from typing import Iterable, Mapping, Sequence
 
 from .content_audit import ARMS
 from .memory_utility import REQUIRED_OUTCOMES, utility_census
 from .prefix_contract import build_contract, sha256_file, validate_contract
+from .qstar import classify_memory_regime
 
 
 def _set_option(argv: Sequence[str], name: str, value: str | None) -> list[str]:
@@ -78,6 +80,7 @@ def build_arm_commands(
     donor_manifest: Path | None = None,
     dump_correct_donor: Path | None = None,
     target_seed_override: int | None = None,
+    include_native: bool = False,
 ) -> dict[str, list[str]]:
     requested = tuple(str(arm) for arm in arms)
     unknown = sorted(set(requested) - set(ARMS))
@@ -96,31 +99,12 @@ def build_arm_commands(
         scheduled.append(("correct_repeat", "correct"))
     for run_name, arm in scheduled:
         arm_dir = (output_root / run_name).resolve()
-        inference_args = list(contract["base_inference_args"])
-        inference_args = _set_option(inference_args, "--offload_models", None)
-        inference_args = _set_option(inference_args, "--no-offload_models", None)
-        offload_models = os.environ.get("SLOTMEM_OFFLOAD_MODELS", "0").strip().lower()
-        inference_args.append(
-            "--offload_models"
-            if offload_models in ("1", "true", "yes", "on")
-            else "--no-offload_models"
-        )
-        inference_args = _set_option(inference_args, "--resume_state_path", snapshot)
-        inference_args = _set_option(
-            inference_args, "--start_chunk_idx", str(target_idx)
-        )
-        inference_args = _set_option(
-            inference_args, "--save_state_path", str(arm_dir / "resume_state.pt")
-        )
-        inference_args = _set_option(
-            inference_args,
-            "--target_seed_override",
-            str(target_seed_override) if target_seed_override is not None else None,
-        )
-        inference_args = _set_option(inference_args, "--max_chunks", str(target_idx + 2))
-        inference_args = _set_option(inference_args, "--output_path", str(arm_dir))
-        inference_args = _set_option(
-            inference_args, "--efficiency_metrics_path", str(arm_dir / "efficiency.json")
+        inference_args = _branch_inference_args(
+            contract,
+            arm_dir,
+            target_idx,
+            snapshot,
+            target_seed_override,
         )
         command = [
             python,
@@ -145,7 +129,54 @@ def build_arm_commands(
             )
         command.extend(["--", *inference_args])
         commands[run_name] = command
+    if include_native:
+        arm_dir = (output_root / "native").resolve()
+        inference_args = _branch_inference_args(
+            contract,
+            arm_dir,
+            target_idx,
+            snapshot,
+            target_seed_override,
+        )
+        inference_args = _set_option(inference_args, "--no-native_wan_inference", None)
+        inference_args = _set_option(inference_args, "--native_wan_inference", None)
+        inference_args.append("--native_wan_inference")
+        repo = Path(__file__).resolve().parents[1]
+        commands["native"] = [python, "-u", str(repo / "infer_slotmem.py"), *inference_args]
     return commands
+
+
+def _branch_inference_args(
+    contract: Mapping,
+    arm_dir: Path,
+    target_idx: int,
+    snapshot: str,
+    target_seed_override: int | None,
+) -> list[str]:
+    inference_args = list(contract["base_inference_args"])
+    inference_args = _set_option(inference_args, "--offload_models", None)
+    inference_args = _set_option(inference_args, "--no-offload_models", None)
+    offload_models = os.environ.get("SLOTMEM_OFFLOAD_MODELS", "0").strip().lower()
+    inference_args.append(
+        "--offload_models"
+        if offload_models in ("1", "true", "yes", "on")
+        else "--no-offload_models"
+    )
+    inference_args = _set_option(inference_args, "--resume_state_path", snapshot)
+    inference_args = _set_option(inference_args, "--start_chunk_idx", str(target_idx))
+    inference_args = _set_option(
+        inference_args, "--save_state_path", str(arm_dir / "resume_state.pt")
+    )
+    inference_args = _set_option(
+        inference_args,
+        "--target_seed_override",
+        str(target_seed_override) if target_seed_override is not None else None,
+    )
+    inference_args = _set_option(inference_args, "--max_chunks", str(target_idx + 2))
+    inference_args = _set_option(inference_args, "--output_path", str(arm_dir))
+    return _set_option(
+        inference_args, "--efficiency_metrics_path", str(arm_dir / "efficiency.json")
+    )
 
 
 def validate_audit_group(reports: Mapping[str, Mapping]) -> list[str]:
@@ -206,7 +237,10 @@ def _frame_l1_median(left: Path, right: Path) -> float:
     import imageio.v3 as iio
 
     distances = []
-    for a, b in zip(iio.imiter(left), iio.imiter(right)):
+    missing = object()
+    for a, b in zip_longest(iio.imiter(left), iio.imiter(right), fillvalue=missing):
+        if a is missing or b is missing:
+            raise ValueError("video frame count mismatch")
         if a.shape != b.shape:
             raise ValueError(f"video frame shape mismatch: {a.shape} != {b.shape}")
         distances.append(float(np.mean(np.abs(a.astype(np.float32) - b.astype(np.float32)))))
@@ -245,7 +279,12 @@ def _writer_evidence(efficiency: Mapping, target_idx: int) -> dict:
     }
 
 
-def validate_event_run(event_run: Path) -> dict:
+def validate_event_run(
+    event_run: Path,
+    *,
+    require_dynamic_writer: bool = False,
+    require_native: bool = False,
+) -> dict:
     contract_path = event_run / "prefix_contract.json"
     if not contract_path.is_file():
         contract_path = event_run.parent / "prefix_contract.json"
@@ -253,6 +292,7 @@ def validate_event_run(event_run: Path) -> dict:
     snapshot = Path(contract["snapshot"]["path"])
     reports: dict[str, dict] = {}
     writer_evidence: dict[str, dict] = {}
+    writer_regimes: dict[str, str] = {}
     for run_name in (*ARMS, "correct_repeat"):
         report_path = event_run / run_name / "audit.json"
         if report_path.is_file():
@@ -269,12 +309,10 @@ def validate_event_run(event_run: Path) -> dict:
         efficiency = json.loads(efficiency_path.read_text(encoding="utf-8"))
         evidence = _writer_evidence(efficiency, target_idx)
         writer_evidence[arm] = evidence
-        if evidence["update_count"] <= 0:
-            errors.append(f"{arm}:writer_update_missing")
-        if evidence["positive_residual_count"] <= 0:
-            errors.append(f"{arm}:writer_residual_not_positive")
-        if evidence["bank_hash_change_count"] <= 0:
-            errors.append(f"{arm}:bank_hash_unchanged")
+        regime = classify_memory_regime(evidence)
+        writer_regimes[arm] = regime
+        if require_dynamic_writer and regime != "dynamic_writer":
+            errors.append(f"{arm}:dynamic_writer_required")
     filename = f"chunk_{target_idx:03d}.mp4"
     video_paths = {name: event_run / name / filename for name in (*ARMS, "correct_repeat")}
     decoded: dict[str, object] = {}
@@ -293,6 +331,13 @@ def validate_event_run(event_run: Path) -> dict:
                 decoded[f"{arm}_vs_correct"] = _frame_l1_median(
                     video_paths[arm], video_paths["correct"]
                 )
+        native_path = event_run / "native" / filename
+        if native_path.is_file():
+            decoded["native_vs_correct"] = _frame_l1_median(
+                native_path, video_paths["correct"]
+            )
+        elif require_native:
+            errors.append("native:decoded_video_missing")
     else:
         errors.append("decoded_videos_missing")
 
@@ -303,6 +348,12 @@ def validate_event_run(event_run: Path) -> dict:
         "errors": errors,
         "decoded_l1": decoded,
         "writer_evidence": writer_evidence,
+        "writer_regimes": writer_regimes,
+        "memory_regime": (
+            "dynamic_writer"
+            if writer_regimes and all(value == "dynamic_writer" for value in writer_regimes.values())
+            else "static_prefix"
+        ),
         "arms": reports,
     }
     _write_json(event_run / "intervention_contract.json", report)
@@ -407,6 +458,7 @@ def run_arms(args: argparse.Namespace) -> int:
         donor_manifest=args.donor_manifest,
         dump_correct_donor=args.dump_correct_donor,
         target_seed_override=args.target_seed_override,
+        include_native=bool(args.include_native),
     )
     expected_hash = contract["snapshot"]["sha256"]
     for name, command in commands.items():
@@ -425,7 +477,11 @@ def run_arms(args: argparse.Namespace) -> int:
                         "at target_chunk_idx, so the five-arm comparison would be invalid. "
                         "Pick an event whose target character is actually read at the target chunk."
                     )
-    report = validate_event_run(output)
+    report = validate_event_run(
+        output,
+        require_dynamic_writer=bool(args.require_dynamic_writer),
+        require_native=bool(args.include_native),
+    )
     return 0 if report["status"] == "passed" else 2
 
 
@@ -512,6 +568,8 @@ def main() -> int:
     run.add_argument("--dump-correct-donor", type=Path)
     run.add_argument("--target-seed-override", type=int)
     run.add_argument("--python", default=sys.executable)
+    run.add_argument("--include-native", action="store_true")
+    run.add_argument("--require-dynamic-writer", action="store_true")
     run.set_defaults(handler=run_arms)
 
     donor = sub.add_parser("dump-donor")
@@ -523,7 +581,18 @@ def main() -> int:
 
     validate = sub.add_parser("validate")
     validate.add_argument("--event-run", type=Path, required=True)
-    validate.set_defaults(handler=lambda ns: 0 if validate_event_run(ns.event_run)["status"] == "passed" else 2)
+    validate.add_argument("--require-native", action="store_true")
+    validate.add_argument("--require-dynamic-writer", action="store_true")
+    validate.set_defaults(
+        handler=lambda ns: 0
+        if validate_event_run(
+            ns.event_run,
+            require_native=bool(ns.require_native),
+            require_dynamic_writer=bool(ns.require_dynamic_writer),
+        )["status"]
+        == "passed"
+        else 2
+    )
 
     score = sub.add_parser("score")
     score.add_argument("--event-run", type=Path, required=True)

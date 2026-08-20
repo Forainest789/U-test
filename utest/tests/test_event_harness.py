@@ -13,6 +13,7 @@ from utest.event_harness import (
     validate_audit_group,
     validate_runtime_reports,
 )
+from utest.qstar import classify_memory_regime
 from utest.memory_utility import REQUIRED_OUTCOMES
 
 
@@ -98,6 +99,43 @@ def test_arm_commands_apply_one_target_seed_override(tmp_path: Path) -> None:
     for command in commands.values():
         assert command[command.index("--target_seed_override") + 1] == "271"
         assert command[command.index("--start_chunk_idx") + 1] == "4"
+
+
+def test_seven_run_commands_keep_repeat_adjacent_and_native_last(tmp_path: Path) -> None:
+    snapshot = tmp_path / "prefix.pt"
+    contract = {
+        "snapshot": {"path": str(snapshot), "sha256": "abc"},
+        "event": {"target_chunk_idx": 8},
+        "arm_seed": 17,
+        "base_inference_args": ["--json_path", "story.json", "--seed_base", "42"],
+    }
+
+    commands = build_arm_commands(
+        contract,
+        output_root=tmp_path / "arms",
+        event_json=tmp_path / "event.json",
+        arms=("correct", "no_memory", "zero", "random", "wrong"),
+        donor=tmp_path / "donor.pt",
+        donor_manifest=tmp_path / "donor.json",
+        include_native=True,
+    )
+
+    assert list(commands) == [
+        "correct", "correct_repeat", "no_memory", "zero", "random", "wrong", "native"
+    ]
+    native = commands["native"]
+    assert "utest.content_audit" not in native
+    assert "--native_wan_inference" in native
+    assert native[native.index("--resume_state_path") + 1] == str(snapshot)
+    assert native[native.index("--start_chunk_idx") + 1] == "8"
+
+
+def test_writer_regime_allows_static_prefix_unless_explicitly_required() -> None:
+    static = {"update_count": 1, "positive_residual_count": 0, "bank_hash_change_count": 0}
+    dynamic = {"update_count": 1, "positive_residual_count": 1, "bank_hash_change_count": 1}
+
+    assert classify_memory_regime(static) == "static_prefix"
+    assert classify_memory_regime(dynamic) == "dynamic_writer"
 
 
 def test_prefix_generation_removes_stale_reference_when_event_has_none(

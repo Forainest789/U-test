@@ -33,7 +33,10 @@ import sys
 from pathlib import Path
 from typing import Callable, Mapping
 
-import torch
+try:
+    import torch
+except ModuleNotFoundError:  # Command planning and contract checks do not need tensors.
+    torch = None
 
 from .prefix_contract import build_runtime_contract
 
