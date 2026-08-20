@@ -97,6 +97,21 @@ def test_qstar_contract_freezes_future_target_horizon_and_timestep_grid(tmp_path
     future.write_bytes(b"held-out-teacher")
     event["source_chunk_idx"] = 0
     event["horizon"] = 1
+    teacher_manifest = tmp_path / "teacher.json"
+    teacher_manifest.write_text(
+        json.dumps(
+            {
+                "story_id": "s1",
+                "target_chunk_idx": 1,
+                "video_path": str(future),
+                "video_sha256": sha256_file(future),
+                "source_type": "held_out_real",
+                "generated_by_arm": False,
+                "generated_by_evaluated_model": False,
+            }
+        ),
+        encoding="utf-8",
+    )
 
     contract = build_contract(
         event,
@@ -104,10 +119,12 @@ def test_qstar_contract_freezes_future_target_horizon_and_timestep_grid(tmp_path
         args,
         manifest,
         future_target_video=future,
+        future_target_manifest=teacher_manifest,
         timestep_indices=(0, 12, 25, 37, 49),
     )
 
     assert contract["inputs"]["future_target_video_sha256"] == sha256_file(future)
+    assert contract["inputs"]["future_target_manifest_sha256"] == sha256_file(teacher_manifest)
     assert contract["qstar"]["horizon"] == 1
     assert contract["qstar"]["timestep_indices"] == [0, 12, 25, 37, 49]
 
@@ -129,6 +146,26 @@ def test_qstar_contract_rejects_missing_future_target(tmp_path: Path) -> None:
         assert "future target" in str(error)
     else:
         raise AssertionError("missing future target must fail")
+
+
+def test_qstar_contract_rejects_target_without_provenance_manifest(tmp_path: Path) -> None:
+    snapshot, manifest, event, args = _fixture(tmp_path)
+    future = tmp_path / "future.mp4"
+    future.write_bytes(b"unproven teacher")
+
+    try:
+        build_contract(
+            event,
+            snapshot,
+            args,
+            manifest,
+            future_target_video=future,
+            timestep_indices=(0,),
+        )
+    except ValueError as error:
+        assert "provenance manifest" in str(error)
+    else:
+        raise AssertionError("teacher without provenance manifest must fail")
 
 
 def test_long_reappearance_fixture_has_one_establishment_and_one_return() -> None:

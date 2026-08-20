@@ -205,6 +205,7 @@ The final remote command will be an evaluation/inference command, not a training
 ```bash
 EVENT_JSON=/data/events/sample_5_qstar.json \
 FUTURE_TARGET_VIDEO=/data/targets/sample_5_chunk_005.mp4 \
+FUTURE_TARGET_MANIFEST=/data/targets/sample_5_chunk_005.teacher.json \
 BASE_INFERENCE_ARGS=/data/runs/stage_gates/slotmem_m0_001/m0a/inference_args.yaml \
 PLATFORM_MANIFEST=/data/runs/stage_gates/slotmem_m0_001/platform.manifest.json \
 DONOR_PAYLOAD=/data/events/donor_payload.pt \

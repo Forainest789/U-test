@@ -39,6 +39,11 @@ except ModuleNotFoundError:  # Command planning and contract checks do not need 
     torch = None
 
 from .prefix_contract import build_runtime_contract
+from .input_contract import (
+    select_donor_entry,
+    validate_donor_bundle,
+    validate_donor_entry,
+)
 
 ARMS = ("no_memory", "zero", "correct", "wrong", "random")
 
@@ -196,29 +201,7 @@ def sha256_file(path: Path) -> str:
 
 def validate_donor_manifest(entry: dict, event: dict, donor_path: Path) -> dict:
     """Validate one pre-frozen target/donor pair before loading its tensors."""
-    required = {
-        "target_story_id", "target_entity_uid", "donor_story_id", "donor_entity_uid",
-        "payload_path", "payload_sha256", "coarse_class", "colour", "character_count",
-        "source_visible", "gap_bucket", "slot_shape", "selection_seed", "payload_key",
-    }
-    missing = sorted(required - set(entry))
-    if missing:
-        raise ValueError(f"donor manifest missing keys: {missing}")
-    if str(entry["target_story_id"]) != str(event.get("story_id")):
-        raise ValueError("donor manifest target_story_id does not match event")
-    if str(entry["target_entity_uid"]) != str(event.get("entity_uid")):
-        raise ValueError("donor manifest target_entity_uid does not match event")
-    if str(entry["donor_entity_uid"]) == str(event.get("entity_uid")):
-        raise ValueError("wrong donor must have a different entity_uid")
-    if str(entry["donor_story_id"]) == str(event.get("story_id")):
-        raise ValueError("wrong donor must come from a different story")
-    resolved = donor_path.resolve()
-    if Path(entry["payload_path"]).resolve() != resolved:
-        raise ValueError("donor manifest payload_path does not match --donor")
-    actual_hash = sha256_file(resolved)
-    if str(entry["payload_sha256"]).lower() != actual_hash:
-        raise ValueError("donor payload SHA256 does not match manifest")
-    return {**entry, "payload_path": str(resolved), "payload_sha256": actual_hash}
+    return validate_donor_entry(entry, event, donor_path)
 
 
 def _tensor_sha256(value: torch.Tensor) -> str:
@@ -502,17 +485,10 @@ def main() -> int:
     donor_entry = None
     if args.arm == "wrong":
         manifest = json.loads(Path(args.donor_manifest).read_text(encoding="utf-8"))
-        entries = manifest.get("pairs", manifest) if isinstance(manifest, dict) else manifest
-        if isinstance(entries, dict):
-            entries = [entries]
-        matches = [
-            entry for entry in entries
-            if str(entry.get("target_story_id")) == str(event.get("story_id"))
-            and str(entry.get("target_entity_uid")) == str(event.get("entity_uid"))
-        ]
-        if len(matches) != 1:
-            ap.error(f"donor manifest must contain exactly one pair for this event, found {len(matches)}")
-        donor_entry = validate_donor_manifest(matches[0], event, Path(args.donor))
+        validate_donor_bundle(event, Path(args.donor), Path(args.donor_manifest))
+        donor_entry = validate_donor_manifest(
+            select_donor_entry(manifest, event), event, Path(args.donor)
+        )
 
     slotmem_dir = Path(args.slotmem_dir)
     if not (slotmem_dir / "infer_slotmem.py").exists():

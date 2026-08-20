@@ -149,6 +149,7 @@ flow-matching prediction error. `C_id` remains an optional rollout outcome.
 ```bash
 EVENT_JSON=/data/events/sample_5_qstar.json \
 FUTURE_TARGET_VIDEO=/data/targets/sample_5_chunk_005.mp4 \
+FUTURE_TARGET_MANIFEST=/data/targets/sample_5_chunk_005.teacher.json \
 BASE_INFERENCE_ARGS=/data/runs/stage_gates/slotmem_m0_001/m0a/inference_args.yaml \
 PLATFORM_MANIFEST=/data/runs/stage_gates/slotmem_m0_001/platform.manifest.json \
 DONOR_PAYLOAD=/data/events/donor_payload.pt \
@@ -162,6 +163,26 @@ SLOTMEM_OFFLOAD_MODELS=0 \
 UTEST_ENV=utest \
 bash scripts/run_slotmem_qstar_event.sh
 ```
+
+The teacher provenance manifest is mandatory; a filename and SHA alone cannot prove that
+the target was not copied from an arm rollout:
+
+```json
+{
+  "story_id": "sample_5",
+  "target_chunk_idx": 5,
+  "video_path": "/data/targets/sample_5_chunk_005.mp4",
+  "video_sha256": "64-character SHA256",
+  "source_type": "held_out_real",
+  "generated_by_arm": false,
+  "generated_by_evaluated_model": false
+}
+```
+
+`source_type` may also be `independent_teacher`. Before any prefix GPU work, the runner
+cross-checks this manifest and validates that the donor manifest identity, SHA, payload
+key, exact slot shape, and embedded payload event all describe the same donor. Updating
+only a donor SHA is intentionally rejected.
 
 Omit `CID_SCORER` when only Q* is required. Set `RUN_ROLLOUT=0` for the cheap
 teacher-forced stage, and set `DRY_RUN=1` to write/inspect `run_manifest.json` without
@@ -211,11 +232,14 @@ Freeze the target/donor pairing as JSON. `payload_key` must be one of the keys w
     "character_count": 1,
     "source_visible": true,
     "gap_bucket": "1-2",
-    "slot_shape": "from donor payload audit",
+    "slot_shape": {"0": [64, 128]},
     "selection_seed": 0
   }]
 }
 ```
+
+Copy the exact `slot_shape` mapping for the selected `payload_key` from
+`donor_payload_info.json.payload_slot_shapes`; do not infer it from another donor.
 
 Run all arms from one immutable target prefix:
 

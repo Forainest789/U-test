@@ -112,6 +112,7 @@ def build_contract(
     *,
     arm_seed: int = 0,
     future_target_video: Path | None = None,
+    future_target_manifest: Path | None = None,
     timestep_indices: Sequence[int] = (),
 ) -> dict:
     snapshot = snapshot.resolve()
@@ -141,6 +142,13 @@ def build_contract(
         future_target_video = future_target_video.resolve()
         if not future_target_video.is_file():
             raise FileNotFoundError(f"future target video not found: {future_target_video}")
+        if future_target_manifest is None:
+            raise ValueError("future target requires a provenance manifest")
+        from .input_contract import validate_teacher_bundle
+
+        teacher = validate_teacher_bundle(
+            event, future_target_video, future_target_manifest
+        )
         indices = [int(value) for value in timestep_indices]
         if not indices or any(value < 0 for value in indices) or len(indices) != len(set(indices)):
             raise ValueError("Q* timestep indices must be unique non-negative integers")
@@ -151,6 +159,9 @@ def build_contract(
         inputs.update(
             future_target_video_path=str(future_target_video),
             future_target_video_sha256=sha256_file(future_target_video),
+            future_target_manifest_path=teacher["manifest_path"],
+            future_target_manifest_sha256=teacher["manifest_sha256"],
+            future_target_source_type=teacher["source_type"],
         )
         qstar = {
             "source_chunk_idx": source_idx,

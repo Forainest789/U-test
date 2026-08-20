@@ -320,12 +320,17 @@ def _load_probe_context(args):
     if list(frozen_qstar.get("timestep_indices", [])) != _parse_timestep_indices(args.timestep_indices):
         raise ValueError("timestep_indices_mismatch")
     arms_root = (args.arms_root.resolve() if args.arms_root else prefix.parent / "arms").resolve()
-    try:
-        future_target.relative_to(arms_root)
-    except ValueError:
-        pass
-    else:
-        raise ValueError("future target video must not be inside evaluated arm outputs")
+    from .input_contract import validate_teacher_bundle
+
+    teacher_manifest_text = contract.get("inputs", {}).get("future_target_manifest_path")
+    if not teacher_manifest_text:
+        raise ValueError("prefix contract has no teacher provenance manifest")
+    teacher_manifest = Path(teacher_manifest_text)
+    teacher = validate_teacher_bundle(
+        event, future_target, teacher_manifest, arms_root=arms_root
+    )
+    if teacher["manifest_sha256"] != contract["inputs"].get("future_target_manifest_sha256"):
+        raise ValueError("future_target_manifest_sha256_mismatch")
 
     inference_argv = list(contract["base_inference_args"])
     inference_argv = _set_runtime_option(inference_argv, "--json_path", str(source))
@@ -511,8 +516,8 @@ def _build_arm_payloads(
         _payload_summary,
         stable_transform_seed,
         transform_payload,
-        validate_donor_manifest,
     )
+    from .input_contract import select_donor_entry, validate_donor_bundle
 
     manager = infer_slotmem.RoleWiseSlotMemoryBank()
     manager.memory_bank = state.get("memory_bank", {}) or {}
@@ -539,17 +544,8 @@ def _build_arm_payloads(
         if donor_path is None or donor_manifest is None:
             raise ValueError("wrong arm requires both donor payload and donor manifest")
         manifest = json.loads(donor_manifest.read_text(encoding="utf-8"))
-        entries = manifest.get("pairs", manifest) if isinstance(manifest, dict) else manifest
-        if isinstance(entries, dict):
-            entries = [entries]
-        matches = [
-            entry for entry in entries
-            if str(entry.get("target_story_id")) == str(event.get("story_id"))
-            and str(entry.get("target_entity_uid")) == str(event.get("entity_uid"))
-        ]
-        if len(matches) != 1:
-            raise ValueError(f"donor manifest must select exactly one pair, found {len(matches)}")
-        entry = validate_donor_manifest(matches[0], event, donor_path)
+        validate_donor_bundle(event, donor_path, donor_manifest)
+        entry = select_donor_entry(manifest, event)
         saved = torch.load(donor_path, map_location="cpu", weights_only=False)
         donors = saved.get("payloads", {}) if saved.get("format") == "slotmem_donor_payload_v2" else saved
         selected_donor = donors[str(entry["payload_key"])]

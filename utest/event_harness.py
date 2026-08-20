@@ -435,6 +435,7 @@ def prepare_prefix(args: argparse.Namespace) -> int:
         args.platform_manifest,
         arm_seed=args.arm_seed,
         future_target_video=args.future_target_video,
+        future_target_manifest=args.future_target_manifest,
         timestep_indices=timestep_indices,
     )
     if bool(contract["code"]["dirty"]) and not bool(args.allow_dirty_source):
@@ -530,11 +531,16 @@ def dump_donor(args: argparse.Namespace) -> int:
 
     payload = torch.load(args.donor_payload, map_location="cpu", weights_only=False)
     keys = sorted(str(key) for key in payload.get("payloads", {}))
+    from .input_contract import payload_slot_shapes
+
     info = {
         "format": payload.get("format"),
         "payload_path": str(args.donor_payload.resolve()),
         "payload_sha256": sha256_file(args.donor_payload),
         "payload_keys": keys,
+        "payload_slot_shapes": {
+            key: payload_slot_shapes(payload["payloads"][key], key) for key in keys
+        },
         "event": contract["event"],
     }
     _write_json(output / "donor_payload_info.json", info)
@@ -575,6 +581,7 @@ def main() -> int:
     prepare.add_argument("--inference-args-file", type=Path)
     prepare.add_argument("--arm-seed", type=int, default=0)
     prepare.add_argument("--future-target-video", type=Path)
+    prepare.add_argument("--future-target-manifest", type=Path)
     prepare.add_argument("--timestep-indices", default="0,12,25,37,49")
     prepare.add_argument("--allow-dirty-source", action="store_true")
     prepare.add_argument("--python", default=sys.executable)

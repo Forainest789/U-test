@@ -14,7 +14,7 @@ def test_strict_runner_dry_run_writes_complete_command_chain(tmp_path: Path) -> 
         pytest.skip("Git Bash is not installed")
     repo = Path(__file__).resolve().parents[2]
     inputs = {}
-    for name in ("event", "target", "args", "platform", "donor", "donor_manifest"):
+    for name in ("event", "target", "teacher_manifest", "args", "platform", "donor", "donor_manifest"):
         path = tmp_path / f"{name}.json"
         path.write_text("{}", encoding="utf-8")
         inputs[name] = path
@@ -23,6 +23,7 @@ def test_strict_runner_dry_run_writes_complete_command_chain(tmp_path: Path) -> 
         **os.environ,
         "EVENT_JSON": str(inputs["event"]),
         "FUTURE_TARGET_VIDEO": str(inputs["target"]),
+        "FUTURE_TARGET_MANIFEST": str(inputs["teacher_manifest"]),
         "BASE_INFERENCE_ARGS": str(inputs["args"]),
         "PLATFORM_MANIFEST": str(inputs["platform"]),
         "DONOR_PAYLOAD": str(inputs["donor"]),
@@ -48,6 +49,7 @@ def test_strict_runner_dry_run_writes_complete_command_chain(tmp_path: Path) -> 
     assert [row["name"] for row in manifest["commands"]] == [
         "content-self-check",
         "qstar-self-check",
+        "input-contract-preflight",
         "prepare-prefix",
         "qstar-probe",
         "seven-rollouts",

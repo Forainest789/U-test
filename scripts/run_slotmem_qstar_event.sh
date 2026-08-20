@@ -5,6 +5,7 @@ set -euo pipefail
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 : "${EVENT_JSON:?set EVENT_JSON to the frozen recurrence event}"
 : "${FUTURE_TARGET_VIDEO:?set FUTURE_TARGET_VIDEO to an independent held-out target clip}"
+: "${FUTURE_TARGET_MANIFEST:?set FUTURE_TARGET_MANIFEST to its provenance manifest}"
 : "${BASE_INFERENCE_ARGS:?set BASE_INFERENCE_ARGS to validated inference_args.yaml}"
 : "${PLATFORM_MANIFEST:?set PLATFORM_MANIFEST to platform.manifest.json}"
 : "${DONOR_PAYLOAD:?set DONOR_PAYLOAD to a frozen v2 donor payload}"
@@ -16,6 +17,7 @@ normalize_path() {
 }
 EVENT_JSON="$(normalize_path "${EVENT_JSON}")"
 FUTURE_TARGET_VIDEO="$(normalize_path "${FUTURE_TARGET_VIDEO}")"
+FUTURE_TARGET_MANIFEST="$(normalize_path "${FUTURE_TARGET_MANIFEST}")"
 BASE_INFERENCE_ARGS="$(normalize_path "${BASE_INFERENCE_ARGS}")"
 PLATFORM_MANIFEST="$(normalize_path "${PLATFORM_MANIFEST}")"
 DONOR_PAYLOAD="$(normalize_path "${DONOR_PAYLOAD}")"
@@ -23,7 +25,7 @@ DONOR_MANIFEST="$(normalize_path "${DONOR_MANIFEST}")"
 EVENT_RUN_ROOT="$(normalize_path "${EVENT_RUN_ROOT}")"
 
 for required in \
-  "${EVENT_JSON}" "${FUTURE_TARGET_VIDEO}" "${BASE_INFERENCE_ARGS}" \
+  "${EVENT_JSON}" "${FUTURE_TARGET_VIDEO}" "${FUTURE_TARGET_MANIFEST}" "${BASE_INFERENCE_ARGS}" \
   "${PLATFORM_MANIFEST}" "${DONOR_PAYLOAD}" "${DONOR_MANIFEST}"; do
   [[ -f "${required}" ]] || { echo "[qstar] missing file: ${required}" >&2; exit 2; }
 done
@@ -72,6 +74,7 @@ log, out, status, dry, timesteps, exit_code = sys.argv[1:]
 log_path = pathlib.Path(log)
 commands = [json.loads(line) for line in log_path.read_text(encoding="utf-8").splitlines()] if log_path.exists() else []
 arms_path = pathlib.Path(out).parent / "arms" / "arm_commands.json"
+input_contract_path = pathlib.Path(out).parent / "input_contract.json"
 payload = {
     "schema_version": 1,
     "status": status if int(exit_code) == 0 else "failed",
@@ -82,6 +85,8 @@ payload = {
 }
 if arms_path.is_file():
     payload["resolved_arm_commands"] = json.loads(arms_path.read_text(encoding="utf-8"))
+if input_contract_path.is_file():
+    payload["input_contract"] = json.loads(input_contract_path.read_text(encoding="utf-8"))
 pathlib.Path(out).write_text(json.dumps(payload,indent=2,ensure_ascii=False),encoding="utf-8")
 ' "${COMMAND_LOG}" "${EVENT_RUN_ROOT}/run_manifest.json" "${RUN_STATUS}" "${DRY_RUN:-0}" "${QSTAR_TIMESTEP_INDICES}" "${exit_code}"
   rm -f "${COMMAND_LOG}"
@@ -92,6 +97,15 @@ trap finalize_manifest EXIT
 cd "${REPO_DIR}"
 run_step content-self-check "${PYTHON_BIN}" -m utest.content_audit --self-check
 run_step qstar-self-check "${PYTHON_BIN}" -m utest.qstar_probe --self-check
+run_step input-contract-preflight \
+  "${PYTHON_BIN}" -m utest.input_contract \
+  --event "${EVENT_JSON}" \
+  --donor "${DONOR_PAYLOAD}" \
+  --donor-manifest "${DONOR_MANIFEST}" \
+  --future-target-video "${FUTURE_TARGET_VIDEO}" \
+  --future-target-manifest "${FUTURE_TARGET_MANIFEST}" \
+  --arms-root "${EVENT_RUN_ROOT}/arms" \
+  --report "${EVENT_RUN_ROOT}/input_contract.json"
 
 PREPARE=(
   "${PYTHON_BIN}" -m utest.event_harness prepare-prefix
@@ -100,6 +114,7 @@ PREPARE=(
   --platform-manifest "${PLATFORM_MANIFEST}"
   --inference-args-file "${BASE_INFERENCE_ARGS}"
   --future-target-video "${FUTURE_TARGET_VIDEO}"
+  --future-target-manifest "${FUTURE_TARGET_MANIFEST}"
   --timestep-indices "${QSTAR_TIMESTEP_INDICES}"
   --arm-seed "${ARM_SEED:-0}"
 )
