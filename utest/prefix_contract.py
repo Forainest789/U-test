@@ -111,6 +111,8 @@ def build_contract(
     platform_manifest: Path,
     *,
     arm_seed: int = 0,
+    future_target_video: Path | None = None,
+    timestep_indices: Sequence[int] = (),
 ) -> dict:
     snapshot = snapshot.resolve()
     platform_manifest = platform_manifest.resolve()
@@ -134,9 +136,35 @@ def build_contract(
         "reference_path": str(reference) if reference else None,
         "reference_sha256": sha256_file(reference) if reference and reference.is_file() else None,
     }
+    qstar = None
+    if future_target_video is not None:
+        future_target_video = future_target_video.resolve()
+        if not future_target_video.is_file():
+            raise FileNotFoundError(f"future target video not found: {future_target_video}")
+        indices = [int(value) for value in timestep_indices]
+        if not indices or any(value < 0 for value in indices) or len(indices) != len(set(indices)):
+            raise ValueError("Q* timestep indices must be unique non-negative integers")
+        source_idx = int(event.get("source_chunk_idx", 0))
+        horizon = int(event.get("horizon", target_idx - source_idx))
+        if horizon != target_idx - source_idx or horizon <= 0:
+            raise ValueError("event horizon does not match source/target chunk indices")
+        inputs.update(
+            future_target_video_path=str(future_target_video),
+            future_target_video_sha256=sha256_file(future_target_video),
+        )
+        qstar = {
+            "source_chunk_idx": source_idx,
+            "target_chunk_idx": target_idx,
+            "horizon": horizon,
+            "timestep_indices": indices,
+        }
     runtime_contract = build_runtime_contract(event, inference_args)
-    return {
-        "schema_version": 1,
+    if event.get("target_seed") is not None and int(event["target_seed"]) != int(
+        runtime_contract["target_seed"]
+    ):
+        raise ValueError("event target_seed does not match actual target seed")
+    contract = {
+        "schema_version": 2 if qstar is not None else 1,
         "event": dict(event),
         "snapshot": {
             "path": str(snapshot),
@@ -153,6 +181,9 @@ def build_contract(
         "base_inference_args": [str(value) for value in inference_args],
         "arm_seed": int(arm_seed),
     }
+    if qstar is not None:
+        contract["qstar"] = qstar
+    return contract
 
 
 def validate_contract(

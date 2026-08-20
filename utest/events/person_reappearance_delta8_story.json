@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "story_id": "person_reappearance_delta8",
+  "global_prompt": "Cinematic live-action continuity study, natural skin texture, physically plausible movement, coherent geography, no captions or text overlays.",
+  "characters": {
+    "Mara": "A woman in her early thirties with a short copper bob, a teal scarf, a crescent-shaped scar above her left eyebrow, and a mustard raincoat.",
+    "Niko": "A tall man with close-cropped black hair wearing a charcoal mechanic jacket.",
+    "Iris": "A woman with long auburn hair wearing a rust-coloured coat and a navy wool hat.",
+    "Tomas": "An older street vendor with silver hair, round glasses, and a green apron."
+  },
+  "chunks": [
+    {
+      "chunk_idx": 0,
+      "content": "Medium close-up at a rainy tram stop: Mara turns toward camera, lowers her umbrella, and checks a brass pocket watch. Her short copper bob, teal scarf, crescent-shaped scar above her left eyebrow, and mustard raincoat are clearly visible; slow push-in, soft overcast daylight.",
+      "character_list": ["Mara"]
+    },
+    {
+      "chunk_idx": 1,
+      "content": "Wide tracking shot beside the tram depot: Niko rolls a bicycle through wet reflections while commuters cross behind him; the camera moves left to right and the established woman is absent.",
+      "character_list": ["Niko"]
+    },
+    {
+      "chunk_idx": 2,
+      "content": "Inside a moving tram, Iris stands near the rear doors and folds a city map. Her long auburn hair and rust-coloured coat create a deliberately similar colour distractor; handheld aisle composition.",
+      "character_list": ["Iris"]
+    },
+    {
+      "chunk_idx": 3,
+      "content": "Low-angle exterior at a market arcade: Tomas closes a striped awning as rainwater spills from its edge; pedestrians pass in deep background and no earlier principal character is present.",
+      "character_list": ["Tomas"]
+    },
+    {
+      "chunk_idx": 4,
+      "content": "Overhead view of Niko repairing a loose bicycle chain under a station canopy, with rapid hand movement and a train sliding through the far background.",
+      "character_list": ["Niko"]
+    },
+    {
+      "chunk_idx": 5,
+      "content": "Static profile composition inside a small cafe: Iris removes her navy hat, places the folded map beside a cup, and looks through a fogged window; warm tungsten light contrasts the rainy exterior.",
+      "character_list": ["Iris"]
+    },
+    {
+      "chunk_idx": 6,
+      "content": "Long-lens street view: Tomas hands a paper parcel to Niko across the market counter while umbrellas sweep through foreground occlusion; neither looks toward camera.",
+      "character_list": ["Tomas", "Niko"]
+    },
+    {
+      "chunk_idx": 7,
+      "content": "Fast lateral dolly along the departing tram: Iris is briefly visible through a window, then disappears behind repeating metal pillars; cool dusk light and strong motion parallax.",
+      "character_list": ["Iris"]
+    },
+    {
+      "chunk_idx": 8,
+      "content": "From a high three-quarter angle on the opposite platform, Mara re-enters at dusk, runs two steps, catches the closing tram door with one hand, then looks up toward camera; dynamic wide composition with rain and moving commuters.",
+      "character_list": ["Mara"]
+    }
+  ]
+}

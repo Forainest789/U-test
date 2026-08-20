@@ -312,6 +312,13 @@ def _load_probe_context(args):
     future_target = args.future_target_video.resolve()
     if not future_target.is_file():
         raise FileNotFoundError(f"future target video not found: {future_target}")
+    frozen_qstar = contract.get("qstar")
+    if not isinstance(frozen_qstar, Mapping):
+        raise ValueError("prefix contract has no frozen Q* target; recreate it with --future-target-video")
+    if contract.get("inputs", {}).get("future_target_video_sha256") != _sha256_file(future_target):
+        raise ValueError("future_target_video_sha256_mismatch")
+    if list(frozen_qstar.get("timestep_indices", [])) != _parse_timestep_indices(args.timestep_indices):
+        raise ValueError("timestep_indices_mismatch")
     arms_root = (args.arms_root.resolve() if args.arms_root else prefix.parent / "arms").resolve()
     try:
         future_target.relative_to(arms_root)

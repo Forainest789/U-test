@@ -127,7 +127,18 @@ The normalized metric file contains `subject_consistency` and optional bootstrap
 {"subject_consistency": 0.8771, "ci_low": 0.861, "ci_high": 0.889}
 ```
 
-## Fixed-prefix five-arm event test
+## Fixed-prefix memory tests
+
+`utest/events/person_reappearance_delta8_story.json` is the long person-memory fixture:
+chunk 0 establishes Mara, chunks 1–7 remove her while varying similar-person, action,
+camera, and lighting distractors, and chunk 8 brings her back in a new action and wide
+composition. Its paired event is `utest/events/person_reappearance_delta8.json`. Replace
+the event's `reference_path` with the frozen chunk-0 reference on the execution host and
+supply an independently acquired 81-frame chunk-8 teacher video; an arm rollout is not a
+valid teacher target. The existing sample-5 chunk-0→chunk-5 recurrence remains the short
+`Delta=5` pilot, while this fixture is the `Delta=8` primary event.
+
+### Legacy fixed-prefix five-arm rollout
 
 Copy one event from `e0.json` into its own JSON file. Use a different eligible story to
 prepare a donor prefix, then dump the native correct payload:

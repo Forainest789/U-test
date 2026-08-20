@@ -422,9 +422,24 @@ def prepare_prefix(args: argparse.Namespace) -> int:
                 + json.dumps(writer, ensure_ascii=False),
                 flush=True,
             )
-    contract = build_contract(
-        event, snapshot, inference_args, args.platform_manifest, arm_seed=args.arm_seed
+    timestep_indices = tuple(
+        int(value.strip())
+        for value in str(args.timestep_indices).split(",")
+        if value.strip()
     )
+    contract = build_contract(
+        event,
+        snapshot,
+        inference_args,
+        args.platform_manifest,
+        arm_seed=args.arm_seed,
+        future_target_video=args.future_target_video,
+        timestep_indices=timestep_indices,
+    )
+    if bool(contract["code"]["dirty"]) and not bool(args.allow_dirty_source):
+        raise RuntimeError(
+            "source tree is dirty; commit the experiment code or pass --allow-dirty-source for development only"
+        )
     contract["event_json"] = str(event_copy)
     _write_json(output / "prefix_contract.json", contract)
     os.chmod(snapshot, stat.S_IREAD)
@@ -555,6 +570,9 @@ def main() -> int:
     prepare.add_argument("--platform-manifest", type=Path, required=True)
     prepare.add_argument("--inference-args-file", type=Path)
     prepare.add_argument("--arm-seed", type=int, default=0)
+    prepare.add_argument("--future-target-video", type=Path)
+    prepare.add_argument("--timestep-indices", default="0,12,25,37,49")
+    prepare.add_argument("--allow-dirty-source", action="store_true")
     prepare.add_argument("--python", default=sys.executable)
     prepare.add_argument("inference_args", nargs=argparse.REMAINDER)
     prepare.set_defaults(handler=prepare_prefix)

@@ -89,3 +89,64 @@ def test_output_and_resume_paths_are_not_frozen_generation_args(tmp_path: Path) 
     assert "start_chunk_idx" not in frozen
     assert "max_chunks" not in frozen
     assert frozen["cfg_scale"] == "5.0"
+
+
+def test_qstar_contract_freezes_future_target_horizon_and_timestep_grid(tmp_path: Path) -> None:
+    snapshot, manifest, event, args = _fixture(tmp_path)
+    future = tmp_path / "future.mp4"
+    future.write_bytes(b"held-out-teacher")
+    event["source_chunk_idx"] = 0
+    event["horizon"] = 1
+
+    contract = build_contract(
+        event,
+        snapshot,
+        args,
+        manifest,
+        future_target_video=future,
+        timestep_indices=(0, 12, 25, 37, 49),
+    )
+
+    assert contract["inputs"]["future_target_video_sha256"] == sha256_file(future)
+    assert contract["qstar"]["horizon"] == 1
+    assert contract["qstar"]["timestep_indices"] == [0, 12, 25, 37, 49]
+
+
+def test_qstar_contract_rejects_missing_future_target(tmp_path: Path) -> None:
+    snapshot, manifest, event, args = _fixture(tmp_path)
+    missing = tmp_path / "missing.mp4"
+
+    try:
+        build_contract(
+            event,
+            snapshot,
+            args,
+            manifest,
+            future_target_video=missing,
+            timestep_indices=(0,),
+        )
+    except FileNotFoundError as error:
+        assert "future target" in str(error)
+    else:
+        raise AssertionError("missing future target must fail")
+
+
+def test_long_reappearance_fixture_has_one_establishment_and_one_return() -> None:
+    root = Path(__file__).resolve().parents[2]
+    event = json.loads(
+        (root / "utest/events/person_reappearance_delta8.json").read_text(encoding="utf-8")
+    )
+    story = json.loads(
+        (root / "utest/events/person_reappearance_delta8_story.json").read_text(encoding="utf-8")
+    )
+    chunks = story["chunks"]
+    target = event["character_name"]
+
+    assert len(chunks) == 9
+    assert event["source_chunk_idx"] == 0
+    assert event["target_chunk_idx"] == 8
+    assert event["horizon"] == 8
+    assert target in chunks[0]["character_list"]
+    assert all(target not in chunk["character_list"] for chunk in chunks[1:8])
+    assert target in chunks[8]["character_list"]
+    assert chunks[0]["content"] != chunks[8]["content"]
