@@ -1577,7 +1577,8 @@ class ReferenceInferenceRuntime:
                                 f"attn_entropy={layer_stats.get('attn_entropy')} "
                                 f"layer_scale={layer_stats.get('applied_layer_scale')} "
                                 f"raw_delta_norm={layer_stats.get('raw_delta_norm')} "
-                                f"effective_delta_norm={layer_stats.get('effective_delta_norm')}",
+                                f"effective_delta_norm={layer_stats.get('effective_delta_norm')} "
+                                f"host_token_norm={layer_stats.get('host_token_norm')}",
                                 flush=True,
                             )
 

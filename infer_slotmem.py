@@ -2947,10 +2947,14 @@ class SlotMemInferenceEngine(ReferenceInferenceEngine):
                     with torch.no_grad():
                         raw_delta_norm = float((x_after_sparse - x_before_sparse).detach().float().norm(dim=-1).mean().item())
                         effective_delta_norm = float((x_mid - x_before_sparse).detach().float().norm(dim=-1).mean().item())
+                        # ponytail: the delta alone cannot say whether memory has any authority
+                        # over x; the ratio to the host token norm can.
+                        host_token_norm = float(x_before_sparse.detach().float().norm(dim=-1).mean().item())
                     character_attn_stats = dict(character_attn_stats) if isinstance(character_attn_stats, dict) else {}
                     character_attn_stats["applied_layer_scale"] = float(total_layer_scale)
                     character_attn_stats["raw_delta_norm"] = raw_delta_norm
                     character_attn_stats["effective_delta_norm"] = effective_delta_norm
+                    character_attn_stats["host_token_norm"] = host_token_norm
                 input_x2 = modulate(block_module.norm2(x_mid), shift_mlp, scale_mlp)
                 x_out_local = x_mid + gate_mlp * block_module.ffn(input_x2)
             return x_out_local, character_attn_stats

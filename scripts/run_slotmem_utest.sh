@@ -10,7 +10,8 @@
 #   1  preflight     the target is inside character_list[:cap].         seconds
 #   2  prefix        extend by one chunk, then freeze a new contract.   ~1 chunk
 #   3  arms          correct no_memory zero random wrong native.        ~1 chunk each
-#   4  report        gates, hashes, effect sizes, wall clock.           seconds
+#   4  report        gates, hashes, injection norms, wall clock.        seconds
+#   5  utility       decoded outcome per arm, signed against no_memory.   minutes
 #
 # The frozen platform is not touched: max_memory_characters stays at whatever the contract
 # froze, character_list is never reordered, and the target is chosen to be one the reader
@@ -39,6 +40,11 @@ ARMS=${ARMS:-"correct no_memory zero random wrong native"}
 # The contracts that froze each story's prefix. Override if they live elsewhere.
 PREFIX_CONTRACT=${PREFIX_CONTRACT:-$UTEST/runs/narrastream_build/${TARGET_STORY}_prefix_20260814_152943/arms/prefix_contract.json}
 DONOR_CONTRACT=${DONOR_CONTRACT:-}
+
+# Where the decoded-outcome scorer lives. It imports fumd.eval (identity, quality,
+# labelling), which is not in this repo, so step 5 is skipped with the command to run by
+# hand when FUMD is unset. Videos and queue_summary.json are the whole interface.
+FUMD=${FUMD:-}
 
 # Whole-module CPU offload between chunks. Off is the 80GB fast profile; set to 1 for the
 # low-VRAM one. It moves weights, not numbers, so it does not change any arm's output.
@@ -245,12 +251,15 @@ for arm in summary["arms"]:
           f"{s['writer_path_reads']:>7} {s['off_target_chunk_skips']:>6} "
           f"{'OK' if s['intervention_effective'] else 'FAIL':>6}")
 
-print(f"\n{'arm':<10} {'sha256(video)':<20} {'role_norm':>10} {'plain_norm':>11} {'ratio':>8}  finished")
-print("-" * 88)
+# authority = how far memory moves a video token, relative to that token's own norm.
+# role/plain is a head-balance diagnostic and says nothing about that: an arm can differ
+# in head balance while the injection is too small to change any decoded frame.
+print(f"\n{'arm':<10} {'sha256(video)':<20} {'role_norm':>10} {'plain_norm':>11} {'ratio':>8} {'authority':>10}  finished")
+print("-" * 100)
 for arm in summary["arms"]:
     sha = summary["outputs"].get(arm, {}).get("sha256", "?")[:16]
     eff = run / "arms" / arm / "efficiency.json"
-    role = plain = ratio = "-"
+    role = plain = ratio = authority = "-"
     when = ""
     if eff.exists():
         d = json.loads(eff.read_text(encoding="utf-8"))
@@ -259,11 +268,44 @@ for arm in summary["arms"]:
         if isinstance(r, (int, float)) and isinstance(p, (int, float)):
             role, plain = f"{r:.6f}", f"{p:.6f}"
             ratio = f"{r / p:.6f}" if p else "inf"
+        dn, hn = st.get("raw_delta_norm"), st.get("host_token_norm")
+        if isinstance(dn, (int, float)) and isinstance(hn, (int, float)) and hn:
+            authority = f"{dn / hn:.3e}"
         # File mtime, not total_elapsed_s: that field is polluted across a resume.
         when = datetime.fromtimestamp(eff.stat().st_mtime).strftime("%m-%d %H:%M")
-    print(f"{arm:<10} {sha:<20} {role:>10} {plain:>11} {ratio:>8}  {when}")
+    print(f"{arm:<10} {sha:<20} {role:>10} {plain:>11} {ratio:>8} {authority:>10}  {when}")
 
 print("\nvideos:")
 for arm, v in summary["outputs"].items():
     print(f"  {arm:<10} {v['video']}")
 REPORT
+
+# ---------------------------------------------------------------- 5. utility
+say "5. decoded outcome per arm"
+# The identity anchor is the target's first-appearance chunk, which lives in the ORIGINAL
+# prefix generation, not the extension: every arm inherits it through the shared prefix, so
+# it is identical across arms by construction and cannot itself carry an arm difference.
+REFERENCE=$("$PYTHON" - "$CONTRACT" <<'REF'
+import json, sys
+from pathlib import Path
+
+contract = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+argv = contract["base_inference_args"]
+out = Path(argv[argv.index("--output_path") + 1]) if "--output_path" in argv else None
+first = int((contract.get("event") or {}).get("memory_chunk_idx", 0))
+print(out / f"chunk_{first:03d}.mp4" if out else "")
+REF
+)
+if [ -z "$FUMD" ]; then
+  echo "FUMD unset, so no scoring here. When ready, from the videomem checkout:"
+  echo "  python scripts/slotmem_arm_utility.py --run-dir $RUN/arms --reference $REFERENCE --out $RUN/arms/utility.json"
+elif [ ! -f "$REFERENCE" ]; then
+  echo "identity anchor $REFERENCE is missing; scoring skipped." >&2
+  echo "It is the target's first-appearance chunk from the original prefix generation." >&2
+else
+  "$PYTHON" "$FUMD/scripts/slotmem_arm_utility.py" --self-check
+  "$PYTHON" "$FUMD/scripts/slotmem_arm_utility.py" \
+    --run-dir "$RUN/arms" --reference "$REFERENCE" --out "$RUN/arms/utility.json" \
+    ${DELTA_ID:+--delta-id "$DELTA_ID"} \
+    ${DYNAMIC_DEGREE_FLOOR:+--dynamic-degree-floor "$DYNAMIC_DEGREE_FLOOR"}
+fi

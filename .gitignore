@@ -28,6 +28,7 @@
 /tmp*/
 /tmp_*/
 /multi_agent_validation_*/
+/analysis_*.png
 
 # Local benchmark repositories cloned for evaluation
 /bench/*
