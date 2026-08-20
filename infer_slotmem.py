@@ -3029,7 +3029,13 @@ def parse_args():
     parser.add_argument("--projector_bottleneck", type=int, default=256)
     parser.add_argument("--use_projector", action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument("--latent_dim", type=int, default=16)
-    parser.add_argument("--offload_models", action=argparse.BooleanOptionalAction, default=True)
+    parser.add_argument(
+        "--offload_models",
+        action=argparse.BooleanOptionalAction,
+        default=_env_flag("SLOTMEM_OFFLOAD_MODELS", False),
+        help="CPU-offload whole modules between chunks. Defaults to off for the 80GB fast profile; "
+        "set SLOTMEM_OFFLOAD_MODELS=1 or pass --offload_models for the low-VRAM profile.",
+    )
     parser.add_argument("--defer_lora_until_after_first_chunk", action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument(
         "--dual_expert_load_mode",

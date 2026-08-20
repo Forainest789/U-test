@@ -15,6 +15,7 @@ if command -v conda >/dev/null 2>&1 && [[ -n "${UTEST_ENV:-}" ]]; then
   conda activate "${UTEST_ENV}"
 fi
 PYTHON_BIN="${PYTHON_BIN:-python3}"
+export SLOTMEM_OFFLOAD_MODELS="${SLOTMEM_OFFLOAD_MODELS:-0}"
 for required in "${EVENT_JSON}" "${BASE_INFERENCE_ARGS}" "${PLATFORM_MANIFEST}" "${DONOR_PAYLOAD}" "${DONOR_MANIFEST}"; do
   [[ -f "${required}" ]] || { echo "[event] missing file: ${required}" >&2; exit 2; }
 done

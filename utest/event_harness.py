@@ -51,9 +51,10 @@ def build_prefix_inference_args(
     else:
         result = _set_option(result, "--ref_image_path", None)
     result = _set_option(result, "--max_chunks", str(int(event["target_chunk_idx"])))
-    result = _set_option(
-        result, "--target_character", str(event.get("character_name") or "") or None
-    )
+    # ponytail: never pin the target to the front of character_list. That reorders the
+    # frozen platform's read window for every chunk; preflight picks a naturally-readable
+    # event instead. Clear it explicitly so an inherited argv cannot smuggle it back in.
+    result = _set_option(result, "--target_character", None)
     result = _set_option(result, "--resume_state_path", None)
     result = _set_option(result, "--start_chunk_idx", None)
     result = _set_option(result, "--target_seed_override", None)
@@ -96,6 +97,14 @@ def build_arm_commands(
     for run_name, arm in scheduled:
         arm_dir = (output_root / run_name).resolve()
         inference_args = list(contract["base_inference_args"])
+        inference_args = _set_option(inference_args, "--offload_models", None)
+        inference_args = _set_option(inference_args, "--no-offload_models", None)
+        offload_models = os.environ.get("SLOTMEM_OFFLOAD_MODELS", "0").strip().lower()
+        inference_args.append(
+            "--offload_models"
+            if offload_models in ("1", "true", "yes", "on")
+            else "--no-offload_models"
+        )
         inference_args = _set_option(inference_args, "--resume_state_path", snapshot)
         inference_args = _set_option(
             inference_args, "--start_chunk_idx", str(target_idx)
@@ -406,6 +415,16 @@ def run_arms(args: argparse.Namespace) -> int:
         _run(command, output / name / "run.log")
         if sha256_file(snapshot) != expected_hash:
             raise RuntimeError(f"snapshot changed during {name}")
+        if name == "no_memory":
+            audit_path = output / "no_memory" / "audit.json"
+            if audit_path.is_file():
+                audit = json.loads(audit_path.read_text(encoding="utf-8"))
+                if int(audit.get("target_read_hits", 0)) <= 0:
+                    raise RuntimeError(
+                        "no_memory target read missed; the target character was not addressed "
+                        "at target_chunk_idx, so the five-arm comparison would be invalid. "
+                        "Pick an event whose target character is actually read at the target chunk."
+                    )
     report = validate_event_run(output)
     return 0 if report["status"] == "passed" else 2
 

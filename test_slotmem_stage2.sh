@@ -37,6 +37,7 @@ DUAL_EXPERT_LOAD_MODE="${DUAL_EXPERT_LOAD_MODE:-active}"
 DUAL_EXPERT_OFFLOAD_DTYPE="${DUAL_EXPERT_OFFLOAD_DTYPE:-bfloat16}"
 DUAL_EXPERT_VRAM_LIMIT="${DUAL_EXPERT_VRAM_LIMIT:--1}"
 DUAL_EXPERT_MANAGE_AUX_MODELS="${DUAL_EXPERT_MANAGE_AUX_MODELS:-0}"
+OFFLOAD_MODELS="${OFFLOAD_MODELS:-0}"
 OUTPUT_DIR="${OUTPUT_ROOT}"
 if [[ -n "${EXP_PREFIX}" ]]; then
   OUTPUT_DIR="${OUTPUT_ROOT}/${EXP_PREFIX}"
@@ -168,6 +169,15 @@ case "${DUAL_EXPERT_MANAGE_AUX_MODELS,,}" in
     ;;
   *)
     cmd+=(--dual_expert_manage_aux_models)
+    ;;
+esac
+
+case "${OFFLOAD_MODELS,,}" in
+  1|true|on|yes)
+    cmd+=(--offload_models)
+    ;;
+  *)
+    cmd+=(--no-offload_models)
     ;;
 esac
 
