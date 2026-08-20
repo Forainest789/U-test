@@ -936,7 +936,8 @@ class ReferenceInferenceRuntime:
     def generate_chunk(self, prompt, memory_tokens=None, memory_bank_tokens=None, memory_bank_percents=None, memory_bank_token_meta=None,
                            memory_token_lengths_per_character=None,
                            ref_images=None, random_ref_frame=None, seed=42,
-                           online_memory_chars=None, online_memory_bank_percents=None):
+                           online_memory_chars=None, online_memory_bank_percents=None,
+                           teacher_forced_probe=None):
             """
             Generate a chunk of video.
             memory_token_lengths_per_character: list of int, token count per character (for segment_embed).
@@ -1013,11 +1014,32 @@ class ReferenceInferenceRuntime:
             self.pipe.dit.to(self.device)
             self.pipe.scheduler.set_timesteps(self.args.num_inference_steps)
 
-            gen = torch.Generator(device=self.device).manual_seed(seed)
             shape = (1, 16, (self.args.context_frames - 1) // 4 + 1,
                      self.args.height // 8, self.args.width // 8)
             latent_dtype = torch.float32 if bool(getattr(self.args, "inference_latents_fp32", True)) else self.dtype
-            latents = torch.randn(shape, generator=gen, device=self.device, dtype=latent_dtype)
+            if teacher_forced_probe is None:
+                gen = torch.Generator(device=self.device).manual_seed(seed)
+                latents = torch.randn(shape, generator=gen, device=self.device, dtype=latent_dtype)
+                denoise_schedule = list(enumerate(self.pipe.scheduler.timesteps))
+            else:
+                if not isinstance(teacher_forced_probe, dict):
+                    raise TypeError("teacher_forced_probe must be a dict")
+                timestep_index = int(teacher_forced_probe["timestep_index"])
+                if timestep_index < 0 or timestep_index >= len(self.pipe.scheduler.timesteps):
+                    raise IndexError(
+                        f"teacher-forced timestep index {timestep_index} outside "
+                        f"[0, {len(self.pipe.scheduler.timesteps)})"
+                    )
+                noisy_latents = teacher_forced_probe.get("noisy_latents")
+                if not isinstance(noisy_latents, torch.Tensor):
+                    raise TypeError("teacher_forced_probe.noisy_latents must be a tensor")
+                if tuple(noisy_latents.shape) != tuple(shape):
+                    raise ValueError(
+                        f"teacher-forced noisy latent shape {tuple(noisy_latents.shape)} "
+                        f"does not match generation shape {tuple(shape)}"
+                    )
+                latents = noisy_latents.to(device=self.device, dtype=latent_dtype).clone()
+                denoise_schedule = [(timestep_index, self.pipe.scheduler.timesteps[timestep_index])]
 
             # 4. Denoising loop
             denoising_latents = latents.clone()
@@ -1084,7 +1106,7 @@ class ReferenceInferenceRuntime:
             cached_query_role_boxes = None
             cached_query_feature_payload = None
 
-            for i, t in enumerate(tqdm(self.pipe.scheduler.timesteps, desc="  Denoising")):
+            for i, t in tqdm(denoise_schedule, desc="  Denoising"):
                 t = t.to(self.device).unsqueeze(0)
                 if hasattr(self, "_set_inference_noise_domain_from_timestep"):
                     self._set_inference_noise_domain_from_timestep(t)
@@ -1279,6 +1301,16 @@ class ReferenceInferenceRuntime:
                     )
 
                 noise_pred = noise_pred_uncond + self.args.cfg_scale * (noise_pred_cond - noise_pred_uncond)
+                if teacher_forced_probe is not None:
+                    return {
+                        "prediction": noise_pred,
+                        "timestep_index": int(i),
+                        "timestep": float(t.detach().float().reshape(-1)[0].item()),
+                        "memory_read_hit": bool(use_memory_path),
+                        "sparse_role_memory_stats": getattr(self, "_last_sparse_role_memory_stats", {}),
+                        "sparse_role_memory_stats_by_layer": getattr(self, "_last_sparse_role_memory_stats_by_layer", {}),
+                        "writer_stats": getattr(self, "_last_jigsaw_stage2_writer_stats", {}),
+                    }
                 denoising_latents = self.pipe.scheduler.step(noise_pred, t[0], denoising_latents)
 
                 if mapping_recorder is not None and len(mapping_recorder) > 0:

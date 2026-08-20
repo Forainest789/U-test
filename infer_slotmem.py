@@ -3015,7 +3015,8 @@ def _populate_slotmem_internal_aliases(args):
     return args
 
 
-def parse_args():
+def parse_args(argv=None):
+    actual_argv = list(sys.argv[1:] if argv is None else argv)
     parser = argparse.ArgumentParser(description="SlotMem Wan2.2 memory inference")
     parser.add_argument("--ckpt_dir", type=str, default="/models/Wan2.2-I2V-A14B")
     parser.add_argument("--train_noise_domain", type=str, default="low_noise", choices=["low_noise", "high_noise"])
@@ -3236,7 +3237,7 @@ def parse_args():
             "full-buffer chunk. Generated frames are still used for conditioning and online memory."
         ),
     )
-    args = _populate_slotmem_internal_aliases(parser.parse_args())
+    args = _populate_slotmem_internal_aliases(parser.parse_args(actual_argv))
     smoke_chunk_idx = int(getattr(args, "smoke_stop_after_chunk_idx", -1))
     smoke_step_idx = int(getattr(args, "smoke_stop_after_denoise_step", -1))
     if smoke_chunk_idx >= 0:
@@ -3256,7 +3257,7 @@ def parse_args():
             parser.error("--save_only_full_buffer_target requires --stop_after_first_full_buffer")
         if str(getattr(args, "full_buffer_stop_mode", "before_generate")) != "before_generate":
             parser.error("--save_only_full_buffer_target currently requires --full_buffer_stop_mode before_generate")
-    if "--num_motion_frames" in sys.argv and "--num_overlap_frame" in sys.argv:
+    if "--num_motion_frames" in actual_argv and "--num_overlap_frame" in actual_argv:
         parser.error("use only one motion-frame interface: --num_overlap_frame with --num_motion_latent, or --num_motion_frames alone")
     if _memory_encoder_enabled(getattr(args, "jigsaw_extra_encoder_mode", "off")):
         wide_layers = _jigsaw_parse_layer_list(getattr(args, "jigsaw_extra_encoder_layers", "0-15"))

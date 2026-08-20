@@ -16,6 +16,7 @@ from utest.qstar import (
 from utest.qstar_probe import (
     ProbeCell,
     evaluate_probe_cell,
+    prepare_flow_cell,
     validate_probe_runtime,
     write_probe_outputs,
 )
@@ -130,3 +131,28 @@ def test_probe_runtime_rejects_stale_prompt_and_seed() -> None:
         validate_probe_runtime(frozen, {**frozen, "target_prompt_sha256": "prompt-b"})
     with pytest.raises(ValueError, match="target_seed_mismatch"):
         validate_probe_runtime(frozen, {**frozen, "target_seed": 99})
+
+
+def test_flow_cell_uses_scheduler_targets_without_advancing_sampler() -> None:
+    class FakeScheduler:
+        timesteps = [900.0, 500.0]
+
+        def __init__(self):
+            self.calls = []
+
+        def add_noise(self, clean, noise, timestep):
+            self.calls.append(("add_noise", timestep))
+            return clean + noise
+
+        def training_target(self, clean, noise, timestep):
+            self.calls.append(("training_target", timestep))
+            return noise - clean
+
+        def step(self, *args):
+            raise AssertionError("teacher-forced probe must not advance the sampler")
+
+    scheduler = FakeScheduler()
+    noisy, target, timestep = prepare_flow_cell(scheduler, 2.0, 5.0, 1)
+
+    assert (noisy, target, timestep) == (7.0, 3.0, 500.0)
+    assert scheduler.calls == [("add_noise", 500.0), ("training_target", 500.0)]
