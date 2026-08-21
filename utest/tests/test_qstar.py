@@ -17,6 +17,7 @@ from utest.qstar_probe import (
     ProbeCell,
     evaluate_probe_cell,
     prepare_flow_cell,
+    validate_measured_injection,
     validate_probe_runtime,
     write_probe_outputs,
 )
@@ -131,6 +132,24 @@ def test_probe_runtime_rejects_stale_prompt_and_seed() -> None:
         validate_probe_runtime(frozen, {**frozen, "target_prompt_sha256": "prompt-b"})
     with pytest.raises(ValueError, match="target_seed_mismatch"):
         validate_probe_runtime(frozen, {**frozen, "target_seed": 99})
+
+
+def test_present_payload_requires_measured_sparse_injection() -> None:
+    disabled = {
+        "sparse_role_memory_stats_by_layer": {
+            "15": {"enabled": 0.0, "selected_memory_tokens": 0, "effective_delta_norm": 0.0}
+        }
+    }
+    with pytest.raises(ValueError, match="measured sparse injection is absent"):
+        validate_measured_injection("correct", True, disabled)
+
+    measured = {
+        "sparse_role_memory_stats_by_layer": {
+            "15": {"enabled": 1.0, "selected_memory_tokens": 64, "effective_delta_norm": 0.0125}
+        }
+    }
+    assert validate_measured_injection("correct", True, measured) == pytest.approx(0.0125)
+    assert validate_measured_injection("no_memory", False, disabled) == 0.0
 
 
 def test_flow_cell_uses_scheduler_targets_without_advancing_sampler() -> None:

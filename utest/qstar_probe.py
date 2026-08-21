@@ -119,6 +119,31 @@ def validate_probe_runtime(frozen: Mapping, actual: Mapping) -> None:
         raise ValueError(",".join(errors))
 
 
+def validate_measured_injection(run_name: str, target_payload_present: bool, result: Mapping) -> float:
+    """Return the measured sparse delta, or fail when a present target payload was bypassed."""
+    if not target_payload_present or str(run_name) in {"no_memory", "native"}:
+        return 0.0
+    by_layer = result.get("sparse_role_memory_stats_by_layer", {})
+    measured = []
+    if isinstance(by_layer, Mapping):
+        for stats in by_layer.values():
+            if not isinstance(stats, Mapping):
+                continue
+            try:
+                enabled = float(stats.get("enabled", 0.0) or 0.0)
+                selected = float(stats.get("selected_memory_tokens", 0.0) or 0.0)
+                delta = float(stats.get("effective_delta_norm", 0.0) or 0.0)
+            except (TypeError, ValueError) as exc:
+                raise ValueError(f"{run_name}: measured sparse injection is non-finite") from exc
+            if not all(math.isfinite(value) for value in (enabled, selected, delta)):
+                raise ValueError(f"{run_name}: measured sparse injection is non-finite")
+            if enabled > 0.0 and selected > 0.0 and delta > 0.0:
+                measured.append(delta)
+    if not measured:
+        raise ValueError(f"{run_name}: target payload present but measured sparse injection is absent")
+    return max(measured)
+
+
 def prepare_flow_cell(scheduler, clean_target, noise, timestep_index: int):
     """Prepare one immutable flow-matching cell without advancing the sampler."""
     timestep_index = int(timestep_index)
@@ -676,16 +701,22 @@ def run_production_probe(args) -> int:
             },
         )
         stats = result.get("sparse_role_memory_stats", {})
+        injection_delta_norm = validate_measured_injection(
+            run_name,
+            bool(bundle["target_read_hit"]),
+            result,
+        )
         summary = bundle["target_payload_summary"]
         return {
             "prediction": result["prediction"].detach().cpu(),
             "memory_read_hit": bool(bundle["target_read_hit"]),
-            "injection_delta_norm": float(stats.get("role_head_out_norm", 0.0) or 0.0),
+            "injection_delta_norm": injection_delta_norm,
             "payload_sha256": bundle["target_payload_sha256"],
             "payload_layers": int(summary.get("layers", 0) or 0),
             "payload_slots": int(summary.get("slots", 0) or 0),
             "diagnostics": {
                 "sparse_role_memory_stats": stats,
+                "sparse_role_memory_stats_by_layer": result.get("sparse_role_memory_stats_by_layer", {}),
                 "writer_stats": result.get("writer_stats", {}),
             },
         }

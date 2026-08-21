@@ -1160,7 +1160,25 @@ class ReferenceInferenceRuntime:
                         memory_bank_percents=memory_bank_percents,
                         timestep=t,
                     )
-                    if selection_mode == 'layer7_single':
+                    if teacher_forced_probe is not None and selection_mode != 'layer7_single':
+                        current_query_role_boxes, current_query_feature_payload = self._prepare_teacher_forced_query_payload(
+                            noisy_latents=denoising_latents,
+                            timestep=t,
+                            prompt=prompt,
+                            role_ids=probe_role_ids,
+                            cond_context=prompt_emb['context'],
+                            uncond_context=neg_emb['context'],
+                            image_emb_for_denoising=image_emb_for_denoising,
+                            extra_input=extra_input,
+                        )
+                        if isinstance(current_query_role_boxes, dict) and len(current_query_role_boxes) > 0:
+                            active_query_role_boxes = current_query_role_boxes
+                            cached_query_role_boxes = current_query_role_boxes
+                            prev_step_role_boxes = dict(current_query_role_boxes)
+                        if isinstance(current_query_feature_payload, dict) and len(current_query_feature_payload) > 0:
+                            active_query_feature_payload = current_query_feature_payload
+                            cached_query_feature_payload = current_query_feature_payload
+                    elif selection_mode == 'layer7_single':
                         per_char_step_maps, probe_ordered_roles, probe_layer_tokens = self._run_character_semantic_probe(
                             noisy_latents=denoising_latents,
                             timestep=t,

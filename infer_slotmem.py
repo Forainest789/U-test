@@ -1854,9 +1854,9 @@ class SlotMemInferenceEngine(ReferenceInferenceEngine):
 
     @torch.no_grad()
     def _run_character_semantic_probe(self, noisy_latents, timestep, prompt, role_ids, cond_context, uncond_context, image_emb_for_denoising, extra_input=None):
-        # This helper intentionally matches only the layer7_single probe mode.
-        # Non-single-layer role selection keeps using the inherited multi-layer
-        # extractor path in generate_chunk().
+        # Multi-step inference normally captures these features during the
+        # preceding step. A one-step teacher-forced probe has no preceding
+        # step, so it also uses this explicit prepass.
         del uncond_context
         probe_char_configs, probe_ordered_roles = self._prepare_character_semantic_probe_configs(prompt=prompt, role_ids=role_ids)
         if len(probe_char_configs) <= 0:
@@ -1934,6 +1934,39 @@ class SlotMemInferenceEngine(ReferenceInferenceEngine):
                 captured_layer_tokens = None
             probe_extractor.remove_hooks()
         return per_char_step_maps, probe_ordered_roles, captured_layer_tokens
+
+    @torch.no_grad()
+    def _prepare_teacher_forced_query_payload(
+        self,
+        *,
+        noisy_latents,
+        timestep,
+        prompt,
+        role_ids,
+        cond_context,
+        uncond_context,
+        image_emb_for_denoising,
+        extra_input=None,
+    ):
+        per_char_step_maps, ordered_roles, layer_tokens = self._run_character_semantic_probe(
+            noisy_latents=noisy_latents,
+            timestep=timestep,
+            prompt=prompt,
+            role_ids=role_ids,
+            cond_context=cond_context,
+            uncond_context=uncond_context,
+            image_emb_for_denoising=image_emb_for_denoising,
+            extra_input=extra_input,
+        )
+        _, _, _, h_lat, w_lat = noisy_latents.shape
+        patch_size = self.pipe.dit.patch_size
+        return self._build_character_mask_payload_from_probe(
+            per_char_step_maps=per_char_step_maps,
+            ordered_roles=ordered_roles,
+            h_patch=h_lat // patch_size[1],
+            w_patch=w_lat // patch_size[2],
+            layer_tokens=layer_tokens,
+        )
 
     @torch.no_grad()
     def _build_character_mask_payload_from_probe(self, per_char_step_maps, ordered_roles, h_patch, w_patch, layer_tokens=None):
