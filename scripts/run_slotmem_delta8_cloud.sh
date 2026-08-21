@@ -74,7 +74,7 @@ print("[delta8] teacher format:", actual)
 "${PYTHON_BIN}" - \
   "${EVENT_TEMPLATE}" "${STORY}" "${REFERENCE}" "${TEACHER}" \
   "${EVENT_JSON}" "${TEACHER_MANIFEST}" "${OLD_DONOR_MANIFEST}" \
-  "${DONOR_PAYLOAD}" "${DONOR_MANIFEST}" <<'PY'
+  "${DONOR_PAYLOAD}" "${DONOR_MANIFEST}" "${SOURCE_ROOT}" <<'PY'
 import hashlib
 import json
 import pathlib
@@ -90,7 +90,12 @@ import sys
     old_donor_manifest,
     donor_payload,
     donor_output,
+    source_root,
 ) = map(pathlib.Path, sys.argv[1:])
+
+sys.path.insert(0, str(source_root.resolve()))
+import torch
+from utest.input_contract import payload_slot_shapes
 
 def sha256(path: pathlib.Path) -> str:
     digest = hashlib.sha256()
@@ -132,6 +137,11 @@ row["target_story_id"] = "person_reappearance_delta8"
 row["target_entity_uid"] = "person_reappearance_delta8::mara"
 row["payload_path"] = str(donor_payload.resolve())
 row["payload_sha256"] = sha256(donor_payload)
+artifact = torch.load(donor_payload, map_location="cpu", weights_only=False)
+payload_key = str(row["payload_key"])
+if artifact.get("format") != "slotmem_donor_payload_v2" or payload_key not in artifact.get("payloads", {}):
+    raise ValueError(f"invalid donor payload or missing payload_key: {payload_key}")
+row["slot_shape"] = payload_slot_shapes(artifact["payloads"][payload_key], payload_key)
 write_json(donor_output, {"pairs": [row]})
 
 print(f"[delta8] event: {event_output}")
