@@ -147,14 +147,14 @@ the adjacent `correct_repeat` floor means the historical target memory reduced c
 flow-matching prediction error. `C_id` remains an optional rollout outcome.
 
 ```bash
-EVENT_JSON=/data/events/sample_5_qstar.json \
-FUTURE_TARGET_VIDEO=/data/targets/sample_5_chunk_005.mp4 \
-FUTURE_TARGET_MANIFEST=/data/targets/sample_5_chunk_005.teacher.json \
+EVENT_JSON="$PWD/utest/events/person_reappearance_delta8.json" \
+FUTURE_TARGET_VIDEO=/data/targets/person_reappearance_delta8_chunk_008_teacher.mp4 \
+FUTURE_TARGET_MANIFEST=/data/targets/person_reappearance_delta8_chunk_008_teacher.manifest.json \
 BASE_INFERENCE_ARGS=/data/runs/stage_gates/slotmem_m0_001/m0a/inference_args.yaml \
 PLATFORM_MANIFEST=/data/runs/stage_gates/slotmem_m0_001/platform.manifest.json \
 DONOR_PAYLOAD=/data/events/donor_payload.pt \
 DONOR_MANIFEST=/data/events/donor_manifest.json \
-EVENT_RUN_ROOT=/data/runs/qstar_sample_5 \
+EVENT_RUN_ROOT=/data/runs/qstar_person_reappearance_delta8 \
 QSTAR_TIMESTEP_INDICES=0,12,25,37,49 \
 QSTAR_NOISE_SEED=0 \
 RUN_ROLLOUT=1 \
@@ -169,9 +169,9 @@ the target was not copied from an arm rollout:
 
 ```json
 {
-  "story_id": "sample_5",
-  "target_chunk_idx": 5,
-  "video_path": "/data/targets/sample_5_chunk_005.mp4",
+  "story_id": "person_reappearance_delta8",
+  "target_chunk_idx": 8,
+  "video_path": "/data/targets/person_reappearance_delta8_chunk_008_teacher.mp4",
   "video_sha256": "64-character SHA256",
   "source_type": "held_out_real",
   "generated_by_arm": false,
