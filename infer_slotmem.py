@@ -1891,7 +1891,10 @@ class SlotMemInferenceEngine(ReferenceInferenceEngine):
         probe_extractor.register_hooks()
         feature_taps = []
         if use_feature_tokens:
-            for feature_layer_idx in feature_layer_indices:
+            # Match the normal inference path: capture query features only at
+            # sparse_role_memory_layer_idx, so the query payload stays shared
+            # (multi-step inference taps a single layer, not all injection layers).
+            for feature_layer_idx in (map_layer_idx,):
                 feature_tap = AttentionOutputFeatureTap(
                     dit_model=dit_model,
                     layer_idx=int(feature_layer_idx),
@@ -1926,7 +1929,7 @@ class SlotMemInferenceEngine(ReferenceInferenceEngine):
                 feature_tap.remove()
                 if isinstance(captured_tokens, torch.Tensor) and captured_tokens.dim() == 2:
                     captured_by_layer[_layer_key(feature_layer_idx)] = captured_tokens
-            if len(captured_by_layer) > 1 or bool(getattr(self, "jigsaw_extra_encoder_enabled", False)):
+            if len(captured_by_layer) > 1:
                 captured_layer_tokens = _make_layerwise_container(captured_by_layer)
             elif len(captured_by_layer) == 1:
                 captured_layer_tokens = next(iter(captured_by_layer.values()))
