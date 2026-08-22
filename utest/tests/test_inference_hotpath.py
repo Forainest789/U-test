@@ -107,3 +107,17 @@ def test_shared_memory_survives_layerwise_query_payload() -> None:
     source = (root / "infer_slotmem.py").read_text(encoding="utf-8")
     assert "if layerwise_memory_banks:\n            selected_mem = None" in source
     assert "if layerwise_sparse_payload:\n            selected_mem = None" not in source
+
+
+def test_teacher_forced_prepass_captures_single_layer_query() -> None:
+    root = Path(__file__).resolve().parents[2]
+    source = (root / "infer_slotmem.py").read_text(encoding="utf-8")
+    start = source.index("    def _run_character_semantic_probe(")
+    end = source.index("    def _prepare_teacher_forced_query_payload(", start)
+    body = source[start:end]
+    assert "for feature_layer_idx in (map_layer_idx,):" in body
+    assert "if len(captured_by_layer) > 1 or bool(getattr(self, \"jigsaw_extra_encoder_enabled\", False)):" not in body
+    assert (
+        "if len(captured_by_layer) > 1:\n"
+        "                captured_layer_tokens = _make_layerwise_container(captured_by_layer)"
+    ) in body
