@@ -2604,7 +2604,7 @@ class SlotMemInferenceEngine(ReferenceInferenceEngine):
                 if not isinstance(query_feature_payload, dict):
                     query_feature_payload = {}
 
-        if layerwise_sparse_payload:
+        if layerwise_memory_banks:
             selected_mem = None
         elif not isinstance(selected_mem, torch.Tensor):
             selected_mem = torch.empty((0, 0), device=self.device, dtype=model_dtype)

@@ -100,3 +100,10 @@ def test_teacher_forced_runtime_wires_current_step_query_before_forward() -> Non
 
     assert "def _prepare_teacher_forced_query_payload(" in engine_source
     assert "_prepare_teacher_forced_query_payload(" in query_setup
+
+
+def test_shared_memory_survives_layerwise_query_payload() -> None:
+    root = Path(__file__).resolve().parents[2]
+    source = (root / "infer_slotmem.py").read_text(encoding="utf-8")
+    assert "if layerwise_memory_banks:\n            selected_mem = None" in source
+    assert "if layerwise_sparse_payload:\n            selected_mem = None" not in source
