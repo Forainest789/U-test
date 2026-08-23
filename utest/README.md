@@ -146,6 +146,27 @@ confirmatory run. The primary value is `Q* = L_no_memory - L_correct`; positive 
 the adjacent `correct_repeat` floor means the historical target memory reduced current
 flow-matching prediction error. `C_id` remains an optional rollout outcome.
 
+Three things about that loss are load-bearing, because each was wrong once:
+
+- **It is scored on the conditional velocity, not the CFG composite.** The sampler steps
+  with `uncond + cfg_scale * (cond - uncond)`, and with `cfg_uncond_with_memory` the
+  memory enters both branches, so the memory term in the composite is
+  `5*delta_cond - 4*delta_uncond` and can cancel or flip. The flow target is defined
+  against the unguided conditional output, so that is what `qstar_records.jsonl` scores;
+  the composite survives only as `cfg_prediction_sha256`.
+- **Every confirmatory arm runs the same forward.** `no_memory` carries no payload and
+  would otherwise fall back to the stock DiT forward while the other five run
+  `_memory_aware_dit_forward`, putting a forward-implementation term inside
+  `L_no_memory - L_correct`. The probe passes `force_memory_path`, so the memory-off arm
+  takes the same custom forward with an empty payload. `native` is exempt: it is base
+  Wan and diagnostic-only.
+- **The repeat floor and the benefit margin are separate numbers in separate units.**
+  `--repeat-loss-tolerance` bounds an absolute MSE difference, `--repeat-influence-tolerance`
+  bounds a unitless relative L2 ratio, and `--benefit-margin` is the smallest Q* that may
+  be called `beneficial`. A deterministic repeat gives `repeat_loss_floor == 0`, so
+  without an explicit margin any positive Q* clears the bar; the report says so in
+  `benefit_margin_degenerate`.
+
 ```bash
 EVENT_JSON="$PWD/utest/events/person_reappearance_delta8.json" \
 FUTURE_TARGET_VIDEO=/data/targets/person_reappearance_delta8_chunk_008_teacher.mp4 \
@@ -183,6 +204,16 @@ the target was not copied from an arm rollout:
 cross-checks this manifest and validates that the donor manifest identity, SHA, payload
 key, exact slot shape, and embedded payload event all describe the same donor. Updating
 only a donor SHA is intentionally rejected.
+
+Both provenance documents are inputs, never outputs. `scripts/run_slotmem_delta8_cloud.sh`
+exits before any work unless `FUTURE_TARGET_MANIFEST` and `DONOR_MANIFEST` both point at
+existing files, and it writes neither: a `generated_by_arm: false` the runner stamped on a
+video it never traced attests nothing, and a `slot_shape` the runner read out of the donor
+payload it is about to compare against is a tautology. The donor row's matched-pair fields
+(`coarse_class`, `colour`, `character_count`, `gap_bucket`, `selection_seed`) must be
+chosen for *this* target; copying a row from another event's manifest and rewriting only
+`target_story_id` / `target_entity_uid` passes every check and silently imports the other
+event's matching decision.
 
 Omit `CID_SCORER` when only Q* is required. Set `RUN_ROLLOUT=0` for the cheap
 teacher-forced stage, and set `DRY_RUN=1` to write/inspect `run_manifest.json` without

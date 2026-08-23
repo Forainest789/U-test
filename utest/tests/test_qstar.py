@@ -126,6 +126,67 @@ def test_synthetic_seven_run_probe_is_paired_and_excludes_native(tmp_path: Path)
     assert len((tmp_path / "qstar_records.jsonl").read_text(encoding="utf-8").splitlines()) == 7
 
 
+def _constant_cell() -> ProbeCell:
+    return ProbeCell(
+        event_id="e1",
+        memory_id="mara|0",
+        horizon=8,
+        timestep_index=0,
+        timestep=999.0,
+        clean_target=[0.0],
+        noise=[1.0],
+        noisy_latent=[1.0],
+        flow_target=[1.0],
+        input_hashes={"prefix": "p"},
+    )
+
+
+def _predictor_for(values: dict):
+    def predictor(arm, cell, payload, native):
+        return {"prediction": [values[arm]], "memory_read_hit": not native}
+
+    return predictor
+
+
+def test_repeat_loss_and_influence_tolerances_are_separate_units() -> None:
+    # one perturbation, two readings two orders apart: 0.01 as a relative L2 ratio,
+    # 1e-4 as an absolute MSE difference. One scalar cannot gate both.
+    values = {
+        "correct": 1.0, "correct_repeat": 1.01, "no_memory": 2.0,
+        "zero": 1.5, "random": 1.4, "wrong": 1.6, "native": 1.2,
+    }
+    with pytest.raises(ValueError, match="correct_repeat loss"):
+        evaluate_probe_cell(
+            _constant_cell(), {k: 0.0 for k in ("correct", "no_memory", "zero", "random", "wrong")},
+            _predictor_for(values), repeat_loss_tolerance=0.0, repeat_influence_tolerance=1.0,
+        )
+    with pytest.raises(ValueError, match="correct_repeat prediction"):
+        evaluate_probe_cell(
+            _constant_cell(), {k: 0.0 for k in ("correct", "no_memory", "zero", "random", "wrong")},
+            _predictor_for(values), repeat_loss_tolerance=1.0, repeat_influence_tolerance=0.0,
+        )
+
+
+def test_zero_benefit_margin_is_flagged_and_liftable() -> None:
+    payloads = {k: 0.0 for k in ("correct", "no_memory", "zero", "random", "wrong")}
+    # deterministic repeat -> repeat_loss_floor == 0, so a 1e-9 Q* would pass unguarded
+    values = {
+        "correct": 1.0, "correct_repeat": 1.0, "no_memory": 1.0 - 5e-10,
+        "zero": 1.0, "random": 1.0, "wrong": 1.0, "native": 1.0,
+    }
+    report, _ = evaluate_probe_cell(_constant_cell(), payloads, _predictor_for(values))
+    assert report["repeat_loss_floor"] == 0.0
+    assert report["benefit_margin_degenerate"] is True
+    assert report["qstar"] > 0 and report["classification"] == "beneficial"
+
+    report, _ = evaluate_probe_cell(
+        _constant_cell(), payloads, _predictor_for(values), benefit_margin=1e-6
+    )
+    assert report["repeat_margin"] == 1e-6
+    assert report["benefit_margin_degenerate"] is False
+    assert report["classification"] == "influence_without_benefit"
+
+
 def test_probe_runtime_rejects_stale_prompt_and_seed() -> None:
     frozen = {"target_prompt_sha256": "prompt-a", "target_seed": 47}
     with pytest.raises(ValueError, match="target_prompt_sha256_mismatch"):

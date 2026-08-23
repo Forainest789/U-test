@@ -114,6 +114,7 @@ def build_contract(
     future_target_video: Path | None = None,
     future_target_manifest: Path | None = None,
     timestep_indices: Sequence[int] = (),
+    arms_root: Path | None = None,
 ) -> dict:
     snapshot = snapshot.resolve()
     platform_manifest = platform_manifest.resolve()
@@ -146,8 +147,10 @@ def build_contract(
             raise ValueError("future target requires a provenance manifest")
         from .input_contract import validate_teacher_bundle
 
+        # arms_root matters here: this is where the teacher is frozen into the contract,
+        # so it is the point at which a target copied out of an arm rollout must be caught.
         teacher = validate_teacher_bundle(
-            event, future_target_video, future_target_manifest
+            event, future_target_video, future_target_manifest, arms_root=arms_root
         )
         indices = [int(value) for value in timestep_indices]
         if not indices or any(value < 0 for value in indices) or len(indices) != len(set(indices)):

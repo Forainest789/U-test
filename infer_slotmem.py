@@ -2667,7 +2667,13 @@ class SlotMemInferenceEngine(ReferenceInferenceEngine):
                 )
                 _record_memory_writer_stats(0, writer_stats)
             mem_input = selected_mem.unsqueeze(0).expand(bsz, -1, -1)
-            if self.use_projector and self.memory_projector is not None:
+            if int(mem_input.shape[1]) <= 0:
+                # ponytail: nothing to project. selected_mem can legitimately be the
+                # (0, 0) fallback -- empty bank, or the Q* probe's forced memory-path
+                # arm -- and a 0-wide tensor does not fit the projector's input Linear.
+                # sparse_enabled already requires shape[1] > 0, so this stays disabled.
+                memory_projected = mem_input
+            elif self.use_projector and self.memory_projector is not None:
                 target_dtype = self.memory_projector.input_proj.weight.dtype
                 mem_input = mem_input.to(dtype=target_dtype)
                 x_for_projector = x.to(dtype=target_dtype)
@@ -2683,7 +2689,7 @@ class SlotMemInferenceEngine(ReferenceInferenceEngine):
             else:
                 memory_projected = mem_input
 
-            if self.memory_embeddings is not None:
+            if self.memory_embeddings is not None and int(memory_projected.shape[1]) > 0:
                 memory_projected = self.memory_embeddings(
                     memory_projected,
                     memory_token_lengths_per_character=memory_token_lengths_per_character,

@@ -11,13 +11,17 @@ TEACHER="${TEACHER:-${ASSET_ROOT}/runs/person_reappearance_delta8_chunk_008_teac
 EVENT_TEMPLATE="${SOURCE_ROOT}/utest/events/person_reappearance_delta8.json"
 STORY="${SOURCE_ROOT}/utest/events/person_reappearance_delta8_story.json"
 EVENT_JSON="${EVENT_JSON:-${INPUTS}/person_reappearance_delta8_event.json}"
-TEACHER_MANIFEST="${FUTURE_TARGET_MANIFEST:-${INPUTS}/person_reappearance_delta8_chunk_008_teacher.manifest.json}"
 
-BASE_INFERENCE_ARGS="${BASE_INFERENCE_ARGS:-${ASSET_ROOT}/runs/m0a/inference_args.yaml}"
+# A manifest this runner writes itself attests nothing: generated_by_arm=false would be
+# the runner's own assertion about a file it never traced. Both provenance documents must
+# arrive from outside, and this script only ever reads them.
+: "${FUTURE_TARGET_MANIFEST:?set FUTURE_TARGET_MANIFEST to an independently frozen teacher provenance manifest; this runner will not sign one}"
+: "${DONOR_MANIFEST:?set DONOR_MANIFEST to a matched-pair donor manifest frozen for this event; this runner will not derive one}"
+TEACHER_MANIFEST="${FUTURE_TARGET_MANIFEST}"
+
+BASE_INFERENCE_ARGS="${BASE_INFERENCE_ARGS:-${ASSET_ROOT}/runs/stage_gates/slotmem_m0_001/m0a/inference_args.yaml}"
 PLATFORM_MANIFEST="${PLATFORM_MANIFEST:-${ASSET_ROOT}/runs/stage_gates/slotmem_m0_001/platform.manifest.json}"
 DONOR_PAYLOAD="${DONOR_PAYLOAD:-${ASSET_ROOT}/runs/fixed_prefix_sample5_quick_20260819/donor_payload.pt}"
-OLD_DONOR_MANIFEST="${OLD_DONOR_MANIFEST:-${ASSET_ROOT}/runs/fixed_prefix_sample5_quick_20260819/donor_manifest.json}"
-DONOR_MANIFEST="${DONOR_MANIFEST:-${INPUTS}/person_reappearance_delta8_donor_manifest.json}"
 
 UTEST_ENV="${UTEST_ENV:-slotmem}"
 PYTHON_BIN="${PYTHON_BIN:-python}"
@@ -47,7 +51,7 @@ mkdir -p "${INPUTS}"
 required=(
   "${REFERENCE}" "${TEACHER}" "${EVENT_TEMPLATE}" "${STORY}"
   "${BASE_INFERENCE_ARGS}" "${PLATFORM_MANIFEST}"
-  "${DONOR_PAYLOAD}" "${OLD_DONOR_MANIFEST}"
+  "${DONOR_PAYLOAD}" "${DONOR_MANIFEST}" "${TEACHER_MANIFEST}"
 )
 for path in "${required[@]}"; do
   [[ -f "${path}" ]] || { echo "[delta8] missing file: ${path}" >&2; exit 2; }
@@ -72,102 +76,44 @@ print("[delta8] teacher format:", actual)
 ' <<<"${probe_json}"
 
 "${PYTHON_BIN}" - \
-  "${EVENT_TEMPLATE}" "${STORY}" "${REFERENCE}" "${TEACHER}" \
-  "${EVENT_JSON}" "${TEACHER_MANIFEST}" "${OLD_DONOR_MANIFEST}" \
-  "${DONOR_PAYLOAD}" "${DONOR_MANIFEST}" "${SOURCE_ROOT}" <<'PY'
-import hashlib
+  "${EVENT_TEMPLATE}" "${STORY}" "${REFERENCE}" "${EVENT_JSON}" <<'PY'
 import json
 import pathlib
 import sys
 
-(
-    event_template,
-    story,
-    reference,
-    teacher,
-    event_output,
-    teacher_output,
-    old_donor_manifest,
-    donor_payload,
-    donor_output,
-    source_root,
-) = map(pathlib.Path, sys.argv[1:])
-
-sys.path.insert(0, str(source_root.resolve()))
-import torch
-from utest.input_contract import payload_slot_shapes
-
-def sha256(path: pathlib.Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for block in iter(lambda: handle.read(1 << 20), b""):
-            digest.update(block)
-    return digest.hexdigest()
-
-def write_json(path: pathlib.Path, payload: object) -> None:
-    temporary = path.with_suffix(path.suffix + ".tmp")
-    temporary.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
-    temporary.replace(path)
-
+# The only file this runner writes is the event: it resolves the two host-local paths the
+# committed template cannot know. Every provenance document is supplied and read-only.
+event_template, story, reference, event_output = map(pathlib.Path, sys.argv[1:])
 event = json.loads(event_template.read_text(encoding="utf-8"))
 event["reference_path"] = str(reference.resolve())
 event["source_json_path"] = str(story.resolve())
-write_json(event_output, event)
-
-teacher_manifest = {
-    "story_id": "person_reappearance_delta8",
-    "target_chunk_idx": 8,
-    "video_path": str(teacher.resolve()),
-    "video_sha256": sha256(teacher),
-    "source_type": "independent_teacher",
-    "generated_by_arm": False,
-    "generated_by_evaluated_model": False,
-    "frame_count": 81,
-    "fps": 16,
-    "width": 832,
-    "height": 480,
-    "reference_path": str(reference.resolve()),
-    "reference_sha256": sha256(reference),
-}
-write_json(teacher_output, teacher_manifest)
-
-old_manifest = json.loads(old_donor_manifest.read_text(encoding="utf-8"))
-row = dict(old_manifest["pairs"][0])
-row["target_story_id"] = "person_reappearance_delta8"
-row["target_entity_uid"] = "person_reappearance_delta8::mara"
-row["payload_path"] = str(donor_payload.resolve())
-row["payload_sha256"] = sha256(donor_payload)
-artifact = torch.load(donor_payload, map_location="cpu", weights_only=False)
-payload_key = str(row["payload_key"])
-if artifact.get("format") != "slotmem_donor_payload_v2" or payload_key not in artifact.get("payloads", {}):
-    raise ValueError(f"invalid donor payload or missing payload_key: {payload_key}")
-row["slot_shape"] = payload_slot_shapes(artifact["payloads"][payload_key], payload_key)
-write_json(donor_output, {"pairs": [row]})
-
+temporary = event_output.with_suffix(event_output.suffix + ".tmp")
+temporary.write_text(json.dumps(event, indent=2, ensure_ascii=False), encoding="utf-8")
+temporary.replace(event_output)
 print(f"[delta8] event: {event_output}")
-print(f"[delta8] teacher manifest: {teacher_output}")
-print(f"[delta8] donor manifest: {donor_output}")
 PY
 
 cd "${SOURCE_ROOT}"
 "${PYTHON_BIN}" -m utest.content_audit --self-check
 "${PYTHON_BIN}" -m utest.qstar_probe --self-check
 
-PRECHECK="${INPUTS}/input_contract_preflight.json"
+STAMP="$(date +%Y%m%d_%H%M%S)"
+DRY_ROOT="${ASSET_ROOT}/runs/qstar_delta8_dryrun_${STAMP}"
+RUN_ROOT="${EVENT_RUN_ROOT:-${ASSET_ROOT}/runs/qstar_person_reappearance_delta8_${STAMP}}"
+[[ ! -e "${DRY_ROOT}" ]] || { echo "[delta8] dry-run output exists: ${DRY_ROOT}" >&2; exit 2; }
+[[ ! -e "${RUN_ROOT}" ]] || { echo "[delta8] full output exists: ${RUN_ROOT}" >&2; exit 2; }
+
+# after RUN_ROOT: --arms-root has to be this run's real arms directory, or the
+# "teacher came out of an arm rollout" check is pointed at a path that never exists.
+PRECHECK="${INPUTS}/input_contract_preflight_${STAMP}.json"
 "${PYTHON_BIN}" -m utest.input_contract \
   --event "${EVENT_JSON}" \
   --donor "${DONOR_PAYLOAD}" \
   --donor-manifest "${DONOR_MANIFEST}" \
   --future-target-video "${TEACHER}" \
   --future-target-manifest "${TEACHER_MANIFEST}" \
-  --arms-root "${ASSET_ROOT}/runs/qstar_person_reappearance_delta8/arms" \
+  --arms-root "${RUN_ROOT}/arms" \
   --report "${PRECHECK}"
-
-STAMP="$(date +%Y%m%d_%H%M%S)"
-DRY_ROOT="${ASSET_ROOT}/runs/qstar_delta8_dryrun_${STAMP}"
-RUN_ROOT="${EVENT_RUN_ROOT:-${ASSET_ROOT}/runs/qstar_person_reappearance_delta8_${STAMP}}"
-[[ ! -e "${DRY_ROOT}" ]] || { echo "[delta8] dry-run output exists: ${DRY_ROOT}" >&2; exit 2; }
-[[ ! -e "${RUN_ROOT}" ]] || { echo "[delta8] full output exists: ${RUN_ROOT}" >&2; exit 2; }
 
 common_env=(
   "EVENT_JSON=${EVENT_JSON}"
@@ -179,6 +125,9 @@ common_env=(
   "DONOR_MANIFEST=${DONOR_MANIFEST}"
   "QSTAR_TIMESTEP_INDICES=${QSTAR_TIMESTEP_INDICES}"
   "QSTAR_NOISE_SEED=${QSTAR_NOISE_SEED}"
+  "QSTAR_REPEAT_LOSS_TOLERANCE=${QSTAR_REPEAT_LOSS_TOLERANCE:-0}"
+  "QSTAR_REPEAT_INFLUENCE_TOLERANCE=${QSTAR_REPEAT_INFLUENCE_TOLERANCE:-0}"
+  "QSTAR_BENEFIT_MARGIN=${QSTAR_BENEFIT_MARGIN:-0}"
   "RUN_ROLLOUT=${RUN_ROLLOUT}"
   "SLOTMEM_OFFLOAD_MODELS=${SLOTMEM_OFFLOAD_MODELS}"
   "CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES}"

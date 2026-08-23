@@ -115,6 +115,7 @@ PREPARE=(
   --inference-args-file "${BASE_INFERENCE_ARGS}"
   --future-target-video "${FUTURE_TARGET_VIDEO}"
   --future-target-manifest "${FUTURE_TARGET_MANIFEST}"
+  --arms-root "${EVENT_RUN_ROOT}/arms"
   --timestep-indices "${QSTAR_TIMESTEP_INDICES}"
   --arm-seed "${ARM_SEED:-0}"
 )
@@ -131,7 +132,9 @@ QSTAR=(
   --donor-manifest "${DONOR_MANIFEST}"
   --timestep-indices "${QSTAR_TIMESTEP_INDICES}"
   --noise-seed "${QSTAR_NOISE_SEED:-0}"
-  --repeat-tolerance "${QSTAR_REPEAT_TOLERANCE:-0}"
+  --repeat-loss-tolerance "${QSTAR_REPEAT_LOSS_TOLERANCE:-0}"
+  --repeat-influence-tolerance "${QSTAR_REPEAT_INFLUENCE_TOLERANCE:-0}"
+  --benefit-margin "${QSTAR_BENEFIT_MARGIN:-0}"
   --influence-floor "${QSTAR_INFLUENCE_FLOOR:-0}"
 )
 if [[ "${REQUIRE_DYNAMIC_WRITER:-0}" == "1" ]]; then QSTAR+=(--require-dynamic-writer); fi

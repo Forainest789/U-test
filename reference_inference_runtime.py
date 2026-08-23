@@ -1017,6 +1017,7 @@ class ReferenceInferenceRuntime:
             shape = (1, 16, (self.args.context_frames - 1) // 4 + 1,
                      self.args.height // 8, self.args.width // 8)
             latent_dtype = torch.float32 if bool(getattr(self.args, "inference_latents_fp32", True)) else self.dtype
+            force_memory_path = False
             if teacher_forced_probe is None:
                 gen = torch.Generator(device=self.device).manual_seed(seed)
                 latents = torch.randn(shape, generator=gen, device=self.device, dtype=latent_dtype)
@@ -1040,6 +1041,11 @@ class ReferenceInferenceRuntime:
                     )
                 latents = noisy_latents.to(device=self.device, dtype=latent_dtype).clone()
                 denoise_schedule = [(timestep_index, self.pipe.scheduler.timesteps[timestep_index])]
+                # ponytail: probe-only. An arm with no memory otherwise falls back to the
+                # stock DiT forward while every arm carrying a payload runs
+                # _memory_aware_dit_forward, so L_no_memory - L_correct would carry a
+                # forward-implementation term. Unreachable from normal generation.
+                force_memory_path = bool(teacher_forced_probe.get("force_memory_path", False))
 
             # 4. Denoising loop
             denoising_latents = latents.clone()
@@ -1129,7 +1135,7 @@ class ReferenceInferenceRuntime:
                 has_memory = (
                     has_valid_memory_tokens or has_valid_bank_tokens
                 )
-                use_memory_path = has_memory
+                use_memory_path = has_memory or force_memory_path
                 should_collect_bank_tokens = bool(collect_chars and i in step_to_collect_banks)
                 should_collect_viz = bool(collect_chars and bool(getattr(self.args, 'save_memory_viz', False)) and i in viz_collect_steps)
                 should_collect_step_viz = bool(collect_chars and need_any_step_decode_viz and i in target_denoise_steps)
@@ -1153,7 +1159,9 @@ class ReferenceInferenceRuntime:
                 probe_layer_tokens = None
                 current_query_role_boxes = None
                 current_query_feature_payload = None
-                if (use_memory_path and self.enable_sparse_role_memory_attn) or need_probe_for_collection:
+                # has_memory, not use_memory_path: a forced memory-path arm has no payload
+                # and therefore no role ids, so the probe would be a wasted forward pass.
+                if (has_memory and self.enable_sparse_role_memory_attn) or need_probe_for_collection:
                     probe_role_ids = self._collect_character_semantic_probe_role_ids(
                         collect_chars=collect_chars,
                         memory_bank_token_meta=memory_bank_token_meta,
@@ -1321,10 +1329,16 @@ class ReferenceInferenceRuntime:
                 noise_pred = noise_pred_uncond + self.args.cfg_scale * (noise_pred_cond - noise_pred_uncond)
                 if teacher_forced_probe is not None:
                     return {
+                        # prediction is the CFG composite the sampler would step with;
+                        # prediction_cond is the conditional velocity the flow-matching
+                        # target is defined against. Q* must be scored on the latter.
                         "prediction": noise_pred,
+                        "prediction_cond": noise_pred_cond,
+                        "cfg_scale": float(self.args.cfg_scale),
                         "timestep_index": int(i),
                         "timestep": float(t.detach().float().reshape(-1)[0].item()),
-                        "memory_read_hit": bool(use_memory_path),
+                        "memory_read_hit": bool(has_memory),
+                        "forced_memory_path": bool(force_memory_path and not has_memory),
                         "sparse_role_memory_stats": getattr(self, "_last_sparse_role_memory_stats", {}),
                         "sparse_role_memory_stats_by_layer": getattr(self, "_last_sparse_role_memory_stats_by_layer", {}),
                         "writer_stats": getattr(self, "_last_jigsaw_stage2_writer_stats", {}),

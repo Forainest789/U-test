@@ -161,7 +161,9 @@ def evaluate_probe_cell(
     payloads: Mapping[str, object],
     predictor: Callable[[str, ProbeCell, object, bool], Mapping],
     *,
-    repeat_tolerance: float = 0.0,
+    repeat_loss_tolerance: float = 0.0,
+    repeat_influence_tolerance: float = 0.0,
+    benefit_margin: float = 0.0,
     influence_floor: float = 0.0,
 ) -> tuple[dict, list[dict]]:
     """Evaluate one immutable cell; the caller owns payload construction and model loading."""
@@ -202,6 +204,8 @@ def evaluate_probe_cell(
                 "payload_sha256": result.get("payload_sha256"),
                 "payload_layers": int(result.get("payload_layers", 0) or 0),
                 "payload_slots": int(result.get("payload_slots", 0) or 0),
+                "cfg_prediction_sha256": result.get("cfg_prediction_sha256"),
+                "forced_memory_path": bool(result.get("forced_memory_path", False)),
                 "diagnostics": dict(result.get("diagnostics", {})),
             }
         )
@@ -210,10 +214,17 @@ def evaluate_probe_cell(
     repeat_prediction_floor = _influence(
         outputs["correct"]["prediction"], outputs["correct_repeat"]["prediction"]
     )
-    if deltas["repeat_loss_floor"] > float(repeat_tolerance) or repeat_prediction_floor > float(repeat_tolerance):
-        raise ValueError("correct_repeat exceeds frozen tolerance")
+    # two different units: an absolute MSE difference and a unitless relative L2 ratio.
+    # One scalar cannot be a sane threshold for both.
+    if deltas["repeat_loss_floor"] > float(repeat_loss_tolerance):
+        raise ValueError("correct_repeat loss exceeds frozen tolerance")
+    if repeat_prediction_floor > float(repeat_influence_tolerance):
+        raise ValueError("correct_repeat prediction exceeds frozen tolerance")
     primary_influence = _influence(
         outputs["correct"]["prediction"], outputs["no_memory"]["prediction"]
+    )
+    repeat_margin = max(
+        float(repeat_loss_tolerance), float(benefit_margin), deltas["repeat_loss_floor"]
     )
     report = {
         "event_id": cell.event_id,
@@ -226,10 +237,14 @@ def evaluate_probe_cell(
         **deltas,
         "repeat_prediction_floor": repeat_prediction_floor,
         "primary_influence": primary_influence,
+        "repeat_margin": repeat_margin,
+        # a deterministic repeat gives repeat_loss_floor == 0; with no explicit
+        # --benefit-margin the "beneficial" label then separates nothing from noise.
+        "benefit_margin_degenerate": repeat_margin <= 0.0,
         "classification": classify_qstar(
             qstar=deltas["qstar"],
             influence=primary_influence,
-            repeat_margin=max(float(repeat_tolerance), deltas["repeat_loss_floor"]),
+            repeat_margin=repeat_margin,
             influence_floor=float(influence_floor),
         ),
     }
@@ -261,7 +276,7 @@ def write_probe_outputs(
     report = {
         "schema_version": 1,
         "status": "passed",
-        "primary_estimand": "L_no_memory - L_correct",
+        "primary_estimand": "L_no_memory - L_correct on the conditional flow velocity (no CFG)",
         "native_is_diagnostic": True,
         "cells": list(cells),
         **dict(metadata or {}),
@@ -456,7 +471,7 @@ def _load_probe_context(args):
                 "noisy_latents": noisy_latent,
             },
         )
-        native_predictions[int(timestep_index)] = native_result["prediction"].detach().cpu()
+        native_predictions[int(timestep_index)] = native_result["prediction_cond"].detach().cpu()
         cells.append(cell)
 
     del native_engine, target_pixels, clean_target, noise
@@ -698,6 +713,9 @@ def run_production_probe(args) -> int:
             teacher_forced_probe={
                 "timestep_index": int(cell.timestep_index),
                 "noisy_latents": cell.noisy_latent.to(engine.device),
+                # every confirmatory arm takes _memory_aware_dit_forward, including the
+                # one with no payload, so Q* is not a forward-implementation delta.
+                "force_memory_path": True,
             },
         )
         stats = result.get("sparse_role_memory_stats", {})
@@ -708,7 +726,11 @@ def run_production_probe(args) -> int:
         )
         summary = bundle["target_payload_summary"]
         return {
-            "prediction": result["prediction"].detach().cpu(),
+            # scored on the conditional velocity, not the CFG composite: the flow target
+            # is defined against the unguided conditional output.
+            "prediction": result["prediction_cond"].detach().cpu(),
+            "cfg_prediction_sha256": tensor_sha256(result["prediction"].detach().cpu()),
+            "forced_memory_path": bool(result.get("forced_memory_path", False)),
             "memory_read_hit": bool(bundle["target_read_hit"]),
             "injection_delta_norm": injection_delta_norm,
             "payload_sha256": bundle["target_payload_sha256"],
@@ -726,7 +748,9 @@ def run_production_probe(args) -> int:
             cell,
             context["payloads"],
             predictor,
-            repeat_tolerance=float(args.repeat_tolerance),
+            repeat_loss_tolerance=float(args.repeat_loss_tolerance),
+            repeat_influence_tolerance=float(args.repeat_influence_tolerance),
+            benefit_margin=float(args.benefit_margin),
             influence_floor=float(args.influence_floor),
         )
         reports.append(report)
@@ -741,6 +765,12 @@ def run_production_probe(args) -> int:
         records,
         metadata={
             "memory_regime": memory_regime,
+            "thresholds": {
+                "repeat_loss_tolerance": float(args.repeat_loss_tolerance),
+                "repeat_influence_tolerance": float(args.repeat_influence_tolerance),
+                "benefit_margin": float(args.benefit_margin),
+                "influence_floor": float(args.influence_floor),
+            },
             "writer_evidence": evidence,
             "target_video": str(args.future_target_video.resolve()),
             "target_video_sha256": _sha256_file(args.future_target_video.resolve()),
@@ -791,7 +821,9 @@ def main() -> int:
     parser.add_argument("--donor-manifest", type=Path)
     parser.add_argument("--timestep-indices", default="0,12,25,37,49")
     parser.add_argument("--noise-seed", type=int, default=0)
-    parser.add_argument("--repeat-tolerance", type=float, default=0.0)
+    parser.add_argument("--repeat-loss-tolerance", type=float, default=0.0)
+    parser.add_argument("--repeat-influence-tolerance", type=float, default=0.0)
+    parser.add_argument("--benefit-margin", type=float, default=0.0)
     parser.add_argument("--influence-floor", type=float, default=0.0)
     parser.add_argument("--require-dynamic-writer", action="store_true")
     args = parser.parse_args()

@@ -109,6 +109,35 @@ def test_shared_memory_survives_layerwise_query_payload() -> None:
     assert "if layerwise_sparse_payload:\n            selected_mem = None" not in source
 
 
+def test_probe_returns_conditional_velocity_beside_the_cfg_composite() -> None:
+    root = Path(__file__).resolve().parents[2]
+    runtime = (root / "reference_inference_runtime.py").read_text(encoding="utf-8")
+    probe = (root / "utest" / "qstar_probe.py").read_text(encoding="utf-8")
+
+    # the flow target is defined against the unguided conditional output, so Q* must not
+    # be scored on uncond + cfg_scale * (cond - uncond).
+    assert '"prediction_cond": noise_pred_cond,' in runtime
+    assert '"prediction": result["prediction_cond"].detach().cpu(),' in probe
+    assert 'native_result["prediction_cond"]' in probe
+
+
+def test_memory_off_arm_stays_on_the_memory_aware_forward() -> None:
+    root = Path(__file__).resolve().parents[2]
+    runtime = (root / "reference_inference_runtime.py").read_text(encoding="utf-8")
+    probe = (root / "utest" / "qstar_probe.py").read_text(encoding="utf-8")
+
+    # no_memory has no payload, so without the force flag it would take the stock DiT
+    # forward while every other confirmatory arm takes _memory_aware_dit_forward.
+    assert "use_memory_path = has_memory or force_memory_path" in runtime
+    assert '"force_memory_path": True,' in probe
+    # the probe prepass is keyed on real memory, not on the forced path: a forced arm has
+    # no role ids and the probe would just burn a forward pass.
+    assert "if (has_memory and self.enable_sparse_role_memory_attn) or need_probe_for_collection:" in runtime
+    # native is base Wan and must not be dragged onto the SlotMem forward.
+    native_call = probe[probe.index("native_result = native_engine.generate_chunk("):]
+    assert "force_memory_path" not in native_call[: native_call.index("native_predictions")]
+
+
 def test_teacher_forced_prepass_captures_single_layer_query() -> None:
     root = Path(__file__).resolve().parents[2]
     source = (root / "infer_slotmem.py").read_text(encoding="utf-8")

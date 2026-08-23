@@ -437,6 +437,7 @@ def prepare_prefix(args: argparse.Namespace) -> int:
         future_target_video=args.future_target_video,
         future_target_manifest=args.future_target_manifest,
         timestep_indices=timestep_indices,
+        arms_root=args.arms_root or (output.parent / "arms"),
     )
     if bool(contract["code"]["dirty"]) and not bool(args.allow_dirty_source):
         raise RuntimeError(
@@ -582,6 +583,7 @@ def main() -> int:
     prepare.add_argument("--arm-seed", type=int, default=0)
     prepare.add_argument("--future-target-video", type=Path)
     prepare.add_argument("--future-target-manifest", type=Path)
+    prepare.add_argument("--arms-root", type=Path)
     prepare.add_argument("--timestep-indices", default="0,12,25,37,49")
     prepare.add_argument("--allow-dirty-source", action="store_true")
     prepare.add_argument("--python", default=sys.executable)
