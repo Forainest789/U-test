@@ -204,3 +204,50 @@ def test_sparse_attention_token_diagnostics_are_aligned() -> None:
             "read_logsumexp",
         )
     )
+
+
+def test_teacher_forced_token_controls_are_wired_before_conditional_forward() -> None:
+    root = Path(__file__).resolve().parents[2]
+    engine_source = (root / "infer_slotmem.py").read_text(encoding="utf-8")
+    runtime_source = (root / "reference_inference_runtime.py").read_text(encoding="utf-8")
+
+    assert "def _zero_context_positions(" in engine_source
+    assert "def _override_query_indices(" in engine_source
+    assert "context_zero_indices" in runtime_source
+    assert "query_indices_by_role" in runtime_source
+    assert "conditional_sparse_stats_by_layer" in runtime_source
+    assert runtime_source.index("conditional_sparse_stats_by_layer") < runtime_source.index(
+        "noise_pred_uncond ="
+    )
+
+
+def test_query_override_preserves_features_and_context_zeroing_preserves_layout() -> None:
+    torch = pytest.importorskip("torch")
+    engine_cls = _load("infer_slotmem", "SlotMemInferenceEngine")
+    engine = object.__new__(engine_cls)
+    payload = {"Mara": {"flat_idx": torch.tensor([1, 2]), "feature": "keep"}}
+
+    overridden = engine._override_query_indices(
+        payload, {"Mara": [3, 5]}, num_tokens=8
+    )
+    assert overridden["Mara"]["flat_idx"].tolist() == [3, 5]
+    assert overridden["Mara"]["feature"] == "keep"
+    with pytest.raises(ValueError, match="outside"):
+        engine._override_query_indices(payload, {"Mara": [8]}, num_tokens=8)
+
+    context = torch.ones(1, 6, 4)
+    output = engine._zero_context_positions(context, [1, 4])
+    assert output.shape == context.shape
+    assert torch.all(output[:, [1, 4]] == 0)
+    assert torch.all(context == 1)
+
+
+def test_semantic_capture_only_returns_before_measured_forward() -> None:
+    root = Path(__file__).resolve().parents[2]
+    source = (root / "reference_inference_runtime.py").read_text(encoding="utf-8")
+    capture_return = source.index("if teacher_forced_probe is not None and semantic_capture_only:")
+    measured_forward = source.index("                if use_memory_path:", capture_return)
+    scheduler_step = source.index("self.pipe.scheduler.step", measured_forward)
+
+    assert capture_return < measured_forward < scheduler_step
+    assert '"semantic_attention_maps"' in source[capture_return:measured_forward]

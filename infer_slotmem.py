@@ -479,6 +479,18 @@ def _layer_key(layer_idx):
         return str(layer_idx)
 
 
+def _zero_context_positions(context, indices):
+    """Clone an encoded prompt and neutralize fixed positions without relayout."""
+    if not indices:
+        return context
+    selected = sorted({int(index) for index in indices})
+    if selected[0] < 0 or selected[-1] >= int(context.shape[1]):
+        raise ValueError("context_zero_indices outside encoded prompt")
+    output = context.clone()
+    output[:, selected] = 0
+    return output
+
+
 def _is_layerwise_container(value):
     return isinstance(value, dict) and bool(value.get(_LAYERWISE_MARKER, False)) and isinstance(value.get(_LAYERWISE_LAYERS_KEY, None), dict)
 
@@ -1961,6 +1973,11 @@ class SlotMemInferenceEngine(ReferenceInferenceEngine):
             image_emb_for_denoising=image_emb_for_denoising,
             extra_input=extra_input,
         )
+        self._last_teacher_forced_semantic_maps = {
+            str(role): maps
+            for role, maps in zip(ordered_roles, per_char_step_maps)
+            if isinstance(maps, dict)
+        }
         _, _, _, h_lat, w_lat = noisy_latents.shape
         patch_size = self.pipe.dit.patch_size
         return self._build_character_mask_payload_from_probe(
@@ -1970,6 +1987,36 @@ class SlotMemInferenceEngine(ReferenceInferenceEngine):
             w_patch=w_lat // patch_size[2],
             layer_tokens=layer_tokens,
         )
+
+    @torch.no_grad()
+    def _override_query_indices(self, payload, overrides, num_tokens):
+        """Replace only role ``flat_idx`` fields, preserving captured features."""
+        if overrides is None:
+            return payload
+        if not isinstance(overrides, dict):
+            raise TypeError("query_indices_by_role must be a dict")
+        if _is_layerwise_container(payload):
+            return _make_layerwise_container({
+                layer: self._override_query_indices(layer_payload, overrides, num_tokens)
+                for layer, layer_payload in _iter_layerwise_items(payload)
+            })
+        output = {
+            str(role): dict(role_payload)
+            for role, role_payload in (payload.items() if isinstance(payload, dict) else [])
+            if isinstance(role_payload, dict)
+        }
+        for role, indices in overrides.items():
+            selected = sorted({int(index) for index in indices})
+            if any(index < 0 or index >= int(num_tokens) for index in selected):
+                raise ValueError("query index outside current video token grid")
+            role_payload = dict(output.get(str(role), {}))
+            role_payload["flat_idx"] = torch.tensor(selected, dtype=torch.long, device="cpu")
+            output[str(role)] = role_payload
+        return output
+
+    @staticmethod
+    def _zero_context_positions(context, indices):
+        return _zero_context_positions(context, indices)
 
     @torch.no_grad()
     def _build_character_mask_payload_from_probe(self, per_char_step_maps, ordered_roles, h_patch, w_patch, layer_tokens=None):

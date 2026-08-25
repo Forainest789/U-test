@@ -937,13 +937,15 @@ class ReferenceInferenceRuntime:
                            memory_token_lengths_per_character=None,
                            ref_images=None, random_ref_frame=None, seed=42,
                            online_memory_chars=None, online_memory_bank_percents=None,
-                           teacher_forced_probe=None):
+                           teacher_forced_probe=None, query_indices_by_role=None):
             """
             Generate a chunk of video.
             memory_token_lengths_per_character: list of int, token count per character (for segment_embed).
             Variant B: use ref_images during generation to handle boundary continuity.
             """
             self._offload()
+            if teacher_forced_probe is not None:
+                self._last_teacher_forced_semantic_maps = {}
             print(f"  [Gen] Generating with seed {seed}...")
 
             # 1. Text encode
@@ -1018,6 +1020,10 @@ class ReferenceInferenceRuntime:
                      self.args.height // 8, self.args.width // 8)
             latent_dtype = torch.float32 if bool(getattr(self.args, "inference_latents_fp32", True)) else self.dtype
             force_memory_path = False
+            capture_sparse_token_diagnostics = False
+            semantic_role_ids = None
+            semantic_capture_only = False
+            teacher_query_indices_by_role = None
             if teacher_forced_probe is None:
                 gen = torch.Generator(device=self.device).manual_seed(seed)
                 latents = torch.randn(shape, generator=gen, device=self.device, dtype=latent_dtype)
@@ -1046,6 +1052,19 @@ class ReferenceInferenceRuntime:
                 # _memory_aware_dit_forward, so L_no_memory - L_correct would carry a
                 # forward-implementation term. Unreachable from normal generation.
                 force_memory_path = bool(teacher_forced_probe.get("force_memory_path", False))
+                capture_sparse_token_diagnostics = bool(
+                    teacher_forced_probe.get("capture_sparse_token_diagnostics", False)
+                )
+                semantic_role_ids = teacher_forced_probe.get("semantic_role_ids")
+                semantic_capture_only = bool(teacher_forced_probe.get("semantic_capture_only", False))
+                if semantic_role_ids is not None and not isinstance(semantic_role_ids, (list, tuple)):
+                    raise TypeError("teacher_forced_probe.semantic_role_ids must be a list")
+                if semantic_capture_only and not semantic_role_ids:
+                    raise ValueError("semantic_capture_only requires semantic_role_ids")
+                teacher_query_indices_by_role = teacher_forced_probe.get("query_indices_by_role")
+                prompt_emb['context'] = self._zero_context_positions(
+                    prompt_emb['context'], teacher_forced_probe.get("context_zero_indices")
+                )
 
             # 4. Denoising loop
             denoising_latents = latents.clone()
@@ -1168,6 +1187,8 @@ class ReferenceInferenceRuntime:
                         memory_bank_percents=memory_bank_percents,
                         timestep=t,
                     )
+                    if teacher_forced_probe is not None and semantic_role_ids is not None:
+                        probe_role_ids = [str(role) for role in semantic_role_ids]
                     if teacher_forced_probe is not None and selection_mode != 'layer7_single':
                         current_query_role_boxes, current_query_feature_payload = self._prepare_teacher_forced_query_payload(
                             noisy_latents=denoising_latents,
@@ -1241,6 +1262,36 @@ class ReferenceInferenceRuntime:
                                 )
                                 probe_feature_tap.register()
 
+                query_override = (
+                    teacher_query_indices_by_role
+                    if teacher_forced_probe is not None
+                    else query_indices_by_role
+                )
+                if query_override is not None:
+                    _, _, f_lat, h_lat, w_lat = denoising_latents.shape
+                    patch_size = self.pipe.dit.patch_size
+                    f_patch = f_lat // max(int(patch_size[0]), 1)
+                    h_patch = h_lat // max(int(patch_size[1]), 1)
+                    w_patch = w_lat // max(int(patch_size[2]), 1)
+                    active_query_feature_payload = self._override_query_indices(
+                        active_query_feature_payload or {},
+                        query_override,
+                        num_tokens=int(f_patch * h_patch * w_patch),
+                    )
+                    active_query_role_boxes = self._build_query_boxes_from_payloads(
+                        active_query_feature_payload, h_patch, w_patch
+                    )
+
+                if teacher_forced_probe is not None and semantic_capture_only:
+                    from diffsynth.core.attention.attention import ATTENTION_IMPLEMENTATION
+                    return {
+                        "semantic_attention_maps": getattr(
+                            self, "_last_teacher_forced_semantic_maps", {}
+                        ),
+                        "query_feature_payload": active_query_feature_payload,
+                        "attention_implementation": str(ATTENTION_IMPLEMENTATION),
+                    }
+
                 if use_memory_path:
                     mapping_recorder = {} if i in selected_feature_steps else None
                     emb_kwargs = dict(image_emb)
@@ -1250,6 +1301,8 @@ class ReferenceInferenceRuntime:
                         emb_kwargs['query_role_boxes'] = active_query_role_boxes
                     if isinstance(active_query_feature_payload, dict) and len(active_query_feature_payload) > 0:
                         emb_kwargs['query_feature_payload'] = active_query_feature_payload
+                    if capture_sparse_token_diagnostics:
+                        emb_kwargs['capture_sparse_token_diagnostics'] = True
                     if mapping_recorder is not None:
                         emb_kwargs['feature_mapping_recorder'] = mapping_recorder
                     noise_pred_cond = self._memory_aware_dit_forward(
@@ -1266,6 +1319,15 @@ class ReferenceInferenceRuntime:
                         denoising_latents, t, context=prompt_emb['context'],
                         **image_emb_for_denoising, **extra_input
                     )
+                conditional_sparse_stats = dict(
+                    getattr(self, "_last_sparse_role_memory_stats", {})
+                )
+                conditional_sparse_stats_by_layer = dict(
+                    getattr(self, "_last_sparse_role_memory_stats_by_layer", {})
+                )
+                conditional_writer_stats = dict(
+                    getattr(self, "_last_jigsaw_stage2_writer_stats", {})
+                )
 
                 next_query_role_boxes = None
                 next_query_feature_payload = None
@@ -1328,6 +1390,7 @@ class ReferenceInferenceRuntime:
 
                 noise_pred = noise_pred_uncond + self.args.cfg_scale * (noise_pred_cond - noise_pred_uncond)
                 if teacher_forced_probe is not None:
+                    from diffsynth.core.attention.attention import ATTENTION_IMPLEMENTATION
                     return {
                         # prediction is the CFG composite the sampler would step with;
                         # prediction_cond is the conditional velocity the flow-matching
@@ -1339,9 +1402,14 @@ class ReferenceInferenceRuntime:
                         "timestep": float(t.detach().float().reshape(-1)[0].item()),
                         "memory_read_hit": bool(has_memory),
                         "forced_memory_path": bool(force_memory_path and not has_memory),
-                        "sparse_role_memory_stats": getattr(self, "_last_sparse_role_memory_stats", {}),
-                        "sparse_role_memory_stats_by_layer": getattr(self, "_last_sparse_role_memory_stats_by_layer", {}),
-                        "writer_stats": getattr(self, "_last_jigsaw_stage2_writer_stats", {}),
+                        "sparse_role_memory_stats": conditional_sparse_stats,
+                        "sparse_role_memory_stats_by_layer": conditional_sparse_stats_by_layer,
+                        "writer_stats": conditional_writer_stats,
+                        "query_feature_payload": active_query_feature_payload,
+                        "semantic_attention_maps": getattr(
+                            self, "_last_teacher_forced_semantic_maps", {}
+                        ),
+                        "attention_implementation": str(ATTENTION_IMPLEMENTATION),
                     }
                 denoising_latents = self.pipe.scheduler.step(noise_pred, t[0], denoising_latents)
 
