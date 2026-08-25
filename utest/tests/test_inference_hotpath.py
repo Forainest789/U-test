@@ -134,7 +134,7 @@ def test_memory_off_arm_stays_on_the_memory_aware_forward() -> None:
     # no role ids and the probe would just burn a forward pass.
     assert "if (has_memory and self.enable_sparse_role_memory_attn) or need_probe_for_collection:" in runtime
     # native is base Wan and must not be dragged onto the SlotMem forward.
-    native_call = probe[probe.index("native_result = native_engine.generate_chunk("):]
+    native_call = probe[probe.index("native_result = context_engine.generate_chunk("):]
     assert "force_memory_path" not in native_call[: native_call.index("native_predictions")]
 
 

@@ -320,7 +320,7 @@ def self_check() -> None:
     print("[qstar] self-check OK")
 
 
-def _load_probe_context(args):
+def _load_probe_context(args, *, include_native: bool = True):
     import torch
     from PIL import Image
     from diffsynth.utils.data import VideoData
@@ -380,56 +380,61 @@ def _load_probe_context(args):
     inference_argv = _set_runtime_option(inference_argv, "--output_path", str(args.output.resolve()))
     native_argv = _set_runtime_option(inference_argv, "--native_wan_inference", None)
     native_argv.append("--native_wan_inference")
-    native_args = infer_slotmem.parse_args(native_argv)
-    native_engine = infer_slotmem.SlotMemInferenceEngine(native_args)
+    if include_native:
+        runtime_args = infer_slotmem.parse_args(native_argv)
+    else:
+        runtime_args = infer_slotmem.parse_args(
+            _set_runtime_option(inference_argv, "--native_wan_inference", None)
+        )
+    context_engine = infer_slotmem.SlotMemInferenceEngine(runtime_args)
 
     video = VideoData(
         video_file=str(future_target),
-        height=int(native_args.height),
-        width=int(native_args.width),
+        height=int(runtime_args.height),
+        width=int(runtime_args.width),
     )
-    if len(video) != int(native_args.context_frames):
+    if len(video) != int(runtime_args.context_frames):
         raise ValueError(
-            f"future target must contain exactly {int(native_args.context_frames)} frames, got {len(video)}"
+            f"future target must contain exactly {int(runtime_args.context_frames)} frames, got {len(video)}"
         )
     frames = video.raw_data()
-    native_engine.pipe.vae.to(native_engine.device)
-    target_pixels = native_engine.pipe.preprocess_video(frames)
-    clean_target = native_engine.pipe.vae.encode(
+    context_engine.pipe.vae.to(context_engine.device)
+    target_pixels = context_engine.pipe.preprocess_video(frames)
+    clean_target = context_engine.pipe.vae.encode(
         target_pixels,
-        device=native_engine.device,
-        tiled=bool(native_args.tiled),
-        tile_size=tuple(native_args.tile_size),
-        tile_stride=tuple(native_args.tile_stride),
-    ).to(device=native_engine.device)
+        device=context_engine.device,
+        tiled=bool(runtime_args.tiled),
+        tile_size=tuple(runtime_args.tile_size),
+        tile_stride=tuple(runtime_args.tile_stride),
+    ).to(device=context_engine.device)
     expected_shape = (
         1,
         16,
-        (int(native_args.context_frames) - 1) // 4 + 1,
-        int(native_args.height) // 8,
-        int(native_args.width) // 8,
+        (int(runtime_args.context_frames) - 1) // 4 + 1,
+        int(runtime_args.height) // 8,
+        int(runtime_args.width) // 8,
     )
     if tuple(clean_target.shape) != expected_shape:
         raise ValueError(
             f"future target latent shape {tuple(clean_target.shape)} does not match {expected_shape}"
         )
-    native_engine.pipe.scheduler.set_timesteps(int(native_args.num_inference_steps))
+    context_engine.pipe.scheduler.set_timesteps(int(runtime_args.num_inference_steps))
     requested_indices = _parse_timestep_indices(args.timestep_indices)
-    invalid = [index for index in requested_indices if index >= len(native_engine.pipe.scheduler.timesteps)]
+    invalid = [index for index in requested_indices if index >= len(context_engine.pipe.scheduler.timesteps)]
     if invalid:
         raise ValueError(f"timestep indices outside scheduler: {invalid}")
-    generator = torch.Generator(device=native_engine.device).manual_seed(int(args.noise_seed))
-    noise = torch.randn(clean_target.shape, generator=generator, device=native_engine.device, dtype=clean_target.dtype)
+    generator = torch.Generator(device=context_engine.device).manual_seed(int(args.noise_seed))
+    noise = torch.randn(clean_target.shape, generator=generator, device=context_engine.device, dtype=clean_target.dtype)
 
     state = torch.load(snapshot, map_location="cpu", weights_only=False)
     reference_path = infer_slotmem.resolve_reference_image_path(
-        native_args.ref_image_path, native_args.json_path, story
+        runtime_args.ref_image_path, runtime_args.json_path, story
     )
     fixed_reference = Image.open(reference_path).convert("RGB") if reference_path else None
     reference_frames = infer_slotmem._decode_pil_frames_from_state(state.get("prev_frames_png", []))
     if not reference_frames and fixed_reference is not None:
         reference_frames = [fixed_reference]
-    if getattr(native_engine.pipe.dit, "has_image_input", False) and not reference_frames:
+    if getattr(context_engine.pipe.dit, "has_image_input", False) and not reference_frames:
         raise ValueError("prefix snapshot has no reference frames for I2V probe")
 
     cells = []
@@ -437,7 +442,7 @@ def _load_probe_context(args):
     target_hash = _sha256_file(future_target)
     for timestep_index in requested_indices:
         noisy_latent, flow_target, timestep = prepare_flow_cell(
-            native_engine.pipe.scheduler, clean_target, noise, timestep_index
+            context_engine.pipe.scheduler, clean_target, noise, timestep_index
         )
         cell = ProbeCell(
             event_id=str(event.get("event_id", f"chunk-{target_idx}")),
@@ -459,29 +464,34 @@ def _load_probe_context(args):
                 "prompt": actual_runtime["target_prompt_sha256"],
             },
         )
-        native_result = native_engine.generate_chunk(
-            prompt=prompt,
-            ref_images=reference_frames or None,
-            random_ref_frame=fixed_reference,
-            seed=target_seed,
-            online_memory_chars=[],
-            online_memory_bank_percents=[],
-            teacher_forced_probe={
-                "timestep_index": int(timestep_index),
-                "noisy_latents": noisy_latent,
-            },
-        )
-        native_predictions[int(timestep_index)] = native_result["prediction_cond"].detach().cpu()
+        if include_native:
+            native_result = context_engine.generate_chunk(
+                prompt=prompt,
+                ref_images=reference_frames or None,
+                random_ref_frame=fixed_reference,
+                seed=target_seed,
+                online_memory_chars=[],
+                online_memory_bank_percents=[],
+                teacher_forced_probe={
+                    "timestep_index": int(timestep_index),
+                    "noisy_latents": noisy_latent,
+                },
+            )
+            native_predictions[int(timestep_index)] = native_result["prediction_cond"].detach().cpu()
         cells.append(cell)
 
-    del native_engine, target_pixels, clean_target, noise
-    gc.collect()
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
-    slotmem_args = infer_slotmem.parse_args(
-        _set_runtime_option(inference_argv, "--native_wan_inference", None)
-    )
-    engine = infer_slotmem.SlotMemInferenceEngine(slotmem_args)
+    del target_pixels, clean_target, noise
+    if include_native:
+        del context_engine
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        slotmem_args = infer_slotmem.parse_args(
+            _set_runtime_option(inference_argv, "--native_wan_inference", None)
+        )
+        engine = infer_slotmem.SlotMemInferenceEngine(slotmem_args)
+    else:
+        engine = context_engine
     payloads = _build_arm_payloads(
         infer_slotmem,
         state,
