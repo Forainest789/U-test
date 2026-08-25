@@ -1817,6 +1817,7 @@ class CharacterWiseCrossAttention(torch.nn.Module):
         latent_h=None,
         latent_w=None,
         timestep_percent=1.0,
+        capture_token_diagnostics=False,
         **kwargs,
     ):
         if query_role_boxes is None:
@@ -1886,6 +1887,9 @@ class CharacterWiseCrossAttention(torch.nn.Module):
 
         out_selected = torch.zeros((bsz, int(selected_union.numel()), dim), device=tokens.device, dtype=tokens.dtype)
         best_selected = torch.full((bsz, int(selected_union.numel())), -1e9, device=tokens.device, dtype=tokens.dtype)
+        if bool(capture_token_diagnostics):
+            raw_cosine_selected = torch.full_like(best_selected, -1e9, dtype=torch.float32)
+            read_lse_selected = torch.full_like(best_selected, -1e9, dtype=torch.float32)
         local_index_map = torch.full((num_video_tokens,), -1, device=tokens.device, dtype=torch.long)
         local_index_map[selected_union] = torch.arange(selected_union.numel(), device=tokens.device, dtype=torch.long)
 
@@ -1998,6 +2002,11 @@ class CharacterWiseCrossAttention(torch.nn.Module):
                 out_role = out_h.permute(0, 2, 1, 3).reshape(bsz, int(q_idx_chunk.numel()), self.inner_dim)
                 out_role = self.out_proj(out_role)
                 sim_role = attn_logits.max(dim=-1).values.mean(dim=1)
+                if bool(capture_token_diagnostics):
+                    raw_query = torch.nn.functional.normalize(q_tok.detach().float(), dim=-1)
+                    raw_memory = torch.nn.functional.normalize(mem_tok.detach().float(), dim=-1)
+                    raw_cosine = torch.einsum('bqd,bkd->bqk', raw_query, raw_memory).max(dim=-1).values
+                    read_lse = torch.logsumexp(attn_logits.detach().float(), dim=-1).mean(dim=1)
 
                 q_local = local_index_map.index_select(0, q_idx_chunk)
                 prev_best = best_selected.index_select(1, q_local)
@@ -2007,6 +2016,11 @@ class CharacterWiseCrossAttention(torch.nn.Module):
                 merged_now = torch.where(winner_expand, out_role, merged_prev)
                 out_selected.index_copy_(1, q_local, merged_now)
                 best_selected.index_copy_(1, q_local, torch.where(winner, sim_role, prev_best))
+                if bool(capture_token_diagnostics):
+                    previous_raw = raw_cosine_selected.index_select(1, q_local)
+                    previous_read = read_lse_selected.index_select(1, q_local)
+                    raw_cosine_selected.index_copy_(1, q_local, torch.where(winner, raw_cosine, previous_raw))
+                    read_lse_selected.index_copy_(1, q_local, torch.where(winner, read_lse, previous_read))
                 role_winner_sum += winner.detach().sum().float()
 
             if role_norm_weight <= 0.0:
@@ -2040,6 +2054,18 @@ class CharacterWiseCrossAttention(torch.nn.Module):
         debug['plain_head_out_norm'] = float(plain_head_norm_sum / role_count)
         if entropy_count > 0:
             debug['attn_entropy'] = float(entropy_sum / float(entropy_count))
+        if bool(capture_token_diagnostics):
+            host = tokens.index_select(1, selected_union).detach().float()
+            raw_delta = scaled_delta.detach().float()
+            debug['token_diagnostics'] = {
+                'flat_idx': selected_union.detach().cpu(),
+                'host_features': host[0].to(device='cpu', dtype=torch.bfloat16),
+                'raw_delta_features': raw_delta[0].to(device='cpu', dtype=torch.bfloat16),
+                'host_norm': host.norm(dim=-1)[0].cpu(),
+                'raw_delta_norm': raw_delta.norm(dim=-1)[0].cpu(),
+                'raw_cosine_max': raw_cosine_selected.detach().float()[0].cpu(),
+                'read_logsumexp': read_lse_selected.detach().float()[0].cpu(),
+            }
         return out, debug
 
     def forward(

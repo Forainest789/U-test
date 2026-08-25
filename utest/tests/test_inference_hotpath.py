@@ -150,3 +150,57 @@ def test_teacher_forced_prepass_captures_single_layer_query() -> None:
         "if len(captured_by_layer) > 1:\n"
         "                captured_layer_tokens = _make_layerwise_container(captured_by_layer)"
     ) in body
+
+
+def test_sparse_token_diagnostics_are_opt_in_at_the_runtime_boundary() -> None:
+    root = Path(__file__).resolve().parents[2]
+    train_source = (root / "train_slotmem.py").read_text(encoding="utf-8")
+    infer_source = (root / "infer_slotmem.py").read_text(encoding="utf-8")
+
+    assert "capture_token_diagnostics=False" in train_source
+    assert "debug['token_diagnostics']" in train_source
+    assert "capture_sparse_token_diagnostics" in infer_source
+    assert 'token_diagnostics["effective_delta_features"]' in infer_source
+
+
+def test_sparse_attention_token_diagnostics_are_aligned() -> None:
+    torch = pytest.importorskip("torch")
+    cls = _load("train_slotmem", "CharacterWiseCrossAttention")
+    module = cls(dim=8, num_heads=2, head_dim=4, rope_dim=0, time_gate=False)
+    tokens = torch.randn(1, 6, 8)
+    memory = torch.randn(1, 3, 8)
+    payload = {"Mara": {"flat_idx": torch.tensor([1, 4])}}
+    meta = [{"char_id": "Mara"} for _ in range(3)]
+
+    _, quiet = module.forward_sparse(
+        tokens,
+        memory,
+        query_feature_payload=payload,
+        memory_bank_token_meta=meta,
+        latent_h=2,
+        latent_w=3,
+    )
+    _, captured = module.forward_sparse(
+        tokens,
+        memory,
+        query_feature_payload=payload,
+        memory_bank_token_meta=meta,
+        latent_h=2,
+        latent_w=3,
+        capture_token_diagnostics=True,
+    )
+
+    assert "token_diagnostics" not in quiet
+    diagnostics = captured["token_diagnostics"]
+    assert diagnostics["flat_idx"].tolist() == [1, 4]
+    assert diagnostics["host_features"].shape == (2, 8)
+    assert diagnostics["raw_delta_features"].shape == (2, 8)
+    assert all(
+        diagnostics[name].shape == (2,)
+        for name in (
+            "host_norm",
+            "raw_delta_norm",
+            "raw_cosine_max",
+            "read_logsumexp",
+        )
+    )

@@ -2310,6 +2310,7 @@ class SlotMemInferenceEngine(ReferenceInferenceEngine):
         kwargs.pop("feature_mapping_recorder", None)
         query_role_boxes = kwargs.pop("query_role_boxes", None)
         query_feature_payload = kwargs.pop("query_feature_payload", None)
+        capture_sparse_token_diagnostics = bool(kwargs.pop("capture_sparse_token_diagnostics", False))
         memory_token_lengths_per_character = kwargs.get("memory_token_lengths_per_character", None)
 
         current_noise_domain = self._set_inference_noise_domain_from_timestep(t)
@@ -2980,6 +2981,7 @@ class SlotMemInferenceEngine(ReferenceInferenceEngine):
                         latent_w=int(w),
                         timestep_percent=float(sparse_timestep_percent),
                         sparse_role_memory_query_chunk_size=self.sparse_role_memory_query_chunk_size,
+                        capture_token_diagnostics=capture_sparse_token_diagnostics,
                     )
                     layer_scale = float(getattr(self, "sparse_role_memory_layer_scales", {}).get(int(layer_idx), 1.0))
                     layer_scale = max(0.0, layer_scale)
@@ -2997,6 +2999,15 @@ class SlotMemInferenceEngine(ReferenceInferenceEngine):
                     character_attn_stats["raw_delta_norm"] = raw_delta_norm
                     character_attn_stats["effective_delta_norm"] = effective_delta_norm
                     character_attn_stats["host_token_norm"] = host_token_norm
+                    token_diagnostics = character_attn_stats.get("token_diagnostics")
+                    if capture_sparse_token_diagnostics and isinstance(token_diagnostics, dict):
+                        token_diagnostics = dict(token_diagnostics)
+                        raw_features = token_diagnostics.get("raw_delta_features")
+                        if isinstance(raw_features, torch.Tensor):
+                            effective_features = raw_features.detach().float() * float(total_layer_scale)
+                            token_diagnostics["effective_delta_features"] = effective_features.to(dtype=torch.bfloat16)
+                            token_diagnostics["effective_delta_norm"] = effective_features.norm(dim=-1)
+                        character_attn_stats["token_diagnostics"] = token_diagnostics
                 input_x2 = modulate(block_module.norm2(x_mid), shift_mlp, scale_mlp)
                 x_out_local = x_mid + gate_mlp * block_module.ffn(input_x2)
             return x_out_local, character_attn_stats
