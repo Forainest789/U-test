@@ -5,8 +5,11 @@ import math
 import pytest
 
 from utest.identity_token_scoring import (
+    build_candidate_groups,
+    build_intervention_masks,
     causal_metrics,
     classify_token,
+    group_membership_sha256,
     percentile_rank,
     score_token_channels,
 )
@@ -79,4 +82,46 @@ def test_causal_metrics_and_identity_label_require_correct_content() -> None:
     )
     assert "identity-core candidate" not in classify_token(
         row, repeat_margin=0.01, benefit_margin=0.3, validation_direction=True
+    )
+
+
+def test_grouping_is_coordinate_only_bounded_and_deterministic() -> None:
+    indices = [0, 1, 4, 5, 16, 17, 20, 21, 32, 33, 36, 37]
+    first = build_candidate_groups(
+        indices, height=4, width=4, max_groups=3, min_group_size=4
+    )
+    second = build_candidate_groups(
+        list(reversed(indices)), height=4, width=4, max_groups=3, min_group_size=4
+    )
+    assert first == second
+    assert 1 <= len(first) <= 3
+    assert sorted(index for group in first for index in group["indices"]) == sorted(indices)
+    assert all(len(group["indices"]) >= 4 for group in first)
+    assert group_membership_sha256(first) == group_membership_sha256(second)
+
+
+def test_interventions_match_count_and_per_frame_histogram() -> None:
+    original = [0, 1, 2, 3, 16, 17, 18, 19, 32, 33, 34, 35, 48, 49, 50, 51]
+    universe = original + [4, 20, 36, 52]
+    scores = {index: float(index % 16) for index in universe}
+    masks = build_intervention_masks(
+        original,
+        universe,
+        scores,
+        budget_fraction=0.25,
+        seed=7,
+        height=4,
+        width=4,
+    )
+    keep_names = ["identity_top", "random", "low_score", "wrong_identity"]
+    assert {len(masks[name]) for name in keep_names} == {4}
+    histogram = lambda values: [
+        sum(index // 16 == frame for index in values) for frame in range(4)
+    ]
+    assert {tuple(histogram(masks[name])) for name in keep_names} == {
+        tuple(histogram(masks["identity_top"]))
+    }
+    assert all(
+        len(universe) - len(masks[name]) == 4
+        for name in ("drop_identity", "drop_random", "drop_low")
     )
