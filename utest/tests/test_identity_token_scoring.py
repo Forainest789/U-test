@@ -80,8 +80,9 @@ def test_causal_metrics_and_identity_label_require_correct_content() -> None:
     assert "identity-core candidate" in classify_token(
         row, repeat_margin=0.01, benefit_margin=0.01, validation_direction=True
     )
+    no_content_row = {**row, "content_delta": 0.0}
     assert "identity-core candidate" not in classify_token(
-        row, repeat_margin=0.01, benefit_margin=0.3, validation_direction=True
+        no_content_row, repeat_margin=0.01, benefit_margin=0.01, validation_direction=True
     )
 
 

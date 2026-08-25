@@ -506,6 +506,8 @@ def _load_probe_context(args, *, include_native: bool = True):
         "torch": torch,
         "engine": engine,
         "event": event,
+        "story": story,
+        "target_chunk": target_chunk,
         "contract": contract,
         "prompt": prompt,
         "target_seed": target_seed,

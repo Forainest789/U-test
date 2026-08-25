@@ -2,8 +2,16 @@ from __future__ import annotations
 
 from pathlib import Path
 from types import SimpleNamespace
+import json
 
-from utest.identity_token_probe import build_screening_schedule, run_probe, select_cells
+from utest.identity_token_probe import (
+    build_screening_schedule,
+    finalize_s2,
+    run_probe,
+    s2_forward_budget,
+    select_cells,
+    semantic_group_manifest,
+)
 from utest.qstar_probe import ProbeCell
 
 
@@ -143,3 +151,88 @@ def test_orchestrator_loads_once_and_stops_before_s2_without_content_signal(
     assert calls == {"loads": 1, "forwards": 25}
     assert report["gates"]["content_causality"]["status"] == "BLOCK"
     assert report["forward_count"] == 25
+
+
+def test_delta8_semantic_manifest_separates_identity_action_and_scene() -> None:
+    root = Path(__file__).resolve().parents[2]
+    story = json.loads(
+        (root / "utest/events/person_reappearance_delta8_story.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    manifest = semantic_group_manifest(
+        story, {"character_name": "Mara", "target_chunk_idx": 8}
+    )
+
+    assert manifest["identity_name"] == ["Mara"]
+    assert len(manifest["stable_attributes"]) == 4
+    assert manifest["action_core"] == [
+        "runs",
+        "two steps",
+        "catches",
+        "closing",
+        "looks up",
+        "toward camera",
+    ]
+    assert set(manifest["scene"]) == {
+        "platform",
+        "tram",
+        "rain",
+        "commuters",
+        "dusk",
+    }
+
+
+def test_s2_never_exceeds_declared_measured_budget() -> None:
+    assert s2_forward_budget(max_groups=8, has_validation=True) <= 25
+    assert 25 + s2_forward_budget(max_groups=8, has_validation=True) <= 50
+
+
+def test_finalize_s2_emits_identity_core_only_after_set_level_pass() -> None:
+    token_rows = [
+        {
+            "flat_idx": 4,
+            "s_name": 0.9,
+            "s_attr": 0.8,
+            "s_persist": 0.85,
+            "s_action": 0.2,
+            "s_scene": 0.1,
+            "group_causal_score": 0.7,
+            "content_delta": 0.25,
+        }
+    ]
+    losses = {
+        "no_memory": 1.0,
+        "full_correct": 0.5,
+        "identity_only": 0.6,
+        "drop_identity": 0.9,
+        "drop_random": 0.55,
+        "drop_low": 0.52,
+        "wrong_identity": 0.85,
+    }
+
+    result = finalize_s2(
+        token_rows,
+        losses,
+        identity_fraction=0.25,
+        repeat_margin=0.01,
+        benefit_margin=0.01,
+        validation_direction=True,
+    )
+
+    assert result["gate"]["status"] == "PASS"
+    assert result["metrics"]["r_keep"] >= 0.8
+    assert "identity-core candidate" in result["token_rows"][0]["labels"]
+
+
+def test_production_s2_wires_expansion_knockouts_and_validation() -> None:
+    root = Path(__file__).resolve().parents[2]
+    source = (root / "utest/identity_token_probe.py").read_text(encoding="utf-8")
+    body = source[source.index("def run_s2("):source.index("def run_probe(")]
+
+    assert '"all_token_diagnostic_correct"' in body
+    assert '"all_token_diagnostic_wrong"' in body
+    assert "build_candidate_groups(" in body
+    assert 'f"drop_group:{group[\'group_id\']}"' in body
+    assert '"validation_wrong_identity"' in body
+    assert "S2 measured-forward budget exceeded" in body

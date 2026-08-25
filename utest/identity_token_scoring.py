@@ -133,7 +133,7 @@ def classify_token(
     causal_identity = (
         high_identity == 3
         and causal > control + repeat_margin
-        and content_delta > benefit_margin
+        and content_delta > 0.0
         and bool(validation_direction)
     )
     labels: list[str] = []
