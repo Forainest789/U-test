@@ -227,6 +227,89 @@ directories under `arms/`, `arms/intervention_contract.json`, and `run_manifest.
 The seven names are `correct`, `correct_repeat`, `no_memory`, `zero`, `random`, `wrong`,
 and diagnostic-only `native`.
 
+### Fast identity-token causal probe on A100 80 GB
+
+This probe asks a narrower question than Q*: after content causality is established, can
+a small set of video-token positions be identified that is sufficient for, and more
+necessary to, Mara's identity recovery than equal-budget random or low-score controls?
+It does not claim that a token has a context-free semantic type. An `identity_core`
+label is an operational result for this frozen event, timestep, layer group, prompt, and
+model; action and scene scores are diagnostics for separating plausible confounds.
+
+The fast smoke run performs five measured teacher-forced forwards at timestep 25 and the
+middle layer group. It verifies determinism, path influence, and correct-versus-wrong
+content direction, then stops before token classification:
+
+```bash
+EVENT_JSON="$PWD/utest/events/person_reappearance_delta8.json" \
+FUTURE_TARGET_VIDEO=/data/targets/person_reappearance_delta8_chunk_008_teacher.mp4 \
+FUTURE_TARGET_MANIFEST=/data/targets/person_reappearance_delta8_chunk_008_teacher.manifest.json \
+BASE_INFERENCE_ARGS=/data/runs/stage_gates/slotmem_m0_001/m0a/inference_args.yaml \
+PLATFORM_MANIFEST=/data/runs/stage_gates/slotmem_m0_001/platform.manifest.json \
+DONOR_PAYLOAD=/data/events/donor_payload.pt \
+DONOR_MANIFEST=/data/events/donor_manifest.json \
+EVENT_RUN_ROOT=/data/runs/identity_probe_smoke \
+IDENTITY_SMOKE=1 RUN_DECODED_VALIDATION=0 \
+UTEST_ENV=utest CUDA_VISIBLE_DEVICES=0 \
+bash scripts/run_slotmem_identity_probe.sh
+```
+
+If smoke passes, use a different, fresh `EVENT_RUN_ROOT` for the full S0-S2 run:
+
+```bash
+EVENT_JSON="$PWD/utest/events/person_reappearance_delta8.json" \
+FUTURE_TARGET_VIDEO=/data/targets/person_reappearance_delta8_chunk_008_teacher.mp4 \
+FUTURE_TARGET_MANIFEST=/data/targets/person_reappearance_delta8_chunk_008_teacher.manifest.json \
+BASE_INFERENCE_ARGS=/data/runs/stage_gates/slotmem_m0_001/m0a/inference_args.yaml \
+PLATFORM_MANIFEST=/data/runs/stage_gates/slotmem_m0_001/platform.manifest.json \
+DONOR_PAYLOAD=/data/events/donor_payload.pt \
+DONOR_MANIFEST=/data/events/donor_manifest.json \
+EVENT_RUN_ROOT=/data/runs/identity_probe_full \
+IDENTITY_SMOKE=0 RUN_DECODED_VALIDATION=0 \
+UTEST_ENV=utest CUDA_VISIBLE_DEVICES=0 \
+bash scripts/run_slotmem_identity_probe.sh
+```
+
+The full path runs 25 S0/S1 screening forwards, at most 25 measured S2 forwards, two
+truncated semantic-attention captures, and one unmeasured CUDA warm-up. S2 scores name,
+stable attributes, correct-versus-wrong persistence, action, and scene channels; proposes
+spatiotemporal groups; then applies group knockout and equal-budget identity/random/low
+controls. It emits token labels only when the set-level gates pass: identity fraction at
+most 25%, identity-only retention at least 80%, identity knockout stronger than controls,
+correct content better than matched-wrong content, and the same causal direction in a
+held-out cell. A failure blocks the identity claim instead of selecting the best-looking
+tokens anyway.
+
+Only after S2 passes, an optional fresh run may add four decoded rollouts for external
+identity and motion scoring:
+
+```bash
+EVENT_JSON="$PWD/utest/events/person_reappearance_delta8.json" \
+FUTURE_TARGET_VIDEO=/data/targets/person_reappearance_delta8_chunk_008_teacher.mp4 \
+FUTURE_TARGET_MANIFEST=/data/targets/person_reappearance_delta8_chunk_008_teacher.manifest.json \
+BASE_INFERENCE_ARGS=/data/runs/stage_gates/slotmem_m0_001/m0a/inference_args.yaml \
+PLATFORM_MANIFEST=/data/runs/stage_gates/slotmem_m0_001/platform.manifest.json \
+DONOR_PAYLOAD=/data/events/donor_payload.pt \
+DONOR_MANIFEST=/data/events/donor_manifest.json \
+EVENT_RUN_ROOT=/data/runs/identity_probe_decoded \
+IDENTITY_SMOKE=0 RUN_DECODED_VALIDATION=1 \
+UTEST_ENV=utest CUDA_VISIBLE_DEVICES=0 \
+bash scripts/run_slotmem_identity_probe.sh
+```
+
+The 50-forward ceiling is for the teacher-forced S0-S2 probe. The four S3 diffusion
+rollouts are deliberately outside that budget and are disabled by default. The runner
+requires one A100 with at least 75 GiB visible memory, bf16, model offload disabled, and
+the actual DiffSynth backend resolved to FlashAttention 2. `ALLOW_ATTENTION_FALLBACK=1`
+exists only for development diagnostics and makes the run non-comparable to the fast A100
+protocol. `DRY_RUN=1` records the complete command chain without loading weights.
+
+Primary outputs are `identity_probe/identity_probe_report.json`,
+`identity_probe/token_scores.parquet` (or its explicitly reported fallback),
+`identity_probe/interventions.jsonl`, `identity_probe/summary.md`, diagnostic figures,
+and the top-level `run_manifest.json`. Read the gate states before the rankings: a high
+token score under a blocked content or identity gate is a candidate, not causal evidence.
+
 ### Legacy fixed-prefix five-arm rollout
 
 Copy one event from `e0.json` into its own JSON file. Use a different eligible story to

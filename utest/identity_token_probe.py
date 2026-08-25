@@ -967,6 +967,7 @@ def run_s2(
         if full_benefit <= max(float(getattr(args, "benefit_margin", 0.0)), 0.0):
             return {
                 "measured_forward_count": len(measured),
+                "semantic_capture_count": 2,
                 "semantic_manifest": manifest,
                 "candidate_universe": universe,
                 "token_rows": [],
@@ -1120,6 +1121,66 @@ def run_s2(
         engine.sparse_role_memory_injection_layers = original_layers
 
 
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for block in iter(lambda: handle.read(1 << 20), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def run_s3(context: Mapping, s2: Mapping, *, output: Path, save_video_fn=None) -> dict:
+    """Decode the four frozen validation arms after the S2 gate passes."""
+    if save_video_fn is None:
+        from diffsynth.utils.data import save_video as save_video_fn
+
+    universe = [int(index) for index in s2["candidate_universe"]]
+    masks = s2["masks"]
+    character = str(context["event"]["character_name"])
+    decoded_root = Path(output) / "decoded_validation"
+    decoded_root.mkdir(parents=True, exist_ok=True)
+    specs = (
+        ("full_correct", "correct", universe),
+        ("no_memory", "no_memory", None),
+        ("identity_only", "correct", [int(index) for index in masks["identity_top"]]),
+        ("drop_identity", "correct", [int(index) for index in masks["drop_identity"]]),
+    )
+    records = []
+    for name, source_arm, indices in specs:
+        bundle = context["payloads"][source_arm]
+        started = time.perf_counter()
+        frames, _, _ = context["engine"].generate_chunk(
+            prompt=context["prompt"],
+            memory_tokens=bundle["memory_tokens"],
+            memory_bank_tokens=bundle["memory_bank_tokens"],
+            memory_bank_percents=bundle["memory_bank_percents"],
+            memory_bank_token_meta=bundle["memory_bank_token_meta"],
+            memory_token_lengths_per_character=bundle["memory_token_lengths_per_character"],
+            ref_images=context["reference_frames"],
+            random_ref_frame=context["fixed_reference"],
+            seed=context["target_seed"],
+            online_memory_chars=[],
+            online_memory_bank_percents=[],
+            query_indices_by_role=({character: indices} if indices is not None else None),
+        )
+        path = decoded_root / f"{name}.mp4"
+        save_video_fn(frames, str(path), fps=16)
+        records.append({
+            "arm": name,
+            "source_arm": source_arm,
+            "query_indices": indices,
+            "frame_count": len(frames),
+            "wall_time_s": time.perf_counter() - started,
+            "video_path": str(path.resolve()),
+            "video_sha256": _sha256_file(path) if path.is_file() else None,
+        })
+    return {
+        "status": "PENDING",
+        "reason": "decoded identity and motion hard gates require scoring",
+        "arms": records,
+    }
+
+
 def run_probe(args, *, context_loader=None) -> dict:
     """Run S0/S1 once; later stages extend this result after a content PASS."""
     from .qstar_probe import _influence, _load_probe_context
@@ -1131,9 +1192,17 @@ def run_probe(args, *, context_loader=None) -> dict:
     layer_groups = _parse_layer_groups(
         getattr(args, "layer_groups", DEFAULT_GROUPS)
     )
-    schedule = build_screening_schedule(timesteps, layer_groups)
     middle_timestep = timesteps[1]
-    all_layers = tuple(sorted({layer for group in layer_groups for layer in group}))
+    smoke = bool(getattr(args, "smoke", False))
+    if smoke:
+        all_layers = tuple(layer_groups[1])
+        schedule = [
+            ScreeningRun("SMOKE", middle_timestep, all_layers, arm)
+            for arm in ("correct", "correct_repeat", "zero", "no_memory", "wrong")
+        ]
+    else:
+        all_layers = tuple(sorted({layer for group in layer_groups for layer in group}))
+        schedule = build_screening_schedule(timesteps, layer_groups)
     loader = context_loader or _load_probe_context
     context = loader(args, include_native=False)
     torch_module = context.get("torch")
@@ -1195,7 +1264,8 @@ def run_probe(args, *, context_loader=None) -> dict:
     public_records = [{key: value for key, value in row.items() if key != "_prediction"} for row in records]
     content_pass = selected["primary"] is not None
     s2_result = None
-    if content_pass:
+    s3_result = None
+    if content_pass and not smoke:
         s2_context = (
             torch_module.inference_mode()
             if torch_module is not None and hasattr(torch_module, "inference_mode")
@@ -1209,6 +1279,21 @@ def run_probe(args, *, context_loader=None) -> dict:
                 args,
                 repeat_margin=repeat_margin,
             )
+        if (
+            bool(getattr(args, "run_decoded_validation", False))
+            and s2_result.get("gate", {}).get("status") == "PASS"
+        ):
+            decoded_context = (
+                torch_module.inference_mode()
+                if torch_module is not None and hasattr(torch_module, "inference_mode")
+                else nullcontext()
+            )
+            with decoded_context:
+                s3_result = run_s3(
+                    context,
+                    s2_result,
+                    output=Path(args.output),
+                )
     report = {
         "schema_version": 1,
         "forward_count": len(records) + int(
@@ -1227,7 +1312,7 @@ def run_probe(args, *, context_loader=None) -> dict:
             + int(s2_result.get("semantic_capture_count", 0) if s2_result else 0)
             + warmup_forward_count
         ),
-        "forward_budget": 50,
+        "forward_budget": 5 if smoke else 50,
         "screening_records": public_records,
         "screening_cells": cell_records,
         "selected_cells": selected,
@@ -1242,7 +1327,22 @@ def run_probe(args, *, context_loader=None) -> dict:
             "identity_set": (
                 dict(s2_result["gate"])
                 if s2_result is not None
-                else {"status": "PENDING", "reasons": ["S2 not run"]}
+                else {
+                    "status": "PENDING",
+                    "reasons": ["smoke mode stops before S2" if smoke else "S2 not run"],
+                }
+            ),
+            "decoded_validation": (
+                {"status": str(s3_result["status"]), "reasons": [s3_result["reason"]]}
+                if s3_result is not None
+                else {
+                    "status": "PENDING",
+                    "reasons": [
+                        "not requested"
+                        if not bool(getattr(args, "run_decoded_validation", False))
+                        else "S2 identity gate did not pass"
+                    ],
+                }
             ),
         },
         "runtime": {
@@ -1305,6 +1405,8 @@ def run_probe(args, *, context_loader=None) -> dict:
     }
     if s2_result is not None:
         report["s2"] = s2_result
+    if s3_result is not None:
+        report["s3"] = s3_result
     return report
 
 
@@ -1389,6 +1491,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--require-dynamic-writer", action="store_true")
     parser.add_argument("--allow-attention-fallback", action="store_true")
     parser.add_argument("--run-decoded-validation", action="store_true")
+    parser.add_argument("--smoke", action="store_true")
     parser.add_argument("--self-check", action="store_true")
     return parser
 

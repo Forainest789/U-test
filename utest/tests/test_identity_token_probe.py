@@ -9,6 +9,7 @@ from utest.identity_token_probe import (
     cache_key,
     finalize_s2,
     run_probe,
+    run_s3,
     s2_forward_budget,
     select_cells,
     semantic_group_manifest,
@@ -304,3 +305,87 @@ def test_output_report_is_complete_without_reading_figures(tmp_path: Path) -> No
         (tmp_path / "identity_probe_report.json").read_text(encoding="utf-8")
     )
     assert report["gates"] and report["timing"] and report["forward_count"] <= 50
+
+
+def test_s3_runs_exactly_four_frozen_query_arms(tmp_path: Path) -> None:
+    calls = []
+
+    class Engine:
+        def generate_chunk(self, **kwargs):
+            calls.append(kwargs)
+            return ["frame"], "latents", {}
+
+    context = _fake_context(Engine())
+    context["event"]["character_name"] = "Mara"
+    s2 = {
+        "candidate_universe": [1, 2, 3, 4, 5, 6],
+        "masks": {
+            "identity_top": [1, 2],
+            "drop_identity": [3, 4, 5, 6],
+        },
+    }
+    saved = []
+    result = run_s3(
+        context,
+        s2,
+        output=tmp_path,
+        save_video_fn=lambda frames, path, fps: saved.append((frames, Path(path), fps)),
+    )
+
+    assert [row["arm"] for row in result["arms"]] == [
+        "full_correct",
+        "no_memory",
+        "identity_only",
+        "drop_identity",
+    ]
+    assert len(calls) == len(saved) == 4
+    assert calls[0]["query_indices_by_role"] == {"Mara": [1, 2, 3, 4, 5, 6]}
+    assert calls[1]["query_indices_by_role"] is None
+    assert calls[2]["query_indices_by_role"] == {"Mara": [1, 2]}
+
+
+def test_smoke_mode_runs_one_cell_and_stops_before_s2(tmp_path: Path) -> None:
+    calls = {"forwards": 0}
+
+    class Engine:
+        device = "cpu"
+        sparse_role_memory_injection_layers = list(range(16))
+
+        def generate_chunk(self, **kwargs):
+            calls["forwards"] += 1
+            memory = kwargs.get("memory_tokens")
+            no_memory = memory is None
+            prediction = 1.0 if memory == -1.0 else 0.0
+            return {
+                "prediction_cond": [prediction],
+                "prediction": [prediction],
+                "forced_memory_path": no_memory,
+                "sparse_role_memory_stats_by_layer": {} if no_memory else {
+                    "5": {
+                        "enabled": 1,
+                        "selected_query_tokens": 4,
+                        "selected_memory_tokens": 4,
+                        "effective_delta_norm": 0.1,
+                        "host_token_norm": 1.0,
+                    }
+                },
+                "attention_implementation": "flash_attention_2",
+            }
+
+    args = SimpleNamespace(
+        repeat_loss_tolerance=0.0,
+        repeat_influence_tolerance=0.0,
+        benefit_margin=0.0,
+        influence_floor=0.0,
+        allow_attention_fallback=False,
+        output=tmp_path,
+        smoke=True,
+    )
+    result = run_probe(
+        args, context_loader=lambda args, include_native: _fake_context(Engine())
+    )
+
+    assert calls["forwards"] == 5
+    assert result["gates"]["content_causality"]["status"] == "PASS"
+    assert "s2" not in result
+    assert result["forward_count"] == 5
