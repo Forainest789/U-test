@@ -1,13 +1,21 @@
 """Fast teacher-forced identity-token causal probe for SlotMem."""
 from __future__ import annotations
 
+import argparse
 from dataclasses import dataclass
+import hashlib
+import json
 import math
+import os
 import random
 import statistics
+import subprocess
+import sys
+import tempfile
 import time
 from collections.abc import Mapping
 from contextlib import nullcontext
+from pathlib import Path
 from typing import Sequence
 
 from .identity_token_scoring import (
@@ -46,12 +54,194 @@ DELTA8_ACTION_CONTEXT = ("tram door", "one hand")
 DELTA8_SCENE = ("platform", "tram", "rain", "commuters", "dusk")
 
 
+def _json_safe(value):
+    if isinstance(value, Mapping):
+        return {str(key): _json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [_json_safe(item) for item in value]
+    if isinstance(value, Path):
+        return str(value)
+    if hasattr(value, "detach"):
+        return value.detach().float().cpu().tolist()
+    if isinstance(value, float) and not math.isfinite(value):
+        raise ValueError("JSON output values must be finite")
+    return value
+
+
+def cache_key(kind: str, inputs: Mapping) -> str:
+    """Hash one versioned immutable cache boundary."""
+    payload = {
+        "schema_version": 1,
+        "kind": str(kind),
+        "inputs": _json_safe(inputs),
+    }
+    encoded = json.dumps(
+        payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _atomic_text(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    temporary.write_text(text, encoding="utf-8")
+    temporary.replace(path)
+
+
+def _write_json(path: Path, value) -> None:
+    _atomic_text(
+        path,
+        json.dumps(_json_safe(value), indent=2, sort_keys=True, ensure_ascii=False) + "\n",
+    )
+
+
+def _write_jsonl(path: Path, rows: Sequence[Mapping]) -> None:
+    text = "".join(
+        json.dumps(_json_safe(row), sort_keys=True, ensure_ascii=False) + "\n"
+        for row in rows
+    )
+    _atomic_text(path, text)
+
+
+def _git_head() -> str | None:
+    completed = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=Path(__file__).resolve().parents[1],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    return completed.stdout.strip() if completed.returncode == 0 else None
+
+
+def _write_figures(output: Path, result: Mapping) -> dict:
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    figures = output / "figures"
+    figures.mkdir(parents=True, exist_ok=True)
+    cells = list(result.get("screening_cells", []) or [])
+    s2 = result.get("s2", {}) if isinstance(result.get("s2"), Mapping) else {}
+    token_rows = list(s2.get("token_rows", []) or [])
+    groups = list(s2.get("groups", []) or [])
+
+    fig, axis = plt.subplots(figsize=(7, 4))
+    if cells:
+        labels = [
+            f"t{row['timestep_index']}:{row.get('layer_group', [])}" for row in cells
+        ]
+        axis.bar(range(len(cells)), [float(row.get("q_content", 0.0)) for row in cells])
+        axis.set_xticks(range(len(cells)), labels, rotation=60, ha="right", fontsize=7)
+    axis.axhline(0.0, color="black", linewidth=0.8)
+    axis.set_ylabel("Q_content")
+    fig.tight_layout()
+    fig.savefig(figures / "layer_timestep_qcontent.png", dpi=160)
+    plt.close(fig)
+
+    fig, axis = plt.subplots(figsize=(7, 4))
+    if token_rows:
+        x = [int(row["flat_idx"]) for row in token_rows]
+        for name in ("s_pre", "s_action", "s_scene"):
+            axis.scatter(x, [float(row.get(name, 0.0)) for row in token_rows], s=8, label=name)
+        axis.legend()
+    axis.set_xlabel("flat video-token index")
+    axis.set_ylabel("ranked score")
+    fig.tight_layout()
+    fig.savefig(figures / "token_type_maps.png", dpi=160)
+    plt.close(fig)
+
+    fig, axis = plt.subplots(figsize=(7, 4))
+    if groups:
+        axis.bar(
+            [str(group["group_id"]) for group in groups],
+            [float(group.get("group_causal_score", 0.0)) for group in groups],
+        )
+    axis.set_ylabel("group causal score")
+    fig.tight_layout()
+    fig.savefig(figures / "group_causal_map.png", dpi=160)
+    plt.close(fig)
+    return {"status": "PASS", "directory": str(figures.resolve())}
+
+
+def write_outputs(output: Path, result: Mapping) -> None:
+    """Write one self-contained, versioned probe directory atomically."""
+    output = Path(output)
+    output.mkdir(parents=True, exist_ok=True)
+    report = dict(result)
+    try:
+        report["figures"] = _write_figures(output, report)
+    except Exception as exc:
+        report["figures"] = {"status": "BLOCK", "reason": str(exc)}
+    s2 = report.get("s2", {}) if isinstance(report.get("s2"), Mapping) else {}
+    _write_json(
+        output / "runtime_manifest.json",
+        {
+            "schema_version": int(report.get("schema_version", 1)),
+            "runtime": report.get("runtime", {}),
+            "timing": report.get("timing", {}),
+            "gates": report.get("gates", {}),
+            "forward_count": int(report.get("forward_count", 0)),
+            "actual_model_forward_count": int(
+                report.get("actual_model_forward_count", report.get("forward_count", 0))
+            ),
+            "forward_budget": int(report.get("forward_budget", 50)),
+        },
+    )
+    _write_json(output / "input_contract.json", report.get("input_contract", {}))
+    _write_jsonl(output / "screening_cells.jsonl", report.get("screening_cells", []))
+    _write_json(output / "selected_cells.json", report.get("selected_cells", {}))
+    _write_json(
+        output / "diagnostic_prompt_manifest.json",
+        {
+            "semantic_manifest": s2.get("semantic_manifest", {}),
+            "diagnostic_prompt": s2.get("diagnostic_prompt"),
+        },
+    )
+    _write_jsonl(output / "token_scores.jsonl", s2.get("token_rows", []))
+    _write_json(output / "token_groups.json", s2.get("groups", []))
+    _write_jsonl(output / "interventions.jsonl", s2.get("interventions", []))
+    _write_json(output / "identity_probe_report.json", report)
+
+
 @dataclass(frozen=True)
 class ScreeningRun:
     stage: str
     timestep_index: int
     layer_group: tuple[int, ...]
     arm: str
+
+
+def _parse_timesteps(value) -> tuple[int, ...]:
+    if isinstance(value, str):
+        parsed = tuple(int(item.strip()) for item in value.split(",") if item.strip())
+    else:
+        parsed = tuple(int(item) for item in value)
+    if len(parsed) != 3 or len(set(parsed)) != 3 or any(item < 0 for item in parsed):
+        raise ValueError("timestep indices must contain three unique non-negative values")
+    return parsed
+
+
+def _parse_layer_groups(value) -> tuple[tuple[int, ...], ...]:
+    if not isinstance(value, str):
+        groups = tuple(tuple(int(layer) for layer in group) for group in value)
+    else:
+        groups = []
+        for group_text in value.split(","):
+            group_text = group_text.strip()
+            if "-" in group_text:
+                left, right = (int(item) for item in group_text.split("-", 1))
+                groups.append(tuple(range(left, right + 1)))
+            elif group_text:
+                groups.append((int(group_text),))
+        groups = tuple(groups)
+    if len(groups) != 3 or any(not group for group in groups):
+        raise ValueError("layer groups must contain exactly three non-empty groups")
+    flattened = [layer for group in groups for layer in group]
+    if len(flattened) != len(set(flattened)) or any(layer < 0 for layer in flattened):
+        raise ValueError("layer groups must be disjoint and non-negative")
+    return tuple(groups)
 
 
 def semantic_group_manifest(story: Mapping, event: Mapping) -> dict[str, list[str]]:
@@ -160,12 +350,13 @@ def build_screening_schedule(
     if len(timesteps) != 3 or len(groups) != 3:
         raise ValueError("screening requires exactly three timesteps and layer groups")
     middle = timesteps[1]
+    all_layers = tuple(sorted({layer for group in groups for layer in group}))
     schedule = [
-        ScreeningRun("S0", middle, ALL_LAYERS, arm)
+        ScreeningRun("S0", middle, all_layers, arm)
         for arm in ("correct", "correct_repeat", "zero", "no_memory")
     ]
     schedule.extend(
-        ScreeningRun("S1", timestep, ALL_LAYERS, "no_memory")
+        ScreeningRun("S1", timestep, all_layers, "no_memory")
         for timestep in (timesteps[0], timesteps[2])
     )
     schedule.extend(
@@ -174,7 +365,7 @@ def build_screening_schedule(
         for group in groups
         for arm in ("correct", "wrong")
     )
-    schedule.append(ScreeningRun("S1", middle, ALL_LAYERS, "wrong"))
+    schedule.append(ScreeningRun("S1", middle, all_layers, "wrong"))
     return schedule
 
 
@@ -933,20 +1124,42 @@ def run_probe(args, *, context_loader=None) -> dict:
     """Run S0/S1 once; later stages extend this result after a content PASS."""
     from .qstar_probe import _influence, _load_probe_context
 
+    total_started = time.perf_counter()
+    timesteps = _parse_timesteps(
+        getattr(args, "timestep_indices", DEFAULT_TIMESTEPS)
+    )
+    layer_groups = _parse_layer_groups(
+        getattr(args, "layer_groups", DEFAULT_GROUPS)
+    )
+    schedule = build_screening_schedule(timesteps, layer_groups)
+    middle_timestep = timesteps[1]
+    all_layers = tuple(sorted({layer for group in layer_groups for layer in group}))
     loader = context_loader or _load_probe_context
     context = loader(args, include_native=False)
     torch_module = context.get("torch")
-    inference_context = (
-        torch_module.inference_mode()
-        if torch_module is not None and hasattr(torch_module, "inference_mode")
-        else nullcontext()
-    )
     engine = context["engine"]
     original_layers = list(engine.sparse_role_memory_injection_layers)
     records = []
+    warmup_forward_count = 0
     try:
+        if (
+            torch_module is not None
+            and hasattr(torch_module, "cuda")
+            and torch_module.cuda.is_available()
+        ):
+            with torch_module.inference_mode():
+                engine.sparse_role_memory_injection_layers = list(schedule[0].layer_group)
+                _run_screening_forward(context, schedule[0])
+                torch_module.cuda.synchronize()
+                torch_module.cuda.reset_peak_memory_stats()
+                warmup_forward_count = 1
+        inference_context = (
+            torch_module.inference_mode()
+            if torch_module is not None and hasattr(torch_module, "inference_mode")
+            else nullcontext()
+        )
         with inference_context:
-            for run in build_screening_schedule():
+            for run in schedule:
                 engine.sparse_role_memory_injection_layers = list(run.layer_group)
                 records.append(_run_screening_forward(context, run))
     finally:
@@ -960,8 +1173,8 @@ def run_probe(args, *, context_loader=None) -> dict:
         (row["timestep_index"], tuple(row["layer_group"]), row["arm"]): row
         for row in records
     }
-    correct = lookup[(25, ALL_LAYERS, "correct")]
-    repeat = lookup[(25, ALL_LAYERS, "correct_repeat")]
+    correct = lookup[(middle_timestep, all_layers, "correct")]
+    repeat = lookup[(middle_timestep, all_layers, "correct_repeat")]
     repeat_loss_floor = abs(float(correct["loss"]) - float(repeat["loss"]))
     repeat_influence = _influence(correct["_prediction"], repeat["_prediction"])
     if repeat_loss_floor > float(args.repeat_loss_tolerance):
@@ -1001,6 +1214,19 @@ def run_probe(args, *, context_loader=None) -> dict:
         "forward_count": len(records) + int(
             s2_result.get("measured_forward_count", 0) if s2_result else 0
         ),
+        "measured_forward_count": len(records) + int(
+            s2_result.get("measured_forward_count", 0) if s2_result else 0
+        ),
+        "diagnostic_forward_count": int(
+            s2_result.get("semantic_capture_count", 0) if s2_result else 0
+        ),
+        "warmup_forward_count": warmup_forward_count,
+        "actual_model_forward_count": (
+            len(records)
+            + int(s2_result.get("measured_forward_count", 0) if s2_result else 0)
+            + int(s2_result.get("semantic_capture_count", 0) if s2_result else 0)
+            + warmup_forward_count
+        ),
         "forward_budget": 50,
         "screening_records": public_records,
         "screening_cells": cell_records,
@@ -1019,8 +1245,177 @@ def run_probe(args, *, context_loader=None) -> dict:
                 else {"status": "PENDING", "reasons": ["S2 not run"]}
             ),
         },
-        "runtime": {"attention_implementation": backends[0] if len(backends) == 1 else backends},
+        "runtime": {
+            "attention_implementation": backends[0] if len(backends) == 1 else backends,
+            "attention_requested": os.environ.get("DIFFSYNTH_ATTENTION_IMPLEMENTATION"),
+            "offload_models": os.environ.get("SLOTMEM_OFFLOAD_MODELS"),
+            "torch_version": getattr(torch_module, "__version__", None),
+            "cuda_version": getattr(getattr(torch_module, "version", None), "cuda", None),
+            "device_name": (
+                torch_module.cuda.get_device_name(0)
+                if torch_module is not None
+                and hasattr(torch_module, "cuda")
+                and torch_module.cuda.is_available()
+                else None
+            ),
+            "peak_allocated_bytes": (
+                int(torch_module.cuda.max_memory_allocated())
+                if torch_module is not None
+                and hasattr(torch_module, "cuda")
+                and torch_module.cuda.is_available()
+                else 0
+            ),
+            "peak_reserved_bytes": (
+                int(torch_module.cuda.max_memory_reserved())
+                if torch_module is not None
+                and hasattr(torch_module, "cuda")
+                and torch_module.cuda.is_available()
+                else 0
+            ),
+            "argv": list(sys.argv),
+            "python_version": sys.version,
+            "source_commit": _git_head(),
+        },
+        "timing": {
+            "s0_s1_wall_time_s": sum(float(row["wall_time_s"]) for row in records),
+            "total_wall_time_s": time.perf_counter() - total_started,
+            "cache_hits": 0,
+        },
+        "input_contract": {
+            "snapshot": context.get("contract", {}).get("snapshot", {}),
+            "runtime_contract": context.get("contract", {}).get("runtime_contract", {}),
+            "inputs": context.get("contract", {}).get("inputs", {}),
+            "qstar": context.get("contract", {}).get("qstar", {}),
+            "cell_input_hashes": {
+                str(cell.timestep_index): dict(cell.input_hashes) for cell in context["cells"]
+            },
+            "cell_cache_keys": {
+                str(cell.timestep_index): cache_key(
+                    "teacher_forced_cell",
+                    {
+                        "timestep_index": int(cell.timestep_index),
+                        "layers": list(all_layers),
+                        "backend": backends,
+                        "inputs": dict(cell.input_hashes),
+                    },
+                )
+                for cell in context["cells"]
+            },
+        },
     }
     if s2_result is not None:
         report["s2"] = s2_result
     return report
+
+
+def self_check() -> None:
+    schedule = build_screening_schedule()
+    assert len(schedule) == 25
+    assert percentile_rank([1.0, 1.0, 3.0]) == [0.25, 0.25, 1.0]
+    groups = build_candidate_groups(
+        [0, 1, 4, 5, 16, 17, 20, 21],
+        height=4,
+        width=4,
+        max_groups=2,
+        min_group_size=4,
+    )
+    assert sorted(index for group in groups for index in group["indices"]) == [
+        0, 1, 4, 5, 16, 17, 20, 21
+    ]
+    final = finalize_s2(
+        [{
+            "flat_idx": 0,
+            "s_name": 1.0,
+            "s_attr": 1.0,
+            "s_persist": 1.0,
+            "s_action": 0.0,
+            "s_scene": 0.0,
+            "group_causal_score": 0.8,
+            "content_delta": 0.2,
+        }],
+        {
+            "no_memory": 1.0,
+            "full_correct": 0.5,
+            "identity_only": 0.6,
+            "drop_identity": 0.9,
+            "drop_random": 0.55,
+            "drop_low": 0.52,
+            "wrong_identity": 0.85,
+        },
+        identity_fraction=0.25,
+        repeat_margin=0.01,
+        benefit_margin=0.01,
+        validation_direction=True,
+    )
+    assert final["gate"]["status"] == "PASS"
+    with tempfile.TemporaryDirectory() as directory:
+        output = Path(directory) / "identity_probe"
+        write_outputs(
+            output,
+            {
+                "schema_version": 1,
+                "forward_count": 25,
+                "forward_budget": 50,
+                "gates": {"runtime_contract": {"status": "PASS"}},
+                "runtime": {"attention_implementation": "flash_attention_2"},
+                "timing": {"total_wall_time_s": 0.0},
+                "screening_records": [],
+                "screening_cells": [],
+                "selected_cells": {},
+                "input_contract": {},
+            },
+        )
+        assert (output / "identity_probe_report.json").is_file()
+    print("[identity-probe] self-check OK")
+
+
+def _parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--prefix", type=Path)
+    parser.add_argument("--future-target-video", type=Path)
+    parser.add_argument("--arms-root", type=Path)
+    parser.add_argument("--donor", type=Path)
+    parser.add_argument("--donor-manifest", type=Path)
+    parser.add_argument("--output", type=Path)
+    parser.add_argument("--timestep-indices", default="0,25,49")
+    parser.add_argument("--layer-groups", default="0-4,5-10,11-15")
+    parser.add_argument("--max-groups", type=int, default=8)
+    parser.add_argument("--identity-budget", type=float, default=0.25)
+    parser.add_argument("--noise-seed", type=int, default=0)
+    parser.add_argument("--repeat-loss-tolerance", type=float, default=0.0)
+    parser.add_argument("--repeat-influence-tolerance", type=float, default=0.0)
+    parser.add_argument("--benefit-margin", type=float, default=0.0)
+    parser.add_argument("--influence-floor", type=float, default=0.0)
+    parser.add_argument("--require-dynamic-writer", action="store_true")
+    parser.add_argument("--allow-attention-fallback", action="store_true")
+    parser.add_argument("--run-decoded-validation", action="store_true")
+    parser.add_argument("--self-check", action="store_true")
+    return parser
+
+
+def main(argv=None) -> int:
+    parser = _parser()
+    args = parser.parse_args(argv)
+    if args.self_check:
+        self_check()
+        return 0
+    required = (
+        "prefix",
+        "future_target_video",
+        "donor",
+        "donor_manifest",
+        "output",
+    )
+    missing = [name for name in required if getattr(args, name) is None]
+    if missing:
+        parser.error(f"missing required production arguments: {missing}")
+    if args.output.exists():
+        parser.error(f"output already exists: {args.output}")
+    result = run_probe(args)
+    write_outputs(args.output, result)
+    print(f"[identity-probe] wrote {args.output.resolve() / 'identity_probe_report.json'}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

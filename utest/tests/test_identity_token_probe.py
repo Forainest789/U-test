@@ -6,11 +6,13 @@ import json
 
 from utest.identity_token_probe import (
     build_screening_schedule,
+    cache_key,
     finalize_s2,
     run_probe,
     s2_forward_budget,
     select_cells,
     semantic_group_manifest,
+    write_outputs,
 )
 from utest.qstar_probe import ProbeCell
 
@@ -236,3 +238,69 @@ def test_production_s2_wires_expansion_knockouts_and_validation() -> None:
     assert 'f"drop_group:{group[\'group_id\']}"' in body
     assert '"validation_wrong_identity"' in body
     assert "S2 measured-forward budget exceeded" in body
+
+
+def test_cache_key_changes_for_every_frozen_boundary() -> None:
+    base = {
+        "prefix": "a",
+        "prompt": "b",
+        "timestep": 25,
+        "layers": [5, 6],
+        "backend": "fa2",
+    }
+    original = cache_key("cell", base)
+    for key, value in (
+        ("prompt", "c"),
+        ("timestep", 49),
+        ("layers", [7]),
+        ("backend", "sdpa"),
+    ):
+        changed = dict(base)
+        changed[key] = value
+        assert cache_key("cell", changed) != original
+
+
+def test_output_report_is_complete_without_reading_figures(tmp_path: Path) -> None:
+    result = {
+        "schema_version": 1,
+        "forward_count": 25,
+        "forward_budget": 50,
+        "gates": {"runtime_contract": {"status": "PASS"}},
+        "runtime": {"attention_implementation": "flash_attention_2"},
+        "timing": {"total_wall_time_s": 1.0},
+        "input_contract": {"prefix": "abc"},
+        "screening_records": [],
+        "screening_cells": [
+            {
+                "timestep_index": 25,
+                "layer_group": [5, 6, 7, 8, 9, 10],
+                "q_content": 0.2,
+            }
+        ],
+        "selected_cells": {"primary": None, "validation": None},
+        "s2": {
+            "semantic_manifest": {"identity_name": ["Mara"]},
+            "diagnostic_prompt": "Mara runs",
+            "token_rows": [],
+            "groups": [],
+            "interventions": [],
+        },
+    }
+    write_outputs(tmp_path, result)
+
+    expected = {
+        "runtime_manifest.json",
+        "input_contract.json",
+        "screening_cells.jsonl",
+        "selected_cells.json",
+        "diagnostic_prompt_manifest.json",
+        "token_scores.jsonl",
+        "token_groups.json",
+        "interventions.jsonl",
+        "identity_probe_report.json",
+    }
+    assert expected <= {path.name for path in tmp_path.iterdir()}
+    report = json.loads(
+        (tmp_path / "identity_probe_report.json").read_text(encoding="utf-8")
+    )
+    assert report["gates"] and report["timing"] and report["forward_count"] <= 50
