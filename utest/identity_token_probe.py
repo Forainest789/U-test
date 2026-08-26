@@ -455,6 +455,7 @@ def _run_screening_forward(context: Mapping, run: ScreeningRun) -> dict:
             "timestep_index": int(cell.timestep_index),
             "noisy_latents": noisy_latent,
             "force_memory_path": True,
+            "conditional_only": True,
         },
     )
     elapsed = time.perf_counter() - started
@@ -702,6 +703,7 @@ def _s2_model_forward(
             "timestep_index": int(cell.timestep_index),
             "noisy_latents": noisy,
             "force_memory_path": True,
+            "conditional_only": True,
             "query_indices_by_role": {
                 str(context["event"]["character_name"]): [int(index) for index in query_indices]
             },

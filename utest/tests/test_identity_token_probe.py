@@ -241,6 +241,27 @@ def test_production_s2_wires_expansion_knockouts_and_validation() -> None:
     assert "S2 measured-forward budget exceeded" in body
 
 
+def test_identity_opts_into_conditional_only_without_changing_qstar() -> None:
+    root = Path(__file__).resolve().parents[2]
+    identity = (root / "utest/identity_token_probe.py").read_text(encoding="utf-8")
+    qstar = (root / "utest/qstar_probe.py").read_text(encoding="utf-8")
+    screening = identity[
+        identity.index("def _run_screening_forward("):identity.index("def _screening_cells(")
+    ]
+    semantic_capture = identity[
+        identity.index("def _semantic_capture("):identity.index("def _s2_model_forward(")
+    ]
+    s2_forward = identity[
+        identity.index("def _s2_model_forward("):identity.index("def _text_positions(")
+    ]
+
+    assert '"conditional_only": True' in screening
+    assert '"conditional_only": True' in s2_forward
+    assert '"conditional_only": True' not in semantic_capture
+    assert identity.count('"conditional_only": True') == 2
+    assert '"conditional_only"' not in qstar
+
+
 def test_cache_key_changes_for_every_frozen_boundary() -> None:
     base = {
         "prefix": "a",
