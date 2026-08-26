@@ -60,9 +60,11 @@ def tensor_sha256(value) -> str:
 
 def _mse(prediction, target, mask=None) -> float:
     if hasattr(prediction, "detach") and hasattr(target, "detach"):
-        error = (prediction.detach().float() - target.detach().float()).square()
+        predicted = prediction.detach().float()
+        expected = target.detach().to(device=predicted.device, dtype=predicted.dtype)
+        error = (predicted - expected).square()
         if mask is not None:
-            selected = mask.detach().float()
+            selected = mask.detach().to(device=error.device, dtype=error.dtype)
             while selected.ndim < error.ndim:
                 selected = selected.unsqueeze(0)
             selected = selected.expand_as(error)

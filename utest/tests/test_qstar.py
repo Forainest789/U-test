@@ -15,12 +15,48 @@ from utest.qstar import (
 )
 from utest.qstar_probe import (
     ProbeCell,
+    _mse,
     evaluate_probe_cell,
     prepare_flow_cell,
     validate_measured_injection,
     validate_probe_runtime,
     write_probe_outputs,
 )
+
+
+class _DeviceScalar:
+    def __init__(self, value: float, device: str):
+        self.value = float(value)
+        self.device = device
+        self.dtype = "float32"
+
+    def detach(self):
+        return self
+
+    def float(self):
+        return self
+
+    def to(self, *, device, dtype):
+        del dtype
+        return _DeviceScalar(self.value, device)
+
+    def __sub__(self, other):
+        if self.device != other.device:
+            raise RuntimeError("device mismatch")
+        return _DeviceScalar(self.value - other.value, self.device)
+
+    def square(self):
+        return _DeviceScalar(self.value**2, self.device)
+
+    def mean(self):
+        return self
+
+    def item(self):
+        return self.value
+
+
+def test_probe_mse_aligns_cpu_target_to_prediction_device() -> None:
+    assert _mse(_DeviceScalar(3.0, "cuda:0"), _DeviceScalar(1.0, "cpu")) == 4.0
 
 
 def test_qstar_sign_and_control_deltas() -> None:
