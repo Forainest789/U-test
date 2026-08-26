@@ -856,7 +856,13 @@ def run_fusion_alpha_sweep(
                             raise ValueError(f"fusion alpha-one prediction mismatch for {key}")
                     blocks = _captured_feature_blocks(record["_result"], layers)
                     if alpha == 0.0:
-                        alpha_zero[arm] = blocks
+                        alpha_zero[arm] = {
+                            layer: {
+                                "indices": list(block["indices"]),
+                                "host": block["host"],
+                            }
+                            for layer, block in blocks.items()
+                        }
                     summaries = {
                         str(layer): _feature_block_summary(block, alpha_zero[arm][layer])
                         for layer, block in blocks.items()
@@ -866,10 +872,11 @@ def run_fusion_alpha_sweep(
                         correct_blocks[alpha] = blocks
                         correct_records[alpha] = record
                     else:
-                        paired = _paired_delta_cosines(correct_blocks[alpha], blocks)
+                        paired = _paired_delta_cosines(correct_blocks.pop(alpha), blocks)
+                        correct_record = correct_records.pop(alpha)
                         for layer, cosine in paired.items():
                             summaries[str(layer)]["mean_correct_wrong_delta_cosine"] = cosine
-                            correct_records[alpha]["host_feature_diagnostics"][str(layer)][
+                            correct_record["host_feature_diagnostics"][str(layer)][
                                 "mean_correct_wrong_delta_cosine"
                             ] = cosine
                     record.pop("_result", None)
