@@ -121,6 +121,24 @@ def test_probe_returns_conditional_velocity_beside_the_cfg_composite() -> None:
     assert 'native_result["prediction_cond"]' in probe
 
 
+def test_conditional_only_skips_unconditional_but_default_keeps_cfg() -> None:
+    root = Path(__file__).resolve().parents[2]
+    runtime = (root / "reference_inference_runtime.py").read_text(encoding="utf-8")
+    infer = (root / "infer_slotmem.py").read_text(encoding="utf-8")
+
+    assert 'conditional_only = bool(teacher_forced_probe.get("conditional_only", False))' in runtime
+    assert "if conditional_only:" in runtime
+    assert '"prediction_semantics": prediction_semantics' in runtime
+    assert '"cfg_composite_available": not conditional_only' in runtime
+    assert '"dit_forward_counts": {' in runtime
+    assert "self._last_teacher_forced_semantic_prepass_count = 1" in infer
+
+    conditional_branch = runtime[runtime.index("if conditional_only:"):]
+    default_unconditional = conditional_branch.index("noise_pred_uncond =")
+    return_block = conditional_branch.index('"prediction_cond": noise_pred_cond')
+    assert default_unconditional < return_block
+
+
 def test_memory_off_arm_stays_on_the_memory_aware_forward() -> None:
     root = Path(__file__).resolve().parents[2]
     runtime = (root / "reference_inference_runtime.py").read_text(encoding="utf-8")

@@ -1866,6 +1866,7 @@ class SlotMemInferenceEngine(ReferenceInferenceEngine):
 
     @torch.no_grad()
     def _run_character_semantic_probe(self, noisy_latents, timestep, prompt, role_ids, cond_context, uncond_context, image_emb_for_denoising, extra_input=None):
+        self._last_teacher_forced_semantic_prepass_count = 0
         # Multi-step inference normally captures these features during the
         # preceding step. A one-step teacher-forced probe has no preceding
         # step, so it also uses this explicit prepass.
@@ -1921,6 +1922,7 @@ class SlotMemInferenceEngine(ReferenceInferenceEngine):
         forward_stopper.register()
         try:
             try:
+                self._last_teacher_forced_semantic_prepass_count = 1
                 run_native_dit_forward(
                     dit_model,
                     x=noisy_input,

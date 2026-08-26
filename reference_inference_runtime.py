@@ -946,6 +946,7 @@ class ReferenceInferenceRuntime:
             self._offload()
             if teacher_forced_probe is not None:
                 self._last_teacher_forced_semantic_maps = {}
+                self._last_teacher_forced_semantic_prepass_count = 0
             print(f"  [Gen] Generating with seed {seed}...")
 
             # 1. Text encode
@@ -1023,6 +1024,7 @@ class ReferenceInferenceRuntime:
             capture_sparse_token_diagnostics = False
             semantic_role_ids = None
             semantic_capture_only = False
+            conditional_only = False
             teacher_query_indices_by_role = None
             if teacher_forced_probe is None:
                 gen = torch.Generator(device=self.device).manual_seed(seed)
@@ -1057,6 +1059,7 @@ class ReferenceInferenceRuntime:
                 )
                 semantic_role_ids = teacher_forced_probe.get("semantic_role_ids")
                 semantic_capture_only = bool(teacher_forced_probe.get("semantic_capture_only", False))
+                conditional_only = bool(teacher_forced_probe.get("conditional_only", False))
                 if semantic_role_ids is not None and not isinstance(semantic_role_ids, (list, tuple)):
                     raise TypeError("teacher_forced_probe.semantic_role_ids must be a list")
                 if semantic_capture_only and not semantic_role_ids:
@@ -1285,6 +1288,15 @@ class ReferenceInferenceRuntime:
                 if teacher_forced_probe is not None and semantic_capture_only:
                     from diffsynth.core.attention.attention import ATTENTION_IMPLEMENTATION
                     return {
+                        "prediction_semantics": "semantic_capture",
+                        "cfg_composite_available": False,
+                        "dit_forward_counts": {
+                            "semantic_prepass": int(getattr(
+                                self, "_last_teacher_forced_semantic_prepass_count", 0
+                            )),
+                            "conditional": 0,
+                            "unconditional": 0,
+                        },
                         "semantic_attention_maps": getattr(
                             self, "_last_teacher_forced_semantic_maps", {}
                         ),
@@ -1366,29 +1378,35 @@ class ReferenceInferenceRuntime:
                 if isinstance(next_query_feature_payload, dict) and len(next_query_feature_payload) > 0:
                     cached_query_feature_payload = next_query_feature_payload
 
-                if use_memory_path and getattr(self.args, 'cfg_uncond_with_memory', True):
-                    emb_kwargs_uncond = dict(image_emb)
-                    if memory_token_lengths_per_character is not None:
-                        emb_kwargs_uncond['memory_token_lengths_per_character'] = memory_token_lengths_per_character
-                    if isinstance(active_query_role_boxes, dict) and len(active_query_role_boxes) > 0:
-                        emb_kwargs_uncond['query_role_boxes'] = active_query_role_boxes
-                    if isinstance(active_query_feature_payload, dict) and len(active_query_feature_payload) > 0:
-                        emb_kwargs_uncond['query_feature_payload'] = active_query_feature_payload
-                    noise_pred_uncond = self._memory_aware_dit_forward(
-                        x=denoising_latents, t=t, context=neg_emb['context'],
-                        memory_tokens=memory_tokens,
-                        memory_bank_tokens=memory_bank_tokens,
-                        memory_bank_percents=memory_bank_percents,
-                        memory_bank_token_meta=memory_bank_token_meta,
-                        **emb_kwargs_uncond, **extra_input
-                    )
+                if conditional_only:
+                    noise_pred = noise_pred_cond
+                    prediction_semantics = "conditional"
+                    unconditional_count = 0
                 else:
-                    noise_pred_uncond = self.pipe.denoising_model()(
-                        denoising_latents, t, context=neg_emb['context'],
-                        **image_emb_for_denoising, **self.pipe.prepare_extra_input(denoising_latents)
-                    )
-
-                noise_pred = noise_pred_uncond + self.args.cfg_scale * (noise_pred_cond - noise_pred_uncond)
+                    if use_memory_path and getattr(self.args, 'cfg_uncond_with_memory', True):
+                        emb_kwargs_uncond = dict(image_emb)
+                        if memory_token_lengths_per_character is not None:
+                            emb_kwargs_uncond['memory_token_lengths_per_character'] = memory_token_lengths_per_character
+                        if isinstance(active_query_role_boxes, dict) and len(active_query_role_boxes) > 0:
+                            emb_kwargs_uncond['query_role_boxes'] = active_query_role_boxes
+                        if isinstance(active_query_feature_payload, dict) and len(active_query_feature_payload) > 0:
+                            emb_kwargs_uncond['query_feature_payload'] = active_query_feature_payload
+                        noise_pred_uncond = self._memory_aware_dit_forward(
+                            x=denoising_latents, t=t, context=neg_emb['context'],
+                            memory_tokens=memory_tokens,
+                            memory_bank_tokens=memory_bank_tokens,
+                            memory_bank_percents=memory_bank_percents,
+                            memory_bank_token_meta=memory_bank_token_meta,
+                            **emb_kwargs_uncond, **extra_input
+                        )
+                    else:
+                        noise_pred_uncond = self.pipe.denoising_model()(
+                            denoising_latents, t, context=neg_emb['context'],
+                            **image_emb_for_denoising, **self.pipe.prepare_extra_input(denoising_latents)
+                        )
+                    noise_pred = noise_pred_uncond + self.args.cfg_scale * (noise_pred_cond - noise_pred_uncond)
+                    prediction_semantics = "cfg_composite"
+                    unconditional_count = 1
                 if teacher_forced_probe is not None:
                     from diffsynth.core.attention.attention import ATTENTION_IMPLEMENTATION
                     return {
@@ -1397,6 +1415,15 @@ class ReferenceInferenceRuntime:
                         # target is defined against. Q* must be scored on the latter.
                         "prediction": noise_pred,
                         "prediction_cond": noise_pred_cond,
+                        "prediction_semantics": prediction_semantics,
+                        "cfg_composite_available": not conditional_only,
+                        "dit_forward_counts": {
+                            "semantic_prepass": int(getattr(
+                                self, "_last_teacher_forced_semantic_prepass_count", 0
+                            )),
+                            "conditional": 1,
+                            "unconditional": unconditional_count,
+                        },
                         "cfg_scale": float(self.args.cfg_scale),
                         "timestep_index": int(i),
                         "timestep": float(t.detach().float().reshape(-1)[0].item()),
