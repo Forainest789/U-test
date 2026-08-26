@@ -491,7 +491,13 @@ def _layer_diagnostics(result: Mapping) -> dict:
     }
 
 
-def _run_screening_forward(context: Mapping, run: ScreeningRun) -> dict:
+def _run_screening_forward(
+    context: Mapping,
+    run: ScreeningRun,
+    *,
+    capture_token_diagnostics: bool = False,
+    allow_zero_injection: bool = False,
+) -> dict:
     from .qstar_probe import _mse, tensor_sha256, validate_measured_injection
 
     engine = context["engine"]
@@ -521,6 +527,7 @@ def _run_screening_forward(context: Mapping, run: ScreeningRun) -> dict:
             "noisy_latents": noisy_latent,
             "force_memory_path": True,
             "conditional_only": True,
+            "capture_sparse_token_diagnostics": bool(capture_token_diagnostics),
         },
     )
     elapsed = time.perf_counter() - started
@@ -528,11 +535,15 @@ def _run_screening_forward(context: Mapping, run: ScreeningRun) -> dict:
     if prediction is None:
         raise ValueError(f"{run.arm}: predictor did not return conditional velocity")
     backend = str(result.get("attention_implementation", ""))
-    validate_measured_injection(run.arm, bool(bundle["target_read_hit"]), result)
+    diagnostics = _layer_diagnostics(result)
+    if allow_zero_injection:
+        if bool(bundle["target_read_hit"]) and diagnostics["selected_memory_tokens"] <= 0:
+            raise ValueError(f"{run.arm}: alpha-zero path selected no memory tokens")
+    else:
+        validate_measured_injection(run.arm, bool(bundle["target_read_hit"]), result)
     if run.arm == "no_memory" and not bool(result.get("forced_memory_path", False)):
         raise ValueError("no_memory did not use the memory-aware forward")
-    diagnostics = _layer_diagnostics(result)
-    return {
+    record = {
         "stage": run.stage,
         "timestep_index": int(run.timestep_index),
         "timestep": float(cell.timestep),
@@ -548,6 +559,9 @@ def _run_screening_forward(context: Mapping, run: ScreeningRun) -> dict:
         "diagnostics": diagnostics,
         "_prediction": prediction,
     }
+    if capture_token_diagnostics:
+        record["_result"] = result
+    return record
 
 
 def _screening_cells(records: Sequence[Mapping]) -> list[dict]:
@@ -681,6 +695,190 @@ def select_fusion_verification_cells(
         "trigger_candidates": candidates,
         "selected_cells": selected,
     }
+
+
+def _feature_rows(value):
+    if hasattr(value, "detach"):
+        rows = value.detach().float().cpu()
+        if rows.dim() != 2:
+            raise ValueError("token feature tensors must be rank two")
+        return rows
+    rows = [[float(item) for item in row] for row in value]
+    if not rows or not rows[0] or any(len(row) != len(rows[0]) for row in rows):
+        raise ValueError("token feature rows must be a non-empty matrix")
+    return rows
+
+
+def _captured_feature_blocks(result: Mapping, layers: Sequence[int]) -> dict:
+    by_layer = result.get("sparse_role_memory_stats_by_layer", {})
+    output = {}
+    for layer in layers:
+        stats = by_layer.get(str(layer), by_layer.get(int(layer))) if isinstance(by_layer, Mapping) else None
+        diagnostics = stats.get("token_diagnostics") if isinstance(stats, Mapping) else None
+        if not isinstance(diagnostics, Mapping):
+            raise ValueError(f"fusion verification missing token diagnostics for layer {layer}")
+        indices = diagnostics.get("flat_idx")
+        if hasattr(indices, "detach"):
+            indices = [int(value) for value in indices.detach().cpu().reshape(-1).tolist()]
+        else:
+            indices = [int(value) for value in indices]
+        host = _feature_rows(diagnostics.get("host_features"))
+        delta = _feature_rows(diagnostics.get("effective_delta_features"))
+        row_count = int(host.shape[0]) if hasattr(host, "shape") else len(host)
+        delta_count = int(delta.shape[0]) if hasattr(delta, "shape") else len(delta)
+        if len(indices) != row_count or row_count != delta_count:
+            raise ValueError(f"fusion token diagnostics are misaligned for layer {layer}")
+        output[int(layer)] = {"indices": indices, "host": host, "delta": delta}
+    return output
+
+
+def _row_cosine_mean(left, right) -> float:
+    if hasattr(left, "detach"):
+        if tuple(left.shape) != tuple(right.shape):
+            raise ValueError("feature comparison shapes differ")
+        denominator = left.norm(dim=-1) * right.norm(dim=-1)
+        cosine = (left * right).sum(dim=-1) / denominator.clamp_min(1e-12)
+        return float(cosine.mean().item())
+    if len(left) != len(right) or any(len(a) != len(b) for a, b in zip(left, right)):
+        raise ValueError("feature comparison shapes differ")
+    values = []
+    for a, b in zip(left, right):
+        norm_a = math.sqrt(sum(value * value for value in a))
+        norm_b = math.sqrt(sum(value * value for value in b))
+        denominator = max(norm_a * norm_b, 1e-12)
+        values.append(sum(x * y for x, y in zip(a, b)) / denominator)
+    return sum(values) / len(values)
+
+
+def _feature_block_summary(block: Mapping, alpha_zero: Mapping) -> dict:
+    if list(block["indices"]) != list(alpha_zero["indices"]):
+        raise ValueError("alpha sweep token indices changed")
+    host = block["host"]
+    delta = block["delta"]
+    baseline_host = alpha_zero["host"]
+    if hasattr(host, "detach"):
+        host_norm = host.norm(dim=-1)
+        delta_norm = delta.norm(dim=-1)
+        ratios = delta_norm / host_norm.clamp_min(1e-12)
+        baseline_norm = baseline_host.norm(dim=-1)
+        drift = (host_norm - baseline_norm).abs() / baseline_norm.clamp_min(1e-12)
+        mean_host_norm = float(host_norm.mean().item())
+        mean_delta_norm = float(delta_norm.mean().item())
+        mean_ratio = float(ratios.mean().item())
+        max_ratio = float(ratios.max().item())
+        mean_drift = float(drift.mean().item())
+    else:
+        host_norm = [math.sqrt(sum(value * value for value in row)) for row in host]
+        delta_norm = [math.sqrt(sum(value * value for value in row)) for row in delta]
+        baseline_norm = [math.sqrt(sum(value * value for value in row)) for row in baseline_host]
+        ratios = [d / max(h, 1e-12) for d, h in zip(delta_norm, host_norm)]
+        drift = [abs(h - b) / max(b, 1e-12) for h, b in zip(host_norm, baseline_norm)]
+        mean_host_norm = sum(host_norm) / len(host_norm)
+        mean_delta_norm = sum(delta_norm) / len(delta_norm)
+        mean_ratio = sum(ratios) / len(ratios)
+        max_ratio = max(ratios)
+        mean_drift = sum(drift) / len(drift)
+    values = {
+        "selected_tokens": len(block["indices"]),
+        "mean_host_norm": mean_host_norm,
+        "mean_effective_delta_norm": mean_delta_norm,
+        "mean_delta_host_ratio": mean_ratio,
+        "max_delta_host_ratio": max_ratio,
+        "mean_host_delta_cosine": _row_cosine_mean(host, delta),
+        "mean_host_alpha_zero_cosine": _row_cosine_mean(host, baseline_host),
+        "mean_host_norm_drift": mean_drift,
+    }
+    if not all(math.isfinite(float(value)) for value in values.values()):
+        raise ValueError("fusion host diagnostics must be finite")
+    return values
+
+
+def _paired_delta_cosines(left: Mapping, right: Mapping) -> dict[int, float]:
+    if set(left) != set(right):
+        raise ValueError("correct/wrong diagnostic layers differ")
+    output = {}
+    for layer in left:
+        if list(left[layer]["indices"]) != list(right[layer]["indices"]):
+            raise ValueError("correct/wrong token indices differ")
+        output[int(layer)] = _row_cosine_mean(left[layer]["delta"], right[layer]["delta"])
+    return output
+
+
+def run_fusion_alpha_sweep(
+    context: Mapping,
+    selected_cells: Sequence[Mapping],
+    screening_records: Sequence[Mapping],
+) -> dict:
+    engine = context["engine"]
+    if not hasattr(engine, "sparse_role_memory_layer_scales"):
+        raise ValueError("fusion verification requires sparse_role_memory_layer_scales")
+    expected_sha = {
+        (
+            int(record["timestep_index"]),
+            tuple(int(layer) for layer in record["layer_group"]),
+            str(record["arm"]),
+        ): str(record["prediction_sha256"])
+        for record in screening_records
+        if str(record.get("arm")) in ("correct", "wrong")
+    }
+    original_layers = list(engine.sparse_role_memory_injection_layers)
+    original_scale_map = engine.sparse_role_memory_layer_scales
+    original_scales = dict(original_scale_map)
+    records = []
+    try:
+        for spec in selected_cells:
+            timestep = int(spec["timestep_index"])
+            layers = tuple(int(layer) for layer in spec["layer_group"])
+            engine.sparse_role_memory_injection_layers = list(layers)
+            alpha_zero = {}
+            correct_blocks = {}
+            correct_records = {}
+            for alpha in (0.0, 0.25, 0.5, 1.0):
+                engine.sparse_role_memory_layer_scales = {
+                    **original_scales,
+                    **{layer: float(alpha) for layer in layers},
+                }
+                for arm in ("correct", "wrong"):
+                    record = _run_screening_forward(
+                        context,
+                        ScreeningRun("V1", timestep, layers, arm),
+                        capture_token_diagnostics=True,
+                        allow_zero_injection=alpha == 0.0,
+                    )
+                    record["alpha"] = float(alpha)
+                    if alpha == 1.0:
+                        key = (timestep, layers, arm)
+                        if key not in expected_sha:
+                            raise ValueError(f"fusion verification missing S0/S1 SHA for {key}")
+                        if str(record["prediction_sha256"]) != expected_sha[key]:
+                            raise ValueError(f"fusion alpha-one prediction mismatch for {key}")
+                    blocks = _captured_feature_blocks(record["_result"], layers)
+                    if alpha == 0.0:
+                        alpha_zero[arm] = blocks
+                    summaries = {
+                        str(layer): _feature_block_summary(block, alpha_zero[arm][layer])
+                        for layer, block in blocks.items()
+                    }
+                    record["host_feature_diagnostics"] = summaries
+                    if arm == "correct":
+                        correct_blocks[alpha] = blocks
+                        correct_records[alpha] = record
+                    else:
+                        paired = _paired_delta_cosines(correct_blocks[alpha], blocks)
+                        for layer, cosine in paired.items():
+                            summaries[str(layer)]["mean_correct_wrong_delta_cosine"] = cosine
+                            correct_records[alpha]["host_feature_diagnostics"][str(layer)][
+                                "mean_correct_wrong_delta_cosine"
+                            ] = cosine
+                    record.pop("_result", None)
+                    record.pop("_prediction", None)
+                    records.append(record)
+                    if len(records) > 16:
+                        raise RuntimeError("fusion verification V1 measured-forward budget exceeded")
+    finally:
+        engine.sparse_role_memory_injection_layers = original_layers
+        engine.sparse_role_memory_layer_scales = original_scale_map
+    return {"records": records, "measured_forward_count": len(records)}
 
 
 def _as_flat_list(value) -> list[float]:

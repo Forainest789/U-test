@@ -12,6 +12,7 @@ from utest.identity_token_probe import (
     finalize_s2,
     prediction_error_decomposition,
     run_probe,
+    run_fusion_alpha_sweep,
     run_s3,
     s2_forward_budget,
     select_fusion_verification_cells,
@@ -20,6 +21,7 @@ from utest.identity_token_probe import (
     write_outputs,
 )
 from utest.qstar_probe import ProbeCell
+from utest.qstar_probe import tensor_sha256
 
 
 def test_s0_s1_schedule_has_25_unique_measured_forwards() -> None:
@@ -121,6 +123,94 @@ def test_fusion_selection_requires_rescuable_direction_and_prefers_distinct_cell
     assert len(result["trigger_candidates"]) == 3
     assert [row["timestep_index"] for row in result["selected_cells"]] == [25, 49]
     assert result["selected_cells"][0]["layer_group"] == [5, 6]
+
+
+def test_fusion_alpha_sweep_uses_existing_scales_and_restores_engine() -> None:
+    calls = []
+
+    class Engine:
+        device = "cpu"
+        sparse_role_memory_injection_layers = [0, 1]
+        sparse_role_memory_layer_scales = {5: 0.8, 6: 0.9, 12: 0.7}
+
+        def generate_chunk(self, **kwargs):
+            assert kwargs["teacher_forced_probe"]["capture_sparse_token_diagnostics"] is True
+            alpha = self.sparse_role_memory_layer_scales[5]
+            assert self.sparse_role_memory_layer_scales[6] == alpha
+            memory = kwargs["memory_tokens"]
+            prediction = float(memory) * alpha
+            calls.append((alpha, memory, list(self.sparse_role_memory_injection_layers)))
+            layer_stats = {
+                str(layer): {
+                    "enabled": 1,
+                    "selected_query_tokens": 1,
+                    "selected_memory_tokens": 1,
+                    "effective_delta_norm": abs(prediction),
+                    "host_token_norm": 1.0,
+                    "token_diagnostics": {
+                        "flat_idx": [0, 1],
+                        "host_features": [[1.0, 0.0], [0.0, 1.0]],
+                        "effective_delta_features": [
+                            [prediction, 0.0],
+                            [0.0, prediction],
+                        ],
+                    },
+                }
+                for layer in (5, 6)
+            }
+            return {
+                "prediction_cond": [prediction],
+                "prediction": [prediction],
+                "forced_memory_path": False,
+                "sparse_role_memory_stats_by_layer": layer_stats,
+                "attention_implementation": "flash_attention_2",
+                "dit_forward_counts": {
+                    "semantic_prepass": 1,
+                    "conditional": 1,
+                    "unconditional": 0,
+                },
+            }
+
+    engine = Engine()
+    context = _fake_context(engine)
+    selected = [{"timestep_index": 25, "layer_group": [5, 6]}]
+    screening = [
+        {
+            "timestep_index": 25,
+            "layer_group": [5, 6],
+            "arm": "correct",
+            "prediction_sha256": tensor_sha256([1.0]),
+        },
+        {
+            "timestep_index": 25,
+            "layer_group": [5, 6],
+            "arm": "wrong",
+            "prediction_sha256": tensor_sha256([-1.0]),
+        },
+    ]
+
+    result = run_fusion_alpha_sweep(context, selected, screening)
+
+    assert [(row["alpha"], row["arm"]) for row in result["records"]] == [
+        (alpha, arm)
+        for alpha in (0.0, 0.25, 0.5, 1.0)
+        for arm in ("correct", "wrong")
+    ]
+    assert len(calls) == result["measured_forward_count"] == 8
+    half_correct = next(
+        row for row in result["records"]
+        if row["alpha"] == 0.5 and row["arm"] == "correct"
+    )
+    half_wrong = next(
+        row for row in result["records"]
+        if row["alpha"] == 0.5 and row["arm"] == "wrong"
+    )
+    assert half_correct["host_feature_diagnostics"]["5"]["mean_host_delta_cosine"] == 1.0
+    assert half_wrong["host_feature_diagnostics"]["5"]["mean_host_delta_cosine"] == -1.0
+    assert half_wrong["host_feature_diagnostics"]["5"]["mean_correct_wrong_delta_cosine"] == -1.0
+    assert "_result" not in half_correct and "_prediction" not in half_correct
+    assert engine.sparse_role_memory_injection_layers == [0, 1]
+    assert engine.sparse_role_memory_layer_scales == {5: 0.8, 6: 0.9, 12: 0.7}
 
 
 def test_cell_selection_prioritizes_positive_content_delta() -> None:
