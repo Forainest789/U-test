@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import json
 
 from utest.identity_token_probe import (
+    _sum_dit_forward_counts,
     build_screening_schedule,
     cache_key,
     finalize_s2,
@@ -30,6 +31,21 @@ def test_s0_s1_schedule_has_25_unique_measured_forwards() -> None:
     assert any(
         row.arm == "wrong" and len(row.layer_group) == 16 for row in schedule
     )
+
+
+def test_dit_forward_counts_reconcile_measured_warmup_and_semantic_calls() -> None:
+    records = [
+        {"dit_forward_counts": {"semantic_prepass": 1, "conditional": 1, "unconditional": 0}},
+        {"dit_forward_counts": {"semantic_prepass": 0, "conditional": 1, "unconditional": 0}},
+        {"dit_forward_counts": {"semantic_prepass": 1, "conditional": 0, "unconditional": 0}},
+    ]
+
+    assert _sum_dit_forward_counts(records) == {
+        "semantic_prepass": 2,
+        "conditional": 2,
+        "unconditional": 0,
+        "raw": 4,
+    }
 
 
 def test_cell_selection_prioritizes_positive_content_delta() -> None:
@@ -119,6 +135,7 @@ def test_orchestrator_loads_once_and_stops_before_s2_without_content_signal(
         def generate_chunk(self, **kwargs):
             calls["forwards"] += 1
             assert kwargs["teacher_forced_probe"]["force_memory_path"] is True
+            assert kwargs["teacher_forced_probe"]["conditional_only"] is True
             no_memory = kwargs.get("memory_tokens") is None
             return {
                 "prediction_cond": [0.0],
@@ -134,6 +151,11 @@ def test_orchestrator_loads_once_and_stops_before_s2_without_content_signal(
                     }
                 },
                 "attention_implementation": "flash_attention_2",
+                "dit_forward_counts": {
+                    "semantic_prepass": 0 if no_memory else 1,
+                    "conditional": 1,
+                    "unconditional": 0,
+                },
             }
 
     def load(args, *, include_native):
@@ -374,6 +396,7 @@ def test_smoke_mode_runs_one_cell_and_stops_before_s2(tmp_path: Path) -> None:
 
         def generate_chunk(self, **kwargs):
             calls["forwards"] += 1
+            assert kwargs["teacher_forced_probe"]["conditional_only"] is True
             memory = kwargs.get("memory_tokens")
             no_memory = memory is None
             prediction = 1.0 if memory == -1.0 else 0.0
@@ -391,6 +414,11 @@ def test_smoke_mode_runs_one_cell_and_stops_before_s2(tmp_path: Path) -> None:
                     }
                 },
                 "attention_implementation": "flash_attention_2",
+                "dit_forward_counts": {
+                    "semantic_prepass": 0 if no_memory else 1,
+                    "conditional": 1,
+                    "unconditional": 0,
+                },
             }
 
     args = SimpleNamespace(
@@ -410,3 +438,10 @@ def test_smoke_mode_runs_one_cell_and_stops_before_s2(tmp_path: Path) -> None:
     assert result["gates"]["content_causality"]["status"] == "PASS"
     assert "s2" not in result
     assert result["forward_count"] == 5
+    assert result["measured_arm_count"] == 5
+    assert result["warmup_arm_count"] == 0
+    assert result["semantic_prepass_count"] == 4
+    assert result["conditional_dit_count"] == 5
+    assert result["unconditional_dit_count"] == 0
+    assert result["raw_dit_invocation_count"] == 9
+    assert result["actual_model_forward_count"] == result["raw_dit_invocation_count"]

@@ -81,6 +81,15 @@ def cache_key(kind: str, inputs: Mapping) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
+def _sum_dit_forward_counts(records: Sequence[Mapping]) -> dict[str, int]:
+    counts = {"semantic_prepass": 0, "conditional": 0, "unconditional": 0}
+    for record in records:
+        source = record.get("dit_forward_counts", {})
+        for name in counts:
+            counts[name] += int(source.get(name, 0) or 0)
+    return {**counts, "raw": sum(counts.values())}
+
+
 def _atomic_text(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(path.suffix + ".tmp")
@@ -478,6 +487,7 @@ def _run_screening_forward(context: Mapping, run: ScreeningRun) -> dict:
         "input_hashes": dict(cell.input_hashes),
         "payload_sha256": bundle.get("target_payload_sha256"),
         "attention_implementation": backend,
+        "dit_forward_counts": dict(result.get("dit_forward_counts", {})),
         "wall_time_s": elapsed,
         "diagnostics": diagnostics,
         "_prediction": prediction,
@@ -720,6 +730,7 @@ def _s2_model_forward(
         "loss": _mse(prediction, cell.flow_target),
         "query_indices": [int(index) for index in query_indices],
         "context_zero_indices": [int(index) for index in (context_zero_indices or [])],
+        "dit_forward_counts": dict(result.get("dit_forward_counts", {})),
         "result": result,
     }
 
@@ -745,6 +756,7 @@ def _public_intervention(record: Mapping, name: str) -> dict:
         "loss": float(record["loss"]),
         "query_indices": list(record["query_indices"]),
         "context_zero_indices": list(record["context_zero_indices"]),
+        "dit_forward_counts": dict(record.get("dit_forward_counts", {})),
     }
 
 
@@ -794,6 +806,18 @@ def run_s2(
         diagnostic_capture = _semantic_capture(
             context, primary, prompt=diagnostic_prompt, role_ids=semantic_ids
         )
+        semantic_captures = [
+            {
+                "name": "identity_name",
+                "dit_forward_counts": dict(name_capture.get("dit_forward_counts", {})),
+            },
+            {
+                "name": "identity_attributes_actions_scene",
+                "dit_forward_counts": dict(
+                    diagnostic_capture.get("dit_forward_counts", {})
+                ),
+            },
+        ]
         original_query = _query_indices(name_capture.get("query_feature_payload"), character)
         if len(original_query) < 4:
             raise ValueError("original identity query mask contains fewer than four tokens")
@@ -970,6 +994,7 @@ def run_s2(
             return {
                 "measured_forward_count": len(measured),
                 "semantic_capture_count": 2,
+                "semantic_captures": semantic_captures,
                 "semantic_manifest": manifest,
                 "candidate_universe": universe,
                 "token_rows": [],
@@ -1105,6 +1130,7 @@ def run_s2(
             **final,
             "measured_forward_count": len(measured),
             "semantic_capture_count": 2,
+            "semantic_captures": semantic_captures,
             "semantic_manifest": manifest,
             "diagnostic_prompt": diagnostic_prompt,
             "original_query": original_query,
@@ -1212,6 +1238,7 @@ def run_probe(args, *, context_loader=None) -> dict:
     original_layers = list(engine.sparse_role_memory_injection_layers)
     records = []
     warmup_forward_count = 0
+    warmup_record = None
     try:
         if (
             torch_module is not None
@@ -1220,7 +1247,7 @@ def run_probe(args, *, context_loader=None) -> dict:
         ):
             with torch_module.inference_mode():
                 engine.sparse_role_memory_injection_layers = list(schedule[0].layer_group)
-                _run_screening_forward(context, schedule[0])
+                warmup_record = _run_screening_forward(context, schedule[0])
                 torch_module.cuda.synchronize()
                 torch_module.cuda.reset_peak_memory_stats()
                 warmup_forward_count = 1
@@ -1296,24 +1323,35 @@ def run_probe(args, *, context_loader=None) -> dict:
                     s2_result,
                     output=Path(args.output),
                 )
+    measured_arm_count = len(records) + int(
+        s2_result.get("measured_forward_count", 0) if s2_result else 0
+    )
+    count_records = list(public_records)
+    if warmup_record is not None:
+        count_records.append(warmup_record)
+    if s2_result is not None:
+        count_records.extend(s2_result.get("interventions", []))
+        count_records.extend(s2_result.get("semantic_captures", []))
+    dit_counts = _sum_dit_forward_counts(count_records)
+    if dit_counts["raw"] != sum(
+        dit_counts[name] for name in ("semantic_prepass", "conditional", "unconditional")
+    ):
+        raise RuntimeError("raw DiT invocation count does not reconcile")
     report = {
         "schema_version": 1,
-        "forward_count": len(records) + int(
-            s2_result.get("measured_forward_count", 0) if s2_result else 0
-        ),
-        "measured_forward_count": len(records) + int(
-            s2_result.get("measured_forward_count", 0) if s2_result else 0
-        ),
+        "forward_count": measured_arm_count,
+        "measured_forward_count": measured_arm_count,
+        "measured_arm_count": measured_arm_count,
         "diagnostic_forward_count": int(
             s2_result.get("semantic_capture_count", 0) if s2_result else 0
         ),
         "warmup_forward_count": warmup_forward_count,
-        "actual_model_forward_count": (
-            len(records)
-            + int(s2_result.get("measured_forward_count", 0) if s2_result else 0)
-            + int(s2_result.get("semantic_capture_count", 0) if s2_result else 0)
-            + warmup_forward_count
-        ),
+        "warmup_arm_count": warmup_forward_count,
+        "semantic_prepass_count": dit_counts["semantic_prepass"],
+        "conditional_dit_count": dit_counts["conditional"],
+        "unconditional_dit_count": dit_counts["unconditional"],
+        "raw_dit_invocation_count": dit_counts["raw"],
+        "actual_model_forward_count": dit_counts["raw"],
         "forward_budget": 5 if smoke else 50,
         "screening_records": public_records,
         "screening_cells": cell_records,

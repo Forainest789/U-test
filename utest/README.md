@@ -236,9 +236,12 @@ It does not claim that a token has a context-free semantic type. An `identity_co
 label is an operational result for this frozen event, timestep, layer group, prompt, and
 model; action and scene scores are diagnostics for separating plausible confounds.
 
-The fast smoke run performs five measured teacher-forced forwards at timestep 25 and the
-middle layer group. It verifies determinism, path influence, and correct-versus-wrong
-content direction, then stops before token classification:
+The fast smoke run performs five measured teacher-forced arms at timestep 25 and the
+middle layer group. Identity arms return the conditional flow velocity directly and skip
+the unused unconditional CFG DiT; Q* and normal generation retain their existing CFG
+path. Memory-bearing arms may additionally invoke one truncated semantic/query prepass.
+Smoke verifies determinism, path influence, and correct-versus-wrong content direction,
+then stops before token classification:
 
 ```bash
 EVENT_JSON="$PWD/utest/events/person_reappearance_delta8.json" \
@@ -254,7 +257,10 @@ UTEST_ENV=utest CUDA_VISIBLE_DEVICES=0 \
 bash scripts/run_slotmem_identity_probe.sh
 ```
 
-If smoke passes, use a different, fresh `EVENT_RUN_ROOT` for the full S0-S2 run:
+After the optimized smoke reproduces the prior conditional losses and prediction hashes,
+use a different, fresh `EVENT_RUN_ROOT` for the full S0/S1 grid. A blocked single-cell
+smoke is still a valid null result for that cell; S2 remains gated on a positive
+content-specific cell in the full grid:
 
 ```bash
 EVENT_JSON="$PWD/utest/events/person_reappearance_delta8.json" \
@@ -270,7 +276,8 @@ UTEST_ENV=utest CUDA_VISIBLE_DEVICES=0 \
 bash scripts/run_slotmem_identity_probe.sh
 ```
 
-The full path runs 25 S0/S1 screening forwards, at most 25 measured S2 forwards, two
+The five-arm smoke and 50-arm ceiling are measured-arm budgets, not raw DiT invocation
+counts. The full path runs 25 S0/S1 screening arms, at most 25 measured S2 arms, two
 truncated semantic-attention captures, and one unmeasured CUDA warm-up. S2 scores name,
 stable attributes, correct-versus-wrong persistence, action, and scene channels; proposes
 spatiotemporal groups; then applies group knockout and equal-budget identity/random/low
@@ -279,6 +286,13 @@ most 25%, identity-only retention at least 80%, identity knockout stronger than 
 correct content better than matched-wrong content, and the same causal direction in a
 held-out cell. A failure blocks the identity claim instead of selecting the best-looking
 tokens anyway.
+
+The report reconciles work with `measured_arm_count`, `warmup_arm_count`,
+`semantic_prepass_count`, `conditional_dit_count`, `unconditional_dit_count`, and
+`raw_dit_invocation_count`; `actual_model_forward_count` is a compatibility alias for
+the raw total. A semantic prepass is truncated after the required layer and is reported
+separately rather than treated as a full-forward equivalent. If the full S0/S1 content
+gate is blocked, stop there and do not infer token kinds or advance to S2.
 
 Only after S2 passes, an optional fresh run may add four decoded rollouts for external
 identity and motion scoring:
