@@ -629,6 +629,60 @@ def _v0_cells(
     return output
 
 
+def select_fusion_verification_cells(
+    cells: Sequence[Mapping], *, trigger_floor: float, max_cells: int = 2
+) -> dict:
+    if max_cells < 1 or max_cells > 2:
+        raise ValueError("fusion verification selects one or two cells")
+    floor = float(trigger_floor)
+    candidates = []
+    for source in cells:
+        correct = source.get("error_decomposition", {}).get("correct", {})
+        alignment = correct.get("directional_alignment")
+        alpha = correct.get("predicted_optimal_alpha")
+        gain = correct.get("predicted_optimal_gain")
+        if alignment is None or alpha is None or gain is None:
+            continue
+        values = (float(alignment), float(alpha), float(gain))
+        if not all(math.isfinite(value) for value in values):
+            raise ValueError("fusion verification trigger values must be finite")
+        if values[0] < 0.0 and 0.0 < values[1] < 1.0 and values[2] > floor:
+            candidates.append(_json_safe(source))
+    candidates.sort(
+        key=lambda row: (
+            -float(row["error_decomposition"]["correct"]["predicted_optimal_gain"]),
+            -float(row.get("q_content", 0.0)),
+            int(row["timestep_index"]),
+            tuple(int(layer) for layer in row["layer_group"]),
+        )
+    )
+    selected = candidates[:1]
+    if max_cells > 1 and len(candidates) > 1:
+        primary = selected[0]
+        remaining = candidates[1:]
+        second = next(
+            (
+                row for row in remaining
+                if int(row["timestep_index"]) != int(primary["timestep_index"])
+            ),
+            None,
+        )
+        if second is None:
+            second = next(
+                (
+                    row for row in remaining
+                    if tuple(row["layer_group"]) != tuple(primary["layer_group"])
+                ),
+                remaining[0],
+            )
+        selected.append(second)
+    return {
+        "trigger_floor": floor,
+        "trigger_candidates": candidates,
+        "selected_cells": selected,
+    }
+
+
 def _as_flat_list(value) -> list[float]:
     if hasattr(value, "detach"):
         return value.detach().float().cpu().reshape(-1).tolist()

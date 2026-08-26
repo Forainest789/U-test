@@ -14,6 +14,7 @@ from utest.identity_token_probe import (
     run_probe,
     run_s3,
     s2_forward_budget,
+    select_fusion_verification_cells,
     select_cells,
     semantic_group_manifest,
     write_outputs,
@@ -89,6 +90,37 @@ def test_v0_attaches_available_arm_decompositions_without_new_forwards() -> None
     assert set(result[1]["error_decomposition"]) == {"correct", "wrong", "zero"}
     assert result[0]["error_decomposition"]["correct"]["directional_alignment"] < 0.0
     assert "error_decomposition" not in screening[0]
+
+
+def test_fusion_selection_requires_rescuable_direction_and_prefers_distinct_cell() -> None:
+    def cell(timestep, layers, alignment, alpha, gain, q_content):
+        return {
+            "timestep_index": timestep,
+            "layer_group": layers,
+            "q_content": q_content,
+            "error_decomposition": {
+                "correct": {
+                    "directional_alignment": alignment,
+                    "predicted_optimal_alpha": alpha,
+                    "predicted_optimal_gain": gain,
+                }
+            },
+        }
+
+    result = select_fusion_verification_cells(
+        [
+            cell(25, [5, 6], -0.4, 0.5, 0.10, 0.01),
+            cell(25, [0, 1], -0.3, 0.5, 0.09, 0.02),
+            cell(49, [5, 6], -0.2, 0.5, 0.08, 0.03),
+            cell(0, [0, 1], 0.1, 0.5, 0.50, 0.50),
+            cell(49, [0, 1], -0.2, 1.0, 0.50, 0.50),
+        ],
+        trigger_floor=0.0,
+    )
+
+    assert len(result["trigger_candidates"]) == 3
+    assert [row["timestep_index"] for row in result["selected_cells"]] == [25, 49]
+    assert result["selected_cells"][0]["layer_group"] == [5, 6]
 
 
 def test_cell_selection_prioritizes_positive_content_delta() -> None:
