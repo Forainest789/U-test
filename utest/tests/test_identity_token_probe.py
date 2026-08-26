@@ -72,6 +72,22 @@ def test_prediction_error_decomposition_reconstructs_loss_and_predicts_rescue() 
     assert rescue["predicted_optimal_gain"] > 0.0
 
 
+def test_prediction_error_decomposition_avoids_fp32_cancellation() -> None:
+    import pytest
+
+    torch = pytest.importorskip("torch")
+    baseline = torch.tensor([-1.2904350757598877], dtype=torch.float32)
+    prediction = torch.tensor([-1.290442943572998], dtype=torch.float32)
+
+    result = prediction_error_decomposition(
+        prediction=prediction,
+        baseline=baseline,
+        target=torch.zeros_like(baseline),
+    )
+
+    assert abs(result["decomposition_residual"]) < 1e-8
+
+
 def test_v0_attaches_available_arm_decompositions_without_new_forwards() -> None:
     screening = [
         {"timestep_index": 25, "layer_group": [5, 6], "q_content": 0.1},

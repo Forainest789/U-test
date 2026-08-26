@@ -100,9 +100,7 @@ def prediction_error_decomposition(prediction, baseline, target) -> dict:
             raise ValueError("decomposition tensors must have identical shapes")
         delta = pred - base
         error = base - truth
-        loss_delta = float(
-            ((pred - truth).square().mean() - error.square().mean()).item()
-        )
+        loss_delta = float((delta * (pred + base - 2.0 * truth)).mean().item())
         directional = float((2.0 * error * delta).mean().item())
         energy = float(delta.square().mean().item())
     else:
@@ -119,8 +117,8 @@ def prediction_error_decomposition(prediction, baseline, target) -> dict:
         delta = [p - b for p, b in zip(pred, base)]
         error = [b - y for b, y in zip(base, truth)]
         loss_delta = sum(
-            (p - y) ** 2 - (b - y) ** 2
-            for p, b, y in zip(pred, base, truth)
+            d * (p + b - 2.0 * y)
+            for p, b, y, d in zip(pred, base, truth, delta)
         ) / len(pred)
         directional = 2.0 * sum(e * d for e, d in zip(error, delta)) / len(pred)
         energy = sum(value * value for value in delta) / len(pred)
