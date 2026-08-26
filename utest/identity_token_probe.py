@@ -267,6 +267,8 @@ def write_outputs(output: Path, result: Mapping) -> None:
     _write_jsonl(output / "token_scores.jsonl", s2.get("token_rows", []))
     _write_json(output / "token_groups.json", s2.get("groups", []))
     _write_jsonl(output / "interventions.jsonl", s2.get("interventions", []))
+    if isinstance(report.get("fusion_verification"), Mapping):
+        _write_json(output / "fusion_verification.json", report["fusion_verification"])
     _write_json(output / "identity_probe_report.json", report)
 
 
@@ -879,6 +881,102 @@ def run_fusion_alpha_sweep(
         engine.sparse_role_memory_injection_layers = original_layers
         engine.sparse_role_memory_layer_scales = original_scale_map
     return {"records": records, "measured_forward_count": len(records)}
+
+
+def classify_fusion_mechanism(
+    v0_cell: Mapping,
+    alpha_records: Sequence[Mapping],
+    *,
+    trigger_floor: float,
+) -> dict:
+    floor = float(trigger_floor)
+    lookup = {
+        (str(record["arm"]), float(record["alpha"])): record
+        for record in alpha_records
+    }
+    required = {
+        (arm, alpha)
+        for arm in ("correct", "wrong")
+        for alpha in (0.0, 0.25, 0.5, 1.0)
+    }
+    if set(lookup) != required:
+        raise ValueError("fusion classification requires the matched eight-arm alpha grid")
+
+    def metric(record: Mapping, name: str) -> float:
+        diagnostics = record.get("host_feature_diagnostics", {})
+        values = [float(row[name]) for row in diagnostics.values() if name in row]
+        if not values or not all(math.isfinite(value) for value in values):
+            raise ValueError(f"fusion classification missing finite {name}")
+        return sum(values) / len(values)
+
+    correct_zero = float(lookup[("correct", 0.0)]["loss"])
+    wrong_zero = float(lookup[("wrong", 0.0)]["loss"])
+    no_memory = float(v0_cell["loss_no_memory"])
+    correct_losses = {
+        alpha: float(lookup[("correct", alpha)]["loss"])
+        for alpha in (0.0, 0.25, 0.5, 1.0)
+    }
+    wrong_losses = {
+        alpha: float(lookup[("wrong", alpha)]["loss"])
+        for alpha in (0.0, 0.25, 0.5, 1.0)
+    }
+    if not all(math.isfinite(value) for value in (*correct_losses.values(), *wrong_losses.values())):
+        raise ValueError("fusion alpha losses must be finite")
+    improving = [
+        alpha for alpha in (0.25, 0.5, 1.0)
+        if correct_losses[alpha] < correct_zero - floor
+    ]
+    supplement = any(
+        correct_losses[alpha] < wrong_losses[alpha] - floor for alpha in improving
+    )
+    subunit = [alpha for alpha in improving if alpha < 1.0]
+    best_subunit = min(subunit, key=correct_losses.get) if subunit else None
+    competition = False
+    if best_subunit is not None and correct_losses[1.0] > correct_losses[best_subunit] + floor:
+        best_record = lookup[("correct", best_subunit)]
+        full_record = lookup[("correct", 1.0)]
+        competition = (
+            metric(full_record, "mean_host_norm_drift")
+            > metric(best_record, "mean_host_norm_drift")
+            or metric(full_record, "mean_delta_host_ratio")
+            > metric(best_record, "mean_delta_host_ratio")
+        )
+    correct_v0 = v0_cell.get("error_decomposition", {}).get("correct", {})
+    alignment = float(correct_v0.get("directional_alignment", 0.0))
+    energy = float(correct_v0.get("delta_energy", 0.0))
+    direction_mismatch = alignment >= 0.0 or not improving
+    path_confound = (
+        abs(correct_zero - no_memory) > floor
+        or abs(wrong_zero - no_memory) > floor
+    )
+    no_authority = energy <= floor and all(
+        abs(loss - correct_zero) <= floor for loss in correct_losses.values()
+    )
+    flags = {
+        "supplement_candidate": bool(supplement),
+        "representation_competition_candidate": bool(competition),
+        "direction_mismatch": bool(direction_mismatch),
+        "path_or_routing_confound": bool(path_confound),
+        "no_authority": bool(no_authority),
+    }
+    if no_authority:
+        primary = "no_authority"
+    elif competition:
+        primary = "representation_competition_candidate"
+    elif supplement:
+        primary = "supplement_candidate"
+    elif direction_mismatch:
+        primary = "direction_mismatch"
+    else:
+        primary = "inconclusive"
+    return {
+        "primary": primary,
+        "flags": flags,
+        "best_correct_alpha": min(correct_losses, key=correct_losses.get),
+        "correct_losses": correct_losses,
+        "wrong_losses": wrong_losses,
+        "no_memory_loss": no_memory,
+    }
 
 
 def _as_flat_list(value) -> list[float]:
@@ -1571,6 +1669,9 @@ def run_probe(args, *, context_loader=None) -> dict:
     )
     middle_timestep = timesteps[1]
     smoke = bool(getattr(args, "smoke", False))
+    verify_fusion = bool(getattr(args, "verify_fusion", False))
+    if smoke and verify_fusion:
+        raise ValueError("fusion verification requires the full S0/S1 schedule")
     if smoke:
         all_layers = tuple(layer_groups[1])
         schedule = [
@@ -1629,6 +1730,8 @@ def run_probe(args, *, context_loader=None) -> dict:
     if repeat_influence > float(args.repeat_influence_tolerance):
         raise ValueError("correct_repeat prediction exceeds frozen tolerance")
     cell_records = _screening_cells(records)
+    if verify_fusion:
+        cell_records = _v0_cells(cell_records, records, context["cells"])
     repeat_margin = max(
         float(args.repeat_loss_tolerance),
         float(args.benefit_margin),
@@ -1639,11 +1742,95 @@ def run_probe(args, *, context_loader=None) -> dict:
         repeat_margin=repeat_margin,
         influence_floor=float(args.influence_floor),
     )
+    fusion_verification = None
+    if verify_fusion:
+        trigger_floor = max(
+            repeat_loss_floor,
+            float(args.benefit_margin),
+            0.0,
+        )
+        fusion_selection = select_fusion_verification_cells(
+            cell_records,
+            trigger_floor=trigger_floor,
+        )
+        fusion_verification = {
+            "schema_version": 1,
+            "mode": "verify_fusion",
+            "v0_cells": cell_records,
+            **fusion_selection,
+            "v1_records": [],
+            "alpha_curves": [],
+            "host_feature_diagnostics": [],
+            "mechanism_classification": [],
+            "measured_forward_count": 0,
+            "measured_forward_budget": 16,
+            "gates": {
+                "v0_decomposition": {"status": "PASS", "reasons": []},
+                "v1_alpha_sweep": {
+                    "status": "PENDING" if fusion_selection["selected_cells"] else "SKIP",
+                    "reasons": [] if fusion_selection["selected_cells"] else ["no rescuable V0 cell"],
+                },
+            },
+        }
+        if fusion_selection["selected_cells"]:
+            v1_context = (
+                torch_module.inference_mode()
+                if torch_module is not None and hasattr(torch_module, "inference_mode")
+                else nullcontext()
+            )
+            with v1_context:
+                v1 = run_fusion_alpha_sweep(
+                    context,
+                    fusion_selection["selected_cells"],
+                    records,
+                )
+            v0_lookup = {
+                (int(row["timestep_index"]), tuple(row["layer_group"])): row
+                for row in cell_records
+            }
+            classifications = []
+            for spec in fusion_selection["selected_cells"]:
+                key = (int(spec["timestep_index"]), tuple(spec["layer_group"]))
+                cell_alpha_records = [
+                    row for row in v1["records"]
+                    if int(row["timestep_index"]) == key[0]
+                    and tuple(row["layer_group"]) == key[1]
+                ]
+                classification = classify_fusion_mechanism(
+                    v0_lookup[key],
+                    cell_alpha_records,
+                    trigger_floor=trigger_floor,
+                )
+                classifications.append({
+                    "timestep_index": key[0],
+                    "layer_group": list(key[1]),
+                    "classification": classification,
+                })
+            fusion_verification.update({
+                "v1_records": v1["records"],
+                "alpha_curves": classifications,
+                "host_feature_diagnostics": [
+                    {
+                        "timestep_index": row["timestep_index"],
+                        "layer_group": row["layer_group"],
+                        "arm": row["arm"],
+                        "alpha": row["alpha"],
+                        "layers": row["host_feature_diagnostics"],
+                    }
+                    for row in v1["records"]
+                ],
+                "mechanism_classification": classifications,
+                "measured_forward_count": int(v1["measured_forward_count"]),
+                "gates": {
+                    "v0_decomposition": {"status": "PASS", "reasons": []},
+                    "v1_alpha_sweep": {"status": "PASS", "reasons": []},
+                },
+            })
     public_records = [{key: value for key, value in row.items() if key != "_prediction"} for row in records]
     content_pass = selected["primary"] is not None
     s2_result = None
     s3_result = None
-    if content_pass and not smoke:
+    if content_pass and not smoke and not verify_fusion:
         s2_context = (
             torch_module.inference_mode()
             if torch_module is not None and hasattr(torch_module, "inference_mode")
@@ -1672,8 +1859,13 @@ def run_probe(args, *, context_loader=None) -> dict:
                     s2_result,
                     output=Path(args.output),
                 )
-    measured_arm_count = len(records) + int(
-        s2_result.get("measured_forward_count", 0) if s2_result else 0
+    measured_arm_count = (
+        len(records)
+        + int(s2_result.get("measured_forward_count", 0) if s2_result else 0)
+        + int(
+            fusion_verification.get("measured_forward_count", 0)
+            if fusion_verification else 0
+        )
     )
     count_records = list(public_records)
     if warmup_record is not None:
@@ -1681,11 +1873,17 @@ def run_probe(args, *, context_loader=None) -> dict:
     if s2_result is not None:
         count_records.extend(s2_result.get("interventions", []))
         count_records.extend(s2_result.get("semantic_captures", []))
+    if fusion_verification is not None:
+        count_records.extend(fusion_verification.get("v1_records", []))
     dit_counts = _sum_dit_forward_counts(count_records)
     if dit_counts["raw"] != sum(
         dit_counts[name] for name in ("semantic_prepass", "conditional", "unconditional")
     ):
         raise RuntimeError("raw DiT invocation count does not reconcile")
+    if verify_fusion and dit_counts["unconditional"] != 0:
+        raise RuntimeError("fusion verification executed an unconditional DiT")
+    if verify_fusion and measured_arm_count > 41:
+        raise RuntimeError("fusion verification measured-forward budget exceeded")
     report = {
         "schema_version": 1,
         "forward_count": measured_arm_count,
@@ -1701,7 +1899,7 @@ def run_probe(args, *, context_loader=None) -> dict:
         "unconditional_dit_count": dit_counts["unconditional"],
         "raw_dit_invocation_count": dit_counts["raw"],
         "actual_model_forward_count": dit_counts["raw"],
-        "forward_budget": 5 if smoke else 50,
+        "forward_budget": 5 if smoke else (41 if verify_fusion else 50),
         "screening_records": public_records,
         "screening_cells": cell_records,
         "selected_cells": selected,
@@ -1714,7 +1912,12 @@ def run_probe(args, *, context_loader=None) -> dict:
                 "reasons": [] if content_pass else ["no positive content-specific cell"],
             },
             "identity_set": (
-                dict(s2_result["gate"])
+                {
+                    "status": "PENDING",
+                    "reasons": ["fusion verification mode does not run S2"],
+                }
+                if verify_fusion
+                else dict(s2_result["gate"])
                 if s2_result is not None
                 else {
                     "status": "PENDING",
@@ -1796,6 +1999,8 @@ def run_probe(args, *, context_loader=None) -> dict:
         report["s2"] = s2_result
     if s3_result is not None:
         report["s3"] = s3_result
+    if fusion_verification is not None:
+        report["fusion_verification"] = fusion_verification
     return report
 
 
@@ -1880,6 +2085,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--require-dynamic-writer", action="store_true")
     parser.add_argument("--allow-attention-fallback", action="store_true")
     parser.add_argument("--run-decoded-validation", action="store_true")
+    parser.add_argument("--verify-fusion", action="store_true")
     parser.add_argument("--smoke", action="store_true")
     parser.add_argument("--self-check", action="store_true")
     return parser

@@ -9,6 +9,7 @@ from utest.identity_token_probe import (
     _v0_cells,
     build_screening_schedule,
     cache_key,
+    classify_fusion_mechanism,
     finalize_s2,
     prediction_error_decomposition,
     run_probe,
@@ -213,6 +214,45 @@ def test_fusion_alpha_sweep_uses_existing_scales_and_restores_engine() -> None:
     assert engine.sparse_role_memory_layer_scales == {5: 0.8, 6: 0.9, 12: 0.7}
 
 
+def test_fusion_mechanism_classifies_competition_without_claiming_proof() -> None:
+    v0 = {
+        "loss_no_memory": 1.0,
+        "error_decomposition": {
+            "correct": {"directional_alignment": -0.2, "delta_energy": 0.3}
+        },
+    }
+    records = []
+    losses = {
+        ("correct", 0.0): 1.0,
+        ("correct", 0.25): 0.9,
+        ("correct", 0.5): 0.95,
+        ("correct", 1.0): 1.1,
+        ("wrong", 0.0): 1.0,
+        ("wrong", 0.25): 0.98,
+        ("wrong", 0.5): 1.0,
+        ("wrong", 1.0): 1.05,
+    }
+    for (arm, alpha), loss in losses.items():
+        records.append({
+            "arm": arm,
+            "alpha": alpha,
+            "loss": loss,
+            "host_feature_diagnostics": {
+                "5": {
+                    "mean_host_norm_drift": alpha * 0.1,
+                    "mean_delta_host_ratio": alpha * 0.2,
+                }
+            },
+        })
+
+    result = classify_fusion_mechanism(v0, records, trigger_floor=0.0)
+
+    assert result["primary"] == "representation_competition_candidate"
+    assert result["flags"]["supplement_candidate"] is True
+    assert result["flags"]["representation_competition_candidate"] is True
+    assert "proven" not in json.dumps(result).lower()
+
+
 def test_cell_selection_prioritizes_positive_content_delta() -> None:
     selected = select_cells(
         [
@@ -341,6 +381,143 @@ def test_orchestrator_loads_once_and_stops_before_s2_without_content_signal(
     assert calls == {"loads": 1, "forwards": 25}
     assert report["gates"]["content_causality"]["status"] == "BLOCK"
     assert report["forward_count"] == 25
+
+
+def test_fusion_verification_stops_after_v0_when_no_cell_can_be_rescued(
+    tmp_path: Path,
+) -> None:
+    calls = {"forwards": 0}
+
+    class Engine:
+        device = "cpu"
+        sparse_role_memory_injection_layers = list(range(16))
+        sparse_role_memory_layer_scales = {layer: 1.0 for layer in range(16)}
+
+        def generate_chunk(self, **kwargs):
+            calls["forwards"] += 1
+            no_memory = kwargs.get("memory_tokens") is None
+            return {
+                "prediction_cond": [0.0],
+                "prediction": [0.0],
+                "forced_memory_path": no_memory,
+                "sparse_role_memory_stats_by_layer": {} if no_memory else {
+                    "0": {
+                        "enabled": 1,
+                        "selected_query_tokens": 1,
+                        "selected_memory_tokens": 1,
+                        "effective_delta_norm": 0.1,
+                        "host_token_norm": 1.0,
+                    }
+                },
+                "attention_implementation": "flash_attention_2",
+                "dit_forward_counts": {
+                    "semantic_prepass": 0 if no_memory else 1,
+                    "conditional": 1,
+                    "unconditional": 0,
+                },
+            }
+
+    args = SimpleNamespace(
+        repeat_loss_tolerance=0.0,
+        repeat_influence_tolerance=0.0,
+        benefit_margin=0.0,
+        influence_floor=0.0,
+        allow_attention_fallback=False,
+        run_decoded_validation=False,
+        verify_fusion=True,
+        output=tmp_path,
+    )
+    report = run_probe(
+        args, context_loader=lambda args, include_native: _fake_context(Engine())
+    )
+
+    assert calls["forwards"] == 25
+    assert report["forward_count"] == 25
+    assert report["forward_budget"] == 41
+    assert report["fusion_verification"]["selected_cells"] == []
+    assert report["fusion_verification"]["measured_forward_count"] == 0
+    assert "s2" not in report
+    assert report["gates"]["identity_set"] == {
+        "status": "PENDING",
+        "reasons": ["fusion verification mode does not run S2"],
+    }
+
+
+def test_fusion_verification_runs_bounded_v1_and_never_enters_s2(
+    tmp_path: Path,
+) -> None:
+    calls = {"forwards": 0}
+
+    class Engine:
+        device = "cpu"
+        sparse_role_memory_injection_layers = list(range(16))
+        sparse_role_memory_layer_scales = {layer: 1.0 for layer in range(16)}
+
+        def generate_chunk(self, **kwargs):
+            calls["forwards"] += 1
+            memory = kwargs.get("memory_tokens")
+            layers = list(self.sparse_role_memory_injection_layers)
+            alpha = self.sparse_role_memory_layer_scales[layers[0]] if memory is not None else 0.0
+            prediction = 1.0 if memory is None else 1.0 - 1.5 * float(memory) * alpha
+            capture = kwargs["teacher_forced_probe"].get("capture_sparse_token_diagnostics", False)
+            by_layer = {}
+            if memory is not None:
+                for layer in layers:
+                    row = {
+                        "enabled": 1,
+                        "selected_query_tokens": 1,
+                        "selected_memory_tokens": 1,
+                        "effective_delta_norm": max(
+                            abs(1.5 * float(memory) * alpha),
+                            0.01 if float(memory) == 0.0 else 0.0,
+                        ),
+                        "host_token_norm": 1.0,
+                    }
+                    if capture:
+                        row["token_diagnostics"] = {
+                            "flat_idx": [0],
+                            "host_features": [[1.0, 0.0]],
+                            "effective_delta_features": [[-1.5 * float(memory) * alpha, 0.0]],
+                        }
+                    by_layer[str(layer)] = row
+            return {
+                "prediction_cond": [prediction],
+                "prediction": [prediction],
+                "forced_memory_path": memory is None,
+                "sparse_role_memory_stats_by_layer": by_layer,
+                "attention_implementation": "flash_attention_2",
+                "dit_forward_counts": {
+                    "semantic_prepass": 0 if memory is None else 1,
+                    "conditional": 1,
+                    "unconditional": 0,
+                },
+            }
+
+    args = SimpleNamespace(
+        repeat_loss_tolerance=0.0,
+        repeat_influence_tolerance=0.0,
+        benefit_margin=0.0,
+        influence_floor=0.0,
+        allow_attention_fallback=False,
+        run_decoded_validation=False,
+        verify_fusion=True,
+        output=tmp_path,
+    )
+    report = run_probe(
+        args, context_loader=lambda args, include_native: _fake_context(Engine())
+    )
+
+    fusion = report["fusion_verification"]
+    assert calls["forwards"] == report["forward_count"] == 41
+    assert len(fusion["selected_cells"]) == 2
+    assert fusion["measured_forward_count"] == 16
+    assert len(fusion["mechanism_classification"]) == 2
+    assert all(
+        row["classification"]["primary"] == "representation_competition_candidate"
+        for row in fusion["mechanism_classification"]
+    )
+    assert report["unconditional_dit_count"] == 0
+    assert "s2" not in report
 
 
 def test_delta8_semantic_manifest_separates_identity_action_and_scene() -> None:
@@ -494,6 +671,12 @@ def test_output_report_is_complete_without_reading_figures(tmp_path: Path) -> No
             "groups": [],
             "interventions": [],
         },
+        "fusion_verification": {
+            "schema_version": 1,
+            "mode": "verify_fusion",
+            "selected_cells": [],
+            "v1_records": [],
+        },
     }
     write_outputs(tmp_path, result)
 
@@ -507,6 +690,7 @@ def test_output_report_is_complete_without_reading_figures(tmp_path: Path) -> No
         "token_groups.json",
         "interventions.jsonl",
         "identity_probe_report.json",
+        "fusion_verification.json",
     }
     assert expected <= {path.name for path in tmp_path.iterdir()}
     report = json.loads(

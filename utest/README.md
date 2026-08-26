@@ -294,6 +294,38 @@ the raw total. A semantic prepass is truncated after the required layer and is r
 separately rather than treated as a full-forward equivalent. If the full S0/S1 content
 gate is blocked, stop there and do not infer token kinds or advance to S2.
 
+To diagnose whether an identity residual supplies useful denoising direction or instead
+becomes harmful at full strength, reuse the frozen prefix and arms in fusion-verification
+mode. This mode runs the 25-arm S0/S1 grid, performs a zero-forward prediction-error
+decomposition, and only when that decomposition predicts a rescuable sub-unit scale runs
+matched `correct`/`wrong` sweeps at alpha `0,0.25,0.5,1` for at most two cells:
+
+```bash
+PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
+DIFFSYNTH_ATTENTION_IMPLEMENTATION=flash_attention_2 \
+SLOTMEM_OFFLOAD_MODELS=0 CUDA_VISIBLE_DEVICES=0 \
+python -m utest.identity_token_probe \
+  --prefix "$PREFIX_USED" \
+  --future-target-video "$FUTURE_TARGET_VIDEO" \
+  --arms-root "$ARMS_USED" \
+  --donor "$DONOR_PAYLOAD" \
+  --donor-manifest "$DONOR_MANIFEST" \
+  --output "$FUSION_VERIFY_OUTPUT" \
+  --timestep-indices 0,25,49 \
+  --layer-groups 0-4,5-10,11-15 \
+  --noise-seed 0 \
+  --benefit-margin 0 \
+  --verify-fusion
+```
+
+The mode never enters S2/S3, never emits identity-token labels, and has a hard ceiling
+of 41 measured arms (`25 + 2*8`). Results are written to
+`fusion_verification.json`. `representation_competition_candidate` means that a
+sub-unit correct alpha helps, alpha one is worse, and host drift or delta/host ratio
+grows with alpha; it is evidence consistent with over-strong fusion or representation
+competition, not proof of the latter. Alpha-zero is a matched memory/query-path control
+and is intentionally distinct from `no_memory`.
+
 Only after S2 passes, an optional fresh run may add four decoded rollouts for external
 identity and motion scoring:
 
