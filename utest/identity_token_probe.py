@@ -90,6 +90,62 @@ def _sum_dit_forward_counts(records: Sequence[Mapping]) -> dict[str, int]:
     return {**counts, "raw": sum(counts.values())}
 
 
+def prediction_error_decomposition(prediction, baseline, target) -> dict:
+    """Decompose one fixed-target MSE change into direction and delta energy."""
+    if hasattr(prediction, "detach"):
+        pred = prediction.detach().float()
+        base = baseline.detach().to(device=pred.device).float()
+        truth = target.detach().to(device=pred.device).float()
+        if tuple(pred.shape) != tuple(base.shape) or tuple(pred.shape) != tuple(truth.shape):
+            raise ValueError("decomposition tensors must have identical shapes")
+        delta = pred - base
+        error = base - truth
+        loss_delta = float(
+            ((pred - truth).square().mean() - error.square().mean()).item()
+        )
+        directional = float((2.0 * error * delta).mean().item())
+        energy = float(delta.square().mean().item())
+    else:
+        def values(source):
+            if isinstance(source, (list, tuple)):
+                return [item for child in source for item in values(child)]
+            return [float(source)]
+
+        pred = values(prediction)
+        base = values(baseline)
+        truth = values(target)
+        if not pred or not (len(pred) == len(base) == len(truth)):
+            raise ValueError("decomposition inputs must have equal non-zero length")
+        delta = [p - b for p, b in zip(pred, base)]
+        error = [b - y for b, y in zip(base, truth)]
+        loss_delta = sum(
+            (p - y) ** 2 - (b - y) ** 2
+            for p, b, y in zip(pred, base, truth)
+        ) / len(pred)
+        directional = 2.0 * sum(e * d for e, d in zip(error, delta)) / len(pred)
+        energy = sum(value * value for value in delta) / len(pred)
+    values_to_check = (loss_delta, directional, energy)
+    if not all(math.isfinite(value) for value in values_to_check):
+        raise ValueError("prediction error decomposition must be finite")
+    residual = loss_delta - directional - energy
+    tolerance = max(
+        1e-8,
+        1e-5 * max(abs(loss_delta), abs(directional) + abs(energy), 1e-12),
+    )
+    if abs(residual) > tolerance:
+        raise ValueError("prediction error decomposition does not reconstruct loss")
+    alpha = min(1.0, max(0.0, -directional / (2.0 * energy))) if energy > 0 else None
+    gain = -(alpha * directional + alpha * alpha * energy) if alpha is not None else None
+    return {
+        "loss_delta_from_no_memory": float(loss_delta),
+        "directional_alignment": float(directional),
+        "delta_energy": float(energy),
+        "decomposition_residual": float(residual),
+        "predicted_optimal_alpha": float(alpha) if alpha is not None else None,
+        "predicted_optimal_gain": float(gain) if gain is not None else None,
+    }
+
+
 def _atomic_text(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(path.suffix + ".tmp")
@@ -529,6 +585,47 @@ def _screening_cells(records: Sequence[Mapping]) -> list[dict]:
             "content_influence": _influence(correct["_prediction"], wrong["_prediction"]),
             "delta_host_ratio": float(correct["diagnostics"]["delta_host_ratio"]),
         })
+    return output
+
+
+def _v0_cells(
+    screening_cells: Sequence[Mapping],
+    screening_records: Sequence[Mapping],
+    cells: Sequence,
+) -> list[dict]:
+    baselines = {
+        int(record["timestep_index"]): record["_prediction"]
+        for record in screening_records
+        if str(record["arm"]) == "no_memory"
+    }
+    predictions = {
+        (
+            int(record["timestep_index"]),
+            tuple(int(layer) for layer in record["layer_group"]),
+            str(record["arm"]),
+        ): record["_prediction"]
+        for record in screening_records
+        if "_prediction" in record
+    }
+    targets = {int(cell.timestep_index): cell.flow_target for cell in cells}
+    output = []
+    for source in screening_cells:
+        row = dict(source)
+        timestep = int(row["timestep_index"])
+        layers = tuple(int(layer) for layer in row["layer_group"])
+        if timestep not in baselines or timestep not in targets:
+            raise ValueError(f"V0 missing no-memory baseline or target for timestep {timestep}")
+        decomposition = {}
+        for arm in ("correct", "wrong", "zero"):
+            prediction = predictions.get((timestep, layers, arm))
+            if prediction is not None:
+                decomposition[arm] = prediction_error_decomposition(
+                    prediction, baselines[timestep], targets[timestep]
+                )
+        if not {"correct", "wrong"} <= set(decomposition):
+            raise ValueError(f"V0 missing correct/wrong records for timestep {timestep} layers {layers}")
+        row["error_decomposition"] = decomposition
+        output.append(row)
     return output
 
 

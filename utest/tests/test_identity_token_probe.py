@@ -6,9 +6,11 @@ import json
 
 from utest.identity_token_probe import (
     _sum_dit_forward_counts,
+    _v0_cells,
     build_screening_schedule,
     cache_key,
     finalize_s2,
+    prediction_error_decomposition,
     run_probe,
     run_s3,
     s2_forward_budget,
@@ -46,6 +48,47 @@ def test_dit_forward_counts_reconcile_measured_warmup_and_semantic_calls() -> No
         "unconditional": 0,
         "raw": 4,
     }
+
+
+def test_prediction_error_decomposition_reconstructs_loss_and_predicts_rescue() -> None:
+    neutral = prediction_error_decomposition(
+        prediction=[1.5, 0.5], baseline=[1.0, 1.0], target=[0.0, 0.0]
+    )
+    assert neutral["loss_delta_from_no_memory"] == 0.25
+    assert neutral["directional_alignment"] == 0.0
+    assert neutral["delta_energy"] == 0.25
+    assert abs(neutral["decomposition_residual"]) < 1e-12
+    assert neutral["predicted_optimal_alpha"] == 0.0
+
+    rescue = prediction_error_decomposition(
+        prediction=[0.0, 2.0], baseline=[1.0, 2.0], target=[0.0, 0.0]
+    )
+    assert rescue["directional_alignment"] < 0.0
+    assert 0.0 < rescue["predicted_optimal_alpha"] <= 1.0
+    assert rescue["predicted_optimal_gain"] > 0.0
+
+
+def test_v0_attaches_available_arm_decompositions_without_new_forwards() -> None:
+    screening = [
+        {"timestep_index": 25, "layer_group": [5, 6], "q_content": 0.1},
+        {"timestep_index": 25, "layer_group": [0, 1], "q_content": 0.2},
+    ]
+    records = [
+        {"timestep_index": 25, "layer_group": list(range(16)), "arm": "no_memory", "_prediction": [1.0, 2.0]},
+        {"timestep_index": 25, "layer_group": [5, 6], "arm": "correct", "_prediction": [0.0, 2.0]},
+        {"timestep_index": 25, "layer_group": [5, 6], "arm": "wrong", "_prediction": [1.5, 2.0]},
+        {"timestep_index": 25, "layer_group": [0, 1], "arm": "correct", "_prediction": [1.0, 1.0]},
+        {"timestep_index": 25, "layer_group": [0, 1], "arm": "wrong", "_prediction": [2.0, 2.0]},
+        {"timestep_index": 25, "layer_group": [0, 1], "arm": "zero", "_prediction": [1.0, 1.5]},
+    ]
+    cells = [SimpleNamespace(timestep_index=25, flow_target=[0.0, 0.0])]
+
+    result = _v0_cells(screening, records, cells)
+
+    assert set(result[0]["error_decomposition"]) == {"correct", "wrong"}
+    assert set(result[1]["error_decomposition"]) == {"correct", "wrong", "zero"}
+    assert result[0]["error_decomposition"]["correct"]["directional_alignment"] < 0.0
+    assert "error_decomposition" not in screening[0]
 
 
 def test_cell_selection_prioritizes_positive_content_delta() -> None:
