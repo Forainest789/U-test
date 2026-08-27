@@ -2,10 +2,12 @@
 # Fetch the frozen platform: Wan2.2-I2V-A14B base + SlotMem Stage-2 checkpoints, then
 # record exactly what was fetched. No code is cloned -- this repo IS the SlotMem fork.
 #
-#   UTEST_ENV=utest bash scripts/fetch_weights.sh
+# Run this from an already-active Conda environment:
+#   SKIP_PIP=1 bash scripts/fetch_weights.sh
 #
 # Disk: ~126 GB base + ~21 GB checkpoints. VRAM at inference is a separate budget; see
 # docs/research-plan.md.
+main() (
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -13,19 +15,10 @@ CKPT_ROOT="${CKPT_ROOT:-${REPO_DIR}}"
 WAN22_DIR="${WAN22_DIR:-${REPO_DIR}/../wan_models/Wan2.2-I2V-A14B}"
 WAN22_REPO="${WAN22_REPO:-Wan-AI/Wan2.2-I2V-A14B}"
 PYTHON_BIN="${PYTHON_BIN:-python}"
+: "${CONDA_PREFIX:?run this script from the already-active Conda environment}"
+ACTIVE_ENV="${CONDA_DEFAULT_ENV:-$(basename "${CONDA_PREFIX}")}"
 
-if [[ -z "${UTEST_ENV:-}" && "${ALLOW_SHARED_ENV:-0}" != "1" ]]; then
-  echo "[utest] refusing to install into the current env." >&2
-  echo "[utest]   conda create -n utest python=3.10 -y && UTEST_ENV=utest bash $0" >&2
-  echo "[utest]   (SlotMem pins torch 2.7.1/cu128 and flash_attn 2.8.0.post2; installing" >&2
-  echo "[utest]    that over another project's env breaks the other project.)" >&2
-  exit 1
-fi
-if [[ -n "${UTEST_ENV:-}" ]] && command -v conda >/dev/null 2>&1; then
-  eval "$(conda shell.bash hook)"
-  conda activate "${UTEST_ENV}"
-  PYTHON_BIN="python"
-fi
+echo "[utest] using active Conda environment: ${ACTIVE_ENV}"
 
 ensure_hf_cli() {
   command -v hf >/dev/null 2>&1 && return
@@ -53,7 +46,7 @@ fi
 for required in stage2/stage2_low.pt stage2/stage2_high.pt; do
   [[ -f "${CKPT_ROOT}/ckpt/${required}" ]] || {
     echo "[utest] FATAL: missing ckpt/${required}; Stage-2 is the frozen platform" >&2
-    exit 1
+    return 1
   }
 done
 
@@ -76,13 +69,13 @@ echo "[utest] base model: $((wan_bytes / 1024 / 1024 / 1024)) GiB in ${wan_shard
 for expert in low_noise_model high_noise_model; do
   [[ -d "${WAN22_DIR}/${expert}" ]] && [[ -n "$(ls -A "${WAN22_DIR}/${expert}" 2>/dev/null)" ]] || {
     echo "[utest] FATAL: ${WAN22_DIR}/${expert} missing or empty" >&2
-    exit 1
+    return 1
   }
 done
 if (( wan_bytes < 100 * 1024 * 1024 * 1024 )); then
   echo "[utest] FATAL: base model is $((wan_bytes / 1024 / 1024 / 1024)) GiB, expected ~126." >&2
   echo "[utest] Re-run this script; hf download resumes. Set HF_TOKEN for higher rate limits." >&2
-  exit 1
+  return 1
 fi
 
 # 4. Provenance. A commit hash describes the tree only when the tree is clean, which is
@@ -135,7 +128,7 @@ cat <<EOF
 [utest] ready. manifest -> ${MANIFEST}
 
   M0a (official sample, Stage-2) -- record wall time and peak VRAM:
-    CONDA_ENV=${UTEST_ENV:-utest} CUDA_VISIBLE_DEVICES=0 \\
+    CONDA_ENV=${ACTIVE_ENV} CUDA_VISIBLE_DEVICES=0 \\
     DUAL_EXPERT_LOAD_MODE=active DUAL_EXPERT_MANAGE_AUX_MODELS=1 \\
     CKPT_DIR=${WAN22_DIR} \\
     JSON_PATH=${REPO_DIR}/sample/test/3_271/rewrite_caption.json \\
@@ -145,3 +138,6 @@ cat <<EOF
   E0 (zero GPU, run this FIRST -- it gates the whole method line):
     python -m utest.eligibility --data-root <narrastream-scripts> --out runs/e0.json
 EOF
+)
+
+main "$@"
