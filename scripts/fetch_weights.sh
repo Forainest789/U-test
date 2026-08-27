@@ -128,9 +128,13 @@ cat <<EOF
 [utest] ready. manifest -> ${MANIFEST}
 
   M0a (official sample, Stage-2) -- record wall time and peak VRAM:
-    CONDA_ENV=${ACTIVE_ENV} CUDA_VISIBLE_DEVICES=0 \\
+    CUDA_VISIBLE_DEVICES=0 \\
     DUAL_EXPERT_LOAD_MODE=active DUAL_EXPERT_MANAGE_AUX_MODELS=1 \\
     CKPT_DIR=${WAN22_DIR} \\
+    STAGE1_LOW_CKPT_PATH=${CKPT_ROOT}/ckpt/stage1/stage1_low.pt \\
+    STAGE1_HIGH_CKPT_PATH=${CKPT_ROOT}/ckpt/stage1/stage1_high.pt \\
+    STAGE2_LOW_CKPT_PATH=${CKPT_ROOT}/ckpt/stage2/stage2_low.pt \\
+    STAGE2_HIGH_CKPT_PATH=${CKPT_ROOT}/ckpt/stage2/stage2_high.pt \\
     JSON_PATH=${REPO_DIR}/sample/test/3_271/rewrite_caption.json \\
     REF_IMAGE_PATH=${REPO_DIR}/sample/test/3_271/frame.jpg \\
     time bash ${REPO_DIR}/test_slotmem_stage2.sh
