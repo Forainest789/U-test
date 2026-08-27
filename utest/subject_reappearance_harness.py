@@ -677,6 +677,47 @@ def _load_donor_slots(block: Mapping) -> dict[int, dict[str, object]]:
     return {bank: {str(layer): tensor for layer, tensor in selected[LAYERS_KEY].items()}}
 
 
+def _validate_donor_target_compatibility(row: Mapping) -> None:
+    """Reject a frozen donor that cannot be transformed into this target's slots."""
+    import torch
+
+    event = _read_json(Path(row["event_json"]))
+    manifest = _read_json(Path(row["subject_subspace_manifest"]))
+    seed = int(row.get("target_seed", row["seed"]))
+    banks = validate_subject_subspace_manifest(manifest, event, seed=seed)
+    block = {**row, "event": event}
+    source_slots = _load_source_slots(block, manifest)
+    donor_slots = _load_donor_slots(block)
+    expected_banks = set(banks)
+    if set(source_slots) != expected_banks or set(donor_slots) != expected_banks:
+        raise ValueError("donor-target bank sets do not match the frozen mask contract")
+    for bank, layers in banks.items():
+        expected_layers = set(layers)
+        source_layers = source_slots[bank]
+        donor_layers = donor_slots[bank]
+        if set(source_layers) != expected_layers or set(donor_layers) != expected_layers:
+            raise ValueError(
+                f"donor-target layer sets for bank {bank} do not match the frozen mask contract"
+            )
+        for layer, layer_contract in layers.items():
+            source = source_layers[layer]
+            donor = donor_layers[layer]
+            expected_slots = layer_contract["slot_count"]
+            if (
+                expected_slots != 32
+                or not isinstance(source, torch.Tensor)
+                or not isinstance(donor, torch.Tensor)
+                or source.ndim != 2
+                or donor.ndim != 2
+                or source.shape[0] != expected_slots
+                or donor.shape[0] != expected_slots
+                or tuple(source.shape) != tuple(donor.shape)
+            ):
+                raise ValueError(
+                    f"donor-target tensor shape mismatch at bank {bank} layer {layer}"
+                )
+
+
 def _expected_returned_hashes(
     arm: str,
     bank: int,
@@ -1418,7 +1459,9 @@ def _execute_stage(
         if qualification.get("status") != "passed":
             raise ValueError("source qualification is not passed")
         contract = _validated_prefix_contract(row)
-        if stage == "full":
+        if stage == "preflight":
+            _validate_donor_target_compatibility(row)
+        elif stage == "full":
             preflight_validation = block_dir / "preflight" / "validation.json"
             if not preflight_validation.is_file():
                 raise ValueError("full arms require a passed preflight")

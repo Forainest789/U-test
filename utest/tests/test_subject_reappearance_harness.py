@@ -1003,6 +1003,12 @@ def test_full_revalidates_preflight_with_the_validated_prefix_contract(
     monkeypatch.setattr(
         "utest.subject_reappearance_harness._validated_prefix_contract", lambda actual: contract
     )
+    monkeypatch.setattr(
+        "utest.subject_reappearance_harness._validate_donor_target_compatibility",
+        lambda _row: (_ for _ in ()).throw(
+            AssertionError("full must rely on its passed preflight")
+        ),
+    )
 
     def checked(block: dict, **kwargs):
         assert block["contract"] is contract
@@ -1011,6 +1017,182 @@ def test_full_revalidates_preflight_with_the_validated_prefix_contract(
     monkeypatch.setattr("utest.subject_reappearance_harness.validate_block", checked)
     with pytest.raises(RuntimeError, match="runtime checked"):
         _execute_stage({"blocks": [row]}, "full")
+
+
+def _preflight_execution_row(tmp_path: Path) -> tuple[dict, Path]:
+    block, block_dir = _validated_block(tmp_path)
+    row = {
+        "event_id": block["event"]["event_id"],
+        "seed": 0,
+        "target_seed": 0,
+        "block_dir": str(block_dir),
+        "source_qualification": str(block_dir / "source_qualification.json"),
+        "commands": {
+            "preflight": {
+                "status": "deferred_until_prefix",
+                "arm_order": list(PREFLIGHT_ARMS),
+            }
+        },
+        "event_json": str(block["event_json"]),
+        "subject_subspace_manifest": str(block["subject_subspace_manifest"]),
+        "source_capture": str(block["source_capture"]),
+        "donor": block["donor"],
+    }
+    return row, block_dir
+
+
+def _rewrite_execution_donor(
+    row: dict,
+    *,
+    hidden_dimension: int | None = None,
+    missing_layer: str | None = None,
+    donor_bank: int | None = None,
+) -> None:
+    donor_path = Path(row["donor"]["payload_path"])
+    artifact = torch.load(donor_path, map_location="cpu", weights_only=True)
+    payload_key = next(iter(artifact["payloads"]))
+    layers = artifact["payloads"][payload_key][LAYERS_KEY]
+    if hidden_dimension is not None:
+        layers = {
+            layer: torch.zeros((32, hidden_dimension), dtype=tensor.dtype)
+            for layer, tensor in layers.items()
+        }
+        artifact["payloads"][payload_key][LAYERS_KEY] = layers
+    if missing_layer is not None:
+        layers.pop(missing_layer)
+    if donor_bank is not None:
+        selected = artifact["payloads"].pop(payload_key)
+        payload_key = f'{payload_key.rsplit("|", 1)[0]}|{donor_bank}'
+        artifact["payloads"][payload_key] = selected
+        row["donor"]["payload_key"] = payload_key
+    torch.save(artifact, donor_path)
+    donor_manifest_path = Path(row["donor"]["manifest_path"])
+    donor_manifest = json.loads(donor_manifest_path.read_text(encoding="utf-8"))
+    donor_manifest["pairs"][0]["payload_sha256"] = sha256_file(donor_path)
+    donor_manifest["pairs"][0]["payload_key"] = payload_key
+    donor_manifest["pairs"][0]["slot_shape"] = {
+        layer: list(tensor.shape) for layer, tensor in layers.items()
+    }
+    donor_manifest_path.write_text(json.dumps(donor_manifest), encoding="utf-8")
+
+
+def test_preflight_rejects_self_consistent_donor_with_incompatible_target_shape_before_gpu(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    row, block_dir = _preflight_execution_row(tmp_path)
+    _rewrite_execution_donor(row, hidden_dimension=4)
+    calls = []
+    contract = {"snapshot": {"path": str(block_dir / "snapshot.pt")}}
+    monkeypatch.setattr(
+        "utest.subject_reappearance_harness._validated_prefix_contract",
+        lambda _row: contract,
+    )
+    monkeypatch.setattr(
+        "utest.subject_reappearance_harness._freeze_or_load_command_artifact",
+        lambda _row, _contract: {"preflight": {"full_correct": ["gpu"]}},
+    )
+    monkeypatch.setattr(
+        "utest.subject_reappearance_harness.validate_contract", lambda *_args: []
+    )
+    monkeypatch.setattr(
+        "utest.subject_reappearance_harness._run_logged",
+        lambda *_args: calls.append("gpu"),
+    )
+
+    with pytest.raises(ValueError, match="donor.*target.*shape"):
+        _execute_stage({"blocks": [row]}, "preflight")
+
+    assert calls == []
+
+
+def test_preflight_accepts_compatible_donor_before_reaching_gpu_boundary(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    row, block_dir = _preflight_execution_row(tmp_path)
+    calls = []
+    contract = {"snapshot": {"path": str(block_dir / "snapshot.pt")}}
+    monkeypatch.setattr(
+        "utest.subject_reappearance_harness._validated_prefix_contract",
+        lambda _row: contract,
+    )
+    monkeypatch.setattr(
+        "utest.subject_reappearance_harness._freeze_or_load_command_artifact",
+        lambda _row, _contract: {"preflight": {"full_correct": ["gpu"]}},
+    )
+    monkeypatch.setattr(
+        "utest.subject_reappearance_harness.validate_contract", lambda *_args: []
+    )
+
+    def gpu_boundary(*_args) -> None:
+        calls.append("gpu")
+        raise RuntimeError("gpu boundary reached")
+
+    monkeypatch.setattr(
+        "utest.subject_reappearance_harness._run_logged", gpu_boundary
+    )
+
+    with pytest.raises(RuntimeError, match="gpu boundary reached"):
+        _execute_stage({"blocks": [row]}, "preflight")
+
+    assert calls == ["gpu"]
+
+
+def test_preflight_rejects_self_consistent_donor_with_missing_layer_before_gpu(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    row, block_dir = _preflight_execution_row(tmp_path)
+    _rewrite_execution_donor(row, missing_layer="15")
+    calls = []
+    contract = {"snapshot": {"path": str(block_dir / "snapshot.pt")}}
+    monkeypatch.setattr(
+        "utest.subject_reappearance_harness._validated_prefix_contract",
+        lambda _row: contract,
+    )
+    monkeypatch.setattr(
+        "utest.subject_reappearance_harness._freeze_or_load_command_artifact",
+        lambda _row, _contract: {"preflight": {"full_correct": ["gpu"]}},
+    )
+    monkeypatch.setattr(
+        "utest.subject_reappearance_harness.validate_contract", lambda *_args: []
+    )
+    monkeypatch.setattr(
+        "utest.subject_reappearance_harness._run_logged",
+        lambda *_args: calls.append("gpu"),
+    )
+
+    with pytest.raises(ValueError, match="donor-target layer sets"):
+        _execute_stage({"blocks": [row]}, "preflight")
+
+    assert calls == []
+
+
+def test_preflight_rejects_self_consistent_donor_with_missing_target_bank_before_gpu(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    row, block_dir = _preflight_execution_row(tmp_path)
+    _rewrite_execution_donor(row, donor_bank=1)
+    calls = []
+    contract = {"snapshot": {"path": str(block_dir / "snapshot.pt")}}
+    monkeypatch.setattr(
+        "utest.subject_reappearance_harness._validated_prefix_contract",
+        lambda _row: contract,
+    )
+    monkeypatch.setattr(
+        "utest.subject_reappearance_harness._freeze_or_load_command_artifact",
+        lambda _row, _contract: {"preflight": {"full_correct": ["gpu"]}},
+    )
+    monkeypatch.setattr(
+        "utest.subject_reappearance_harness.validate_contract", lambda *_args: []
+    )
+    monkeypatch.setattr(
+        "utest.subject_reappearance_harness._run_logged",
+        lambda *_args: calls.append("gpu"),
+    )
+
+    with pytest.raises(ValueError, match="donor-target bank sets"):
+        _execute_stage({"blocks": [row]}, "preflight")
+
+    assert calls == []
 
 
 @pytest.mark.parametrize("descendant", ["story_path", "reference_path"])

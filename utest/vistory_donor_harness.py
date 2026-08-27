@@ -522,8 +522,15 @@ def _execution_record(job: Mapping, stage: str) -> dict:
     }
 
 
-def _validate_write_paths(run: Mapping) -> None:
-    root = Path(str(run["output_root"])).resolve()
+def validate_donor_run_paths(run: Mapping) -> None:
+    """Fail closed unless every donor artifact stays below real, non-link ancestors."""
+    root = Path(str(run["output_root"]))
+    resolved_root = root.resolve()
+    is_link = lambda path: path.is_symlink() or (
+        hasattr(path, "is_junction") and path.is_junction()
+    )
+    if is_link(root):
+        raise ValueError(f"donor output root is a symlink or junction: {root}")
     for job in run["jobs"]:
         paths = [
             job[key]
@@ -544,7 +551,17 @@ def _validate_write_paths(run: Mapping) -> None:
             for key in ("claim", "stdout", "stderr")
         )
         for value in paths:
-            if not Path(str(value)).resolve().is_relative_to(root):
+            path = Path(str(value))
+            try:
+                relative = path.relative_to(root)
+            except ValueError as error:
+                raise ValueError(f"donor write path escapes output root: {value}") from error
+            cursor = root
+            for part in relative.parts:
+                cursor /= part
+                if is_link(cursor):
+                    raise ValueError(f"donor write path has a symlink ancestor: {value}")
+            if not path.resolve().is_relative_to(resolved_root):
                 raise ValueError(f"donor write path has a symlink escape: {value}")
 
 
@@ -610,6 +627,7 @@ def validate_completed_donor_run(
 ) -> dict:
     """Return a donor run only after all three frozen jobs validate."""
     run = validate_donor_run_manifest(manifest_path)
+    validate_donor_run_paths(run)
     selection_path = Path(str(selection.get("selection_path", ""))).resolve()
     if not selection_path.is_file() or sha256_file(selection_path) != run.get(
         "selection_sha256"
@@ -663,7 +681,7 @@ def run_stage(stage: str, manifest_path: Path) -> dict[str, object]:
         is not run["runtime_environment"]["slotmem_offload_models"]
     ):
         raise ValueError("current offload environment does not match donor run")
-    _validate_write_paths(run)
+    validate_donor_run_paths(run)
     results = []
     for job in run["jobs"]:
         if stage == "resume":
