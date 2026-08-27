@@ -1,6 +1,6 @@
 # ViStoryBench Donor and Source-Semantic Producer Design
 
-**Status:** frozen design; awaiting implementation-plan approval  
+**Status:** frozen design; implementation plan approved
 **Parent experiment:** `vistorybench_subject_reappearance_v1`  
 **Dataset commit:** `92f845531b67e97a67ae04b256ec5d8c020e8341`  
 **Evaluator commit:** `b44ec9108668cc2bcc8c5280886b235e9fb8bea9`
