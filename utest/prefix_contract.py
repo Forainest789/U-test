@@ -49,11 +49,13 @@ def _arguments(argv: Sequence[str]) -> dict[str, str]:
 
 
 def normalized_frozen_args(argv: Sequence[str]) -> dict[str, str]:
-    return {
+    frozen = {
         key: value
         for key, value in sorted(_arguments(argv).items())
         if key not in RUNTIME_ONLY_ARGS
     }
+    frozen.setdefault("fixed_reference_scope", "all_chunks")
+    return dict(sorted(frozen.items()))
 
 
 def _git_state(repo: Path) -> tuple[str, bool]:
@@ -200,6 +202,14 @@ def build_contract(
     return contract
 
 
+def _frozen_args_for_comparison(value: object) -> object:
+    if not isinstance(value, Mapping):
+        return value
+    normalized = dict(value)
+    normalized.setdefault("fixed_reference_scope", "all_chunks")
+    return normalized
+
+
 def validate_contract(
     contract: Mapping, snapshot: Path, runtime: Mapping | None = None
 ) -> list[str]:
@@ -218,6 +228,11 @@ def validate_contract(
         "reference_sha256",
         "target_seed",
     ):
-        if runtime.get(key) != expected_runtime.get(key):
+        actual = runtime.get(key)
+        expected = expected_runtime.get(key)
+        if key == "frozen_args":
+            actual = _frozen_args_for_comparison(actual)
+            expected = _frozen_args_for_comparison(expected)
+        if actual != expected:
             errors.append(f"{key}_mismatch")
     return errors

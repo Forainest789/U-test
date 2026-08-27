@@ -91,6 +91,43 @@ def test_output_and_resume_paths_are_not_frozen_generation_args(tmp_path: Path) 
     assert frozen["cfg_scale"] == "5.0"
 
 
+def test_default_fixed_reference_scope_is_frozen(tmp_path: Path) -> None:
+    snapshot, manifest, event, args = _fixture(tmp_path)
+
+    contract = build_contract(event, snapshot, args, manifest)
+
+    assert contract["runtime_contract"]["frozen_args"]["fixed_reference_scope"] == "all_chunks"
+
+
+def test_fixed_reference_scope_mismatch_is_rejected(tmp_path: Path) -> None:
+    snapshot, manifest, event, args = _fixture(tmp_path)
+    contract = build_contract(event, snapshot, args, manifest)
+
+    runtime = build_runtime_contract(
+        event, [*args, "--fixed_reference_scope", "source_only"]
+    )
+
+    assert validate_contract(contract, snapshot, runtime) == ["frozen_args_mismatch"]
+
+
+def test_historical_contract_without_reference_scope_defaults_only_to_all_chunks(
+    tmp_path: Path,
+) -> None:
+    snapshot, manifest, event, args = _fixture(tmp_path)
+    historical = build_contract(event, snapshot, args, manifest)
+    historical["runtime_contract"]["frozen_args"].pop("fixed_reference_scope")
+
+    current_all_chunks = build_runtime_contract(event, args)
+    current_source_only = build_runtime_contract(
+        event, [*args, "--fixed_reference_scope", "source_only"]
+    )
+
+    assert validate_contract(historical, snapshot, current_all_chunks) == []
+    assert validate_contract(historical, snapshot, current_source_only) == [
+        "frozen_args_mismatch"
+    ]
+
+
 def test_qstar_contract_freezes_future_target_horizon_and_timestep_grid(tmp_path: Path) -> None:
     snapshot, manifest, event, args = _fixture(tmp_path)
     future = tmp_path / "future.mp4"

@@ -37,6 +37,13 @@ sys.modules["utils"] = _utils_pkg
 import utils.image_process  # noqa: F401
 
 from utest.media_metadata import generated_timing
+from utest.prefix_contract import sha256_file
+from utest.reference_scope import (
+    build_reference_conditioning_audit,
+    choose_random_reference,
+    image_png_bytes,
+    validate_reference_resume,
+)
 from reference_inference_runtime import (
     ReferenceInferenceRuntime as ReferenceInferenceEngine,
     AttentionMapExtractorV8,
@@ -3201,6 +3208,13 @@ def parse_args(argv=None):
     parser.add_argument("--context_frames", type=int, default=81)
     parser.add_argument("--negative_prompt", type=str, default="bright tones, overexposed, static, blurred details, subtitles, style, works, paintings, images, static, overall gray, worst quality, low quality, JPEG compression residue, ugly, incomplete, extra fingers, poorly drawn hands, poorly drawn faces, deformed, disfigured, misshapen limbs, fused fingers, still picture, messy background, three legs, many people in the background, walking backwards")
     parser.add_argument("--ref_image_path", type=str, default=None)
+    parser.add_argument(
+        "--fixed_reference_scope",
+        type=str,
+        default="all_chunks",
+        choices=["all_chunks", "source_only"],
+        help="Use the initial fixed reference for every chunk or only for source chunk 0.",
+    )
     parser.add_argument("--ref_pad_cfg", action="store_true", default=False)
     parser.add_argument("--ref_pad_num", type=int, default=0)
     parser.add_argument("--use_first_aug", action="store_true", default=False)
@@ -3478,9 +3492,7 @@ def _encode_pil_frames_for_state(frames):
     for frame in list(frames or []):
         if not isinstance(frame, Image.Image):
             continue
-        buffer = io.BytesIO()
-        frame.convert("RGB").save(buffer, format="PNG")
-        encoded.append(buffer.getvalue())
+        encoded.append(image_png_bytes(frame))
     return encoded
 
 
@@ -3691,6 +3703,9 @@ def main():
         "output_path": str(Path(args.output_path).resolve()),
         "json_path": str(Path(args.json_path).resolve()),
         "ref_image_path": str(args.ref_image_path or ""),
+        "resolved_reference_path": None,
+        "resolved_reference_file_sha256": None,
+        "fixed_reference_scope": str(args.fixed_reference_scope),
         "global_prompt": data.get("global_prompt") if isinstance(data, dict) else None,
         "characters": top_level_characters,
         "character_list": top_level_character_list,
@@ -3708,16 +3723,27 @@ def main():
         first_frame_pil = Image.open(resolved_ref_image_path).convert("RGB")
         prev_frames_pil = [first_frame_pil]
         fixed_random_ref_frame = first_frame_pil
+        resolved_reference = Path(resolved_ref_image_path).resolve()
+        slotmem_inference_manifest["resolved_reference_path"] = str(resolved_reference)
+        slotmem_inference_manifest["resolved_reference_file_sha256"] = sha256_file(
+            resolved_reference
+        )
     else:
         if getattr(engine.pipe.dit, "has_image_input", False):
             raise ValueError("No valid reference image found for I2V inference.")
         prev_frames_pil = None
         fixed_random_ref_frame = None
+    _write_slotmem_inference_manifest(bench_manifest_path, slotmem_inference_manifest)
 
+    restored_previous_frames = False
+    resume_next_chunk_idx = None
     if isinstance(resume_state, dict):
+        if resume_state.get("next_chunk_idx") is not None:
+            resume_next_chunk_idx = int(resume_state["next_chunk_idx"])
         resumed_prev_frames = _decode_pil_frames_from_state(resume_state.get("prev_frames_png", []))
         if resumed_prev_frames:
             prev_frames_pil = resumed_prev_frames
+            restored_previous_frames = True
             print(f"[ResumeState] restored prev_frames={len(resumed_prev_frames)}", flush=True)
     start_chunk_idx = int(getattr(args, "start_chunk_idx", -1))
     if start_chunk_idx < 0 and isinstance(resume_state, dict):
@@ -3728,6 +3754,14 @@ def main():
         chunks_to_iterate = []
     else:
         chunks_to_iterate = chunks[start_chunk_idx:]
+    if chunks_to_iterate:
+        validate_reference_resume(
+            args.fixed_reference_scope,
+            start_chunk_idx=start_chunk_idx,
+            has_fixed_reference=fixed_random_ref_frame is not None,
+            restored_previous_frames=restored_previous_frames,
+            resume_next_chunk_idx=resume_next_chunk_idx,
+        )
     if start_chunk_idx > 0:
         print(f"[ResumeState] starting from chunk_idx={start_chunk_idx}", flush=True)
 
@@ -3900,7 +3934,19 @@ def main():
         )
         print(f"  [RunSeed] chunk={chunk_idx} seed={chunk_seed}", flush=True)
         chunk_ref_images = prev_frames_pil
-        chunk_random_ref_frame = fixed_random_ref_frame
+        chunk_random_ref_frame = choose_random_reference(
+            args.fixed_reference_scope,
+            chunk_idx,
+            fixed_random_ref_frame,
+            chunk_ref_images,
+        )
+        reference_conditioning = build_reference_conditioning_audit(
+            scope=args.fixed_reference_scope,
+            chunk_idx=chunk_idx,
+            fixed_reference=fixed_random_ref_frame,
+            previous_frames=chunk_ref_images,
+            random_reference=chunk_random_ref_frame,
+        )
         original_ref_pad_num = int(getattr(args, "ref_pad_num", 0))
         effective_ref_pad_num = original_ref_pad_num
         if int(effective_ref_pad_num) != original_ref_pad_num:
@@ -3976,6 +4022,7 @@ def main():
             "video_saved": bool(save_current_video),
             "video_path": str(Path(save_path).resolve()) if bool(save_current_video) else None,
             "source_json_path": str(Path(args.json_path).resolve()),
+            "reference_conditioning": reference_conditioning,
             **media_timing,
         }
         chunk_json_path = Path(args.output_path) / f"chunk_{chunk_idx:03d}.metadata.json"
