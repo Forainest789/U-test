@@ -3,11 +3,15 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from utest.prefix_contract import (
     build_contract,
     build_runtime_contract,
     sha256_file,
     validate_contract,
+    write_bytes_no_clobber,
+    write_json_no_clobber,
 )
 
 
@@ -38,6 +42,32 @@ def _fixture(tmp_path: Path):
         "--start_chunk_idx", "1", "--max_chunks", "1",
     ]
     return snapshot, manifest, event, args
+
+
+def test_json_publication_is_deterministic_and_no_clobber(tmp_path: Path) -> None:
+    first, second = tmp_path / "first.json", tmp_path / "second.json"
+    value = {"z": [3, 2, 1], "subject": "宋雨辰"}
+
+    write_json_no_clobber(first, value)
+    write_json_no_clobber(second, value)
+
+    assert first.read_bytes() == second.read_bytes()
+    original = first.read_bytes()
+    with pytest.raises(FileExistsError):
+        write_json_no_clobber(first, {"changed": True})
+    assert first.read_bytes() == original
+
+
+def test_bytes_publication_is_atomic_and_no_clobber(tmp_path: Path) -> None:
+    output = tmp_path / "artifact.bin"
+
+    write_bytes_no_clobber(output, b"frozen")
+
+    assert output.read_bytes() == b"frozen"
+    with pytest.raises(FileExistsError):
+        write_bytes_no_clobber(output, b"changed")
+    assert output.read_bytes() == b"frozen"
+    assert not list(tmp_path.glob(f".{output.name}.*.tmp"))
 
 
 def test_snapshot_mutation_is_rejected(tmp_path: Path) -> None:

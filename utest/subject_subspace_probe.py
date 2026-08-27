@@ -6,20 +6,18 @@ import argparse
 import hashlib
 import io
 import json
-import os
 import tempfile
 from pathlib import Path
 from typing import Sequence
 
 import torch
 
-from .prefix_contract import sha256_file
+from .prefix_contract import sha256_file, write_bytes_no_clobber
+from .source_semantic_scores import produce_source_semantic_scores
 from .subject_subspace import (
-    SEMANTIC_GROUPS,
     FROZEN_LAYER_GROUPS,
     aggregate_semantic_slot_scores,
     build_mask_manifest,
-    build_semantic_score_artifact,
     canonical_json_sha256,
     capture_tensor_sha256,
     source_only_semantic_group_manifest,
@@ -37,22 +35,6 @@ def _json_bytes(data: bytes, label: object) -> dict:
 
 def _bytes_sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
-
-
-def _publish_bytes(path: Path, data: bytes) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
-    created = False
-    try:
-        with temporary.open("xb") as handle:
-            created = True
-            handle.write(data)
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.link(temporary, path)
-    finally:
-        if created and temporary.exists():
-            temporary.unlink()
 
 
 def _output(path: Path) -> Path:
@@ -115,7 +97,7 @@ def freeze_subject_subspace(
         "reference_payload_sha256": None,
     }
     manifest = build_mask_manifest(inputs=inputs, rankings=rankings, event=event, seed=seed)
-    _publish_bytes(output_path, (json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n").encode("utf-8"))
+    write_bytes_no_clobber(output_path, (json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n").encode("utf-8"))
     return manifest
 
 
@@ -132,7 +114,7 @@ def _capture_reference(args: argparse.Namespace) -> None:
     }
     if not args.dry_run:
         raise RuntimeError("capture-reference unavailable: refusing to fabricate reference tokens")
-    _publish_bytes(output, (json.dumps(record, indent=2, sort_keys=True) + "\n").encode("utf-8"))
+    write_bytes_no_clobber(output, (json.dumps(record, indent=2, sort_keys=True) + "\n").encode("utf-8"))
     print(json.dumps(record, sort_keys=True))
 
 
@@ -145,7 +127,10 @@ def _self_check_fixture(root: Path, repo: Path) -> tuple[Path, Path, Path, Path]
     event_path = root / "event.json"
     event_path.write_text(json.dumps(event), encoding="utf-8")
     raw, slots = torch.arange(12, dtype=torch.float32).reshape(4, 3), torch.arange(96, dtype=torch.float32).reshape(32, 3)
-    meta, attention = [{"char_id": "Ana", "inside_box": index < 2} for index in range(4)], {"Ana": torch.full((32, 4), 0.25)}
+    meta, attention = [
+        {"char_id": "Ana", "inside_box": index < 2, "tau_local": float(index)}
+        for index in range(4)
+    ], {"Ana": torch.full((32, 4), 0.25)}
     rows = []
     for layer in range(16):
         row = {"character": "Ana", "bank": 0, "layer": layer, "raw_tokens": raw, "raw_token_meta": meta, "encoded_slots": slots, "attention": attention}
@@ -157,11 +142,13 @@ def _self_check_fixture(root: Path, repo: Path) -> tuple[Path, Path, Path, Path]
     capture = {**canonical, "captures": rows, "canonical_artifact_sha256": canonical_json_sha256(canonical)}
     capture_path = root / "source_capture.pt"
     torch.save(capture, capture_path)
-    vocabulary = source_only_semantic_group_manifest(_json_bytes(story.read_bytes(), story), event)
-    score_rows = [{"character": "Ana", "bank": 0, "layer": layer, "groups": {name: [1.0, 0.0, 0.0, 0.0] for name in SEMANTIC_GROUPS}} for layer in range(16)]
-    scores = build_semantic_score_artifact(event_id="self_check", source_capture_sha256=sha256_file(capture_path), source_capture_canonical_artifact_sha256=capture["canonical_artifact_sha256"], semantic_manifest=vocabulary, source_provenance=provenance, captures=score_rows)
     scores_path = root / "scores.json"
-    scores_path.write_text(json.dumps(scores), encoding="utf-8")
+    produce_source_semantic_scores(
+        event_path=event_path,
+        source_capture_path=capture_path,
+        output_path=scores_path,
+        repo_root=repo,
+    )
     return event_path, capture_path, scores_path, root / "manifest.json"
 
 

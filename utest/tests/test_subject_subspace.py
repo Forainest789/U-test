@@ -23,6 +23,7 @@ from utest.subject_subspace import (
     reference_agreement_scores,
     semantic_slot_scores,
     slot_attention_matrix,
+    source_metadata_semantic_groups,
     source_only_semantic_group_manifest,
     top_fraction_indices,
     validate_semantic_scores,
@@ -490,7 +491,10 @@ def _artifacts(tmp_path: Path) -> tuple[dict, dict, Path, dict]:
     model.write_bytes(b"model")
     event = {"event_id": "event", "character_name": "Ana", "source_chunk_idx": 0, "target_chunk_idx": 1, "source_json_path": str(story.resolve()), "reference_path": str(reference.resolve()), "reference_sha256": sha256_file(reference)}
     raw, slots = torch.arange(12, dtype=torch.float32).reshape(4, 3), torch.arange(96, dtype=torch.float32).reshape(32, 3)
-    meta, attention = [{"char_id": "Ana", "inside_box": index < 2} for index in range(4)], {"Ana": torch.full((32, 4), 0.25)}
+    meta, attention = [
+        {"char_id": "Ana", "inside_box": index < 2, "tau_local": float(index)}
+        for index in range(4)
+    ], {"Ana": torch.full((32, 4), 0.25)}
     rows = []
     for layer in range(16):
         row = {"character": "Ana", "bank": 0, "layer": layer, "raw_tokens": raw, "raw_token_meta": meta, "encoded_slots": slots, "attention": attention}
@@ -503,8 +507,19 @@ def _artifacts(tmp_path: Path) -> tuple[dict, dict, Path, dict]:
     capture_path = tmp_path / "source_capture.pt"
     torch.save(capture, capture_path)
     vocabulary = {"identity_name": ["Ana"], "stable_attributes": ["red coat"], "other_characters": [], "action_scene": ["station"]}
-    score_rows = [{"character": "Ana", "bank": 0, "layer": layer, "groups": {name: [1.0, 0.0, 0.0, 0.0] for name in SEMANTIC_GROUPS}} for layer in range(16)]
-    scores = build_semantic_score_artifact(event_id="event", source_capture_sha256=sha256_file(capture_path), source_capture_canonical_artifact_sha256=capture["canonical_artifact_sha256"], semantic_manifest=vocabulary, source_provenance=provenance, captures=score_rows)
+    groups = source_metadata_semantic_groups(meta, "Ana")
+    score_rows = [{"character": "Ana", "bank": 0, "layer": layer, "groups": groups} for layer in range(16)]
+    scores = build_semantic_score_artifact(
+        event_id="event",
+        source_capture_sha256=sha256_file(capture_path),
+        source_capture_canonical_artifact_sha256=capture["canonical_artifact_sha256"],
+        semantic_manifest=vocabulary,
+        source_provenance=provenance,
+        captures=score_rows,
+        formula={"name": "source_role_box_centre", "version": 1},
+        subject_char_id="Ana",
+        source_seed=0,
+    )
     return capture, event, capture_path, scores
 
 

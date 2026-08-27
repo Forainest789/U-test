@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import random
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
+from numbers import Real
 from pathlib import Path
 
 import torch
@@ -13,12 +15,57 @@ import torch
 from .prefix_contract import sha256_file
 
 SEMANTIC_GROUPS = ("identity_name", "stable_attributes", "other_characters", "action_scene")
+SOURCE_SEMANTIC_FORMULA = {"name": "source_role_box_centre", "version": 1}
 FROZEN_LAYER_GROUPS = {
     "0-4": tuple(range(0, 5)),
     "5-10": tuple(range(5, 11)),
     "11-15": tuple(range(11, 16)),
 }
 FORBIDDEN_INPUT_PREFIXES = ("target_", "qstar", "cids", "decoded_")
+
+
+def source_metadata_semantic_groups(
+    raw_token_metadata: Sequence[Mapping[str, object]],
+    subject_char_id: str,
+) -> dict[str, list[float]]:
+    """Return frozen source-only semantic vectors in raw-token order."""
+    if not isinstance(subject_char_id, str) or not subject_char_id.strip():
+        raise ValueError("source semantic groups require a nonempty subject character ID")
+    groups = {name: [] for name in SEMANTIC_GROUPS}
+    has_target = False
+    has_inside_target = False
+    for item in raw_token_metadata:
+        if (
+            not isinstance(item, Mapping)
+            or not {"char_id", "inside_box", "tau_local"}.issubset(item)
+            or not isinstance(item["char_id"], str)
+            or not isinstance(item["inside_box"], bool)
+            or isinstance(item["tau_local"], bool)
+            or not isinstance(item["tau_local"], Real)
+        ):
+            raise ValueError("source semantic token metadata is malformed")
+        char_id = item["char_id"]
+        inside_box = item["inside_box"]
+        tau_local = float(item["tau_local"])
+        if not math.isfinite(tau_local):
+            raise ValueError("source semantic tau_local must be finite")
+        is_target = float(char_id == subject_char_id)
+        inside = is_target * float(inside_box)
+        has_target = has_target or bool(is_target)
+        has_inside_target = has_inside_target or bool(inside)
+        groups["identity_name"].append(is_target)
+        groups["stable_attributes"].append(
+            inside * math.exp(-(tau_local ** 2) / 2.0)
+        )
+        groups["other_characters"].append(
+            float(bool(char_id) and char_id != subject_char_id)
+        )
+        groups["action_scene"].append(is_target * float(not inside_box))
+    if not has_target:
+        raise ValueError("source semantic metadata contains no target token")
+    if not has_inside_target:
+        raise ValueError("source semantic metadata contains no inside-box target token")
+    return groups
 
 
 def canonical_json_sha256(value: object) -> str:
@@ -220,12 +267,26 @@ def validate_source_capture(artifact: Mapping, event: Mapping, *, repo_root: Pat
     return selected
 
 
-def build_semantic_score_artifact(*, event_id: str, source_capture_sha256: str, source_capture_canonical_artifact_sha256: str, semantic_manifest: Mapping, source_provenance: Mapping, captures: list[Mapping]) -> dict:
+def build_semantic_score_artifact(
+    *,
+    event_id: str,
+    source_capture_sha256: str,
+    source_capture_canonical_artifact_sha256: str,
+    semantic_manifest: Mapping,
+    source_provenance: Mapping,
+    captures: list[Mapping],
+    formula: Mapping,
+    subject_char_id: str,
+    source_seed: int,
+) -> dict:
     producer = {
         "kind": "slotmem_source_semantic_token_scores",
         "version": 1,
         "source_chunk_idx": 0,
         "target_evidence_read": False,
+        "formula": dict(formula),
+        "subject_char_id": subject_char_id,
+        "source_seed": source_seed,
         "source_json_sha256": source_provenance["source_json_sha256"],
         "semantic_vocabulary_sha256": canonical_json_sha256(semantic_manifest),
         "code_identity": source_provenance["code_identity"],
@@ -253,6 +314,9 @@ def validate_semantic_scores(artifact: Mapping, *, event: Mapping, source_captur
         "version": 1,
         "source_chunk_idx": 0,
         "target_evidence_read": False,
+        "formula": SOURCE_SEMANTIC_FORMULA,
+        "subject_char_id": event["character_name"],
+        "source_seed": provenance["source_seed"],
         "source_json_sha256": provenance["source_json_sha256"],
         "semantic_vocabulary_sha256": canonical_json_sha256(expected_semantic_manifest),
         "code_identity": provenance["code_identity"],
@@ -272,6 +336,11 @@ def validate_semantic_scores(artifact: Mapping, *, event: Mapping, source_captur
             raise ValueError("semantic score capture address or groups are invalid")
         if any(len(groups[name]) != source["raw_tokens"].shape[0] or not torch.isfinite(torch.tensor(groups[name], dtype=torch.float32)).all() for name in SEMANTIC_GROUPS):
             raise ValueError("semantic score vector token count or values are invalid")
+        expected_groups = source_metadata_semantic_groups(
+            source["raw_token_meta"], event["character_name"]
+        )
+        if any(groups[name] != expected_groups[name] for name in SEMANTIC_GROUPS):
+            raise ValueError("semantic score groups do not match source metadata")
         found[address] = row
     if set(found) != set(expected):
         raise ValueError("semantic scores do not cover every subject payload")
