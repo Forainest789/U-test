@@ -3,18 +3,43 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import subprocess
+import sys
 from pathlib import Path
 
 from utest.event_harness import (
     _writer_evidence,
     build_arm_commands,
     build_prefix_inference_args,
+    load_event,
     score_event,
     validate_audit_group,
     validate_runtime_reports,
 )
 from utest.qstar import classify_memory_regime
 from utest.memory_utility import REQUIRED_OUTCOMES
+
+
+def test_event_parent_paths_resolve_from_the_event_file(tmp_path: Path) -> None:
+    bundle = tmp_path / "bundle"
+    bundle.mkdir()
+    event_path = bundle / "event.json"
+    event_path.write_text(
+        json.dumps(
+            {
+                "path_resolution": "event_parent",
+                "source_json_path": "story.json",
+                "reference_path": "reference.jpg",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    event = load_event(event_path)
+
+    assert event["source_json_path"] == str((bundle / "story.json").resolve())
+    assert event["reference_path"] == str((bundle / "reference.jpg").resolve())
+    assert "path_resolution" not in event
 
 
 def test_arm_commands_share_snapshot_seed_and_target_window(tmp_path: Path) -> None:
@@ -299,3 +324,45 @@ def test_score_command_writes_complete_five_arm_report(tmp_path: Path) -> None:
     report = json.loads((event_run / "utility_report.json").read_text(encoding="utf-8"))
     assert report["status"] == "complete"
     assert set(report["arm_populations"]) == {"correct", "wrong", "zero", "random"}
+
+
+def test_cli_propagates_handler_status_without_system_exit(tmp_path: Path) -> None:
+    event_run = tmp_path / "arms"
+    records_path = tmp_path / "records.json"
+    rules_path = tmp_path / "rules.json"
+    records_path.write_text("[]", encoding="utf-8")
+    rules_path.write_text(
+        json.dumps(
+            {
+                "delta_id": 0.01,
+                "quality_margins": {},
+                "dynamic_degree_floor": 0.2,
+                "gate_a_floors": {},
+                "qualification_seeds": [1],
+                "formal_seeds": [7],
+                "n_boot": 20,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "utest.event_harness",
+            "score",
+            "--event-run",
+            str(event_run),
+            "--records",
+            str(records_path),
+            "--rules",
+            str(rules_path),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert "event harness failed with status 2" in result.stderr

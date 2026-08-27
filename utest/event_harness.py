@@ -38,6 +38,32 @@ def _write_json(path: Path, payload: Mapping | Sequence) -> None:
     path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
+def load_event(event_path: Path) -> dict:
+    """Load an event and resolve its declared portable path contract."""
+    event_path = Path(event_path).resolve()
+    event = json.loads(event_path.read_text(encoding="utf-8"))
+    if not isinstance(event, dict):
+        raise ValueError("event JSON must contain an object")
+    resolution = event.get("path_resolution")
+    if resolution is None:
+        return event
+    if resolution != "event_parent":
+        raise ValueError(f"unsupported event path_resolution: {resolution}")
+    for field in ("source_json_path", "reference_path"):
+        value = event.get(field)
+        if not value:
+            continue
+        relative = Path(str(value))
+        if relative.is_absolute():
+            raise ValueError(f"portable event {field} must be relative")
+        resolved = (event_path.parent / relative).resolve()
+        if not resolved.is_relative_to(event_path.parent):
+            raise ValueError(f"portable event {field} escapes event directory")
+        event[field] = str(resolved)
+    event.pop("path_resolution")
+    return event
+
+
 def build_prefix_inference_args(
     event: Mapping,
     output: Path,
@@ -388,7 +414,7 @@ def _run(command: Sequence[str], log_path: Path) -> None:
 
 
 def prepare_prefix(args: argparse.Namespace) -> int:
-    event = json.loads(args.event.read_text(encoding="utf-8"))
+    event = load_event(args.event)
     output = args.output.resolve()
     if output.exists() and any(output.iterdir()):
         raise FileExistsError(f"prefix output is not empty: {output}")
@@ -649,4 +675,6 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    status = main()
+    if status != 0:
+        raise RuntimeError(f"event harness failed with status {status}")
