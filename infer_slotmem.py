@@ -314,6 +314,241 @@ def _memory_bank_sha256(mem_manager):
     return digest.hexdigest()
 
 
+def _subject_subspace_tensor_sha256(value):
+    digest = hashlib.sha256()
+    _hash_nested_tensors(digest, value)
+    return digest.hexdigest()
+
+
+def _subject_subspace_model_identity(*, high_noise, low_noise):
+    identity = {"high_noise": [], "low_noise": []}
+    for domain, configured in (("high_noise", high_noise), ("low_noise", low_noise)):
+        for value in [item.strip() for item in str(configured or "").split(",") if item.strip()]:
+            path = Path(value).resolve()
+            if not path.is_file():
+                raise ValueError(
+                    f"subject subspace capture checkpoint must be a regular file: {path}"
+                )
+            identity[domain].append({"path": str(path), "sha256": sha256_file(path)})
+    return identity
+
+
+def _validate_subject_subspace_capture(capture):
+    raw_tokens = capture.get("raw_tokens")
+    encoded_slots = capture.get("encoded_slots")
+    raw_token_meta = capture.get("raw_token_meta")
+    attention = capture.get("attention")
+    if not isinstance(raw_tokens, torch.Tensor) or raw_tokens.ndim != 2 or not raw_tokens.numel():
+        raise ValueError("subject subspace capture requires nonempty 2D raw tokens")
+    if not isinstance(encoded_slots, torch.Tensor) or encoded_slots.ndim != 2 or not encoded_slots.numel():
+        raise ValueError("subject subspace capture requires nonempty 2D encoded slots")
+    if not torch.isfinite(raw_tokens).all() or not torch.isfinite(encoded_slots).all():
+        raise ValueError("subject subspace capture tensors must be finite")
+    if int(raw_tokens.shape[1]) != int(encoded_slots.shape[1]):
+        raise ValueError("subject subspace capture raw/encoded feature dimensions mismatch")
+    if not isinstance(raw_token_meta, list) or len(raw_token_meta) != int(raw_tokens.shape[0]):
+        raise ValueError("subject subspace capture raw token/meta count mismatch")
+    if not isinstance(attention, dict) or not attention:
+        raise ValueError("subject subspace capture requires nonempty role attention")
+    role_counts = {}
+    for item in raw_token_meta:
+        role_id = str(item.get("char_id", "")).strip() if isinstance(item, dict) else ""
+        role_id = role_id or "0"
+        role_counts[role_id] = int(role_counts.get(role_id, 0)) + 1
+    if set(attention) != set(role_counts):
+        raise ValueError("subject subspace capture attention roles mismatch raw metadata")
+    total_attention_rows = 0
+    for role_id, value in attention.items():
+        if not isinstance(value, torch.Tensor) or value.ndim != 2 or not value.numel():
+            raise ValueError("subject subspace capture attention must contain nonempty 2D tensors")
+        if not torch.isfinite(value).all():
+            raise ValueError("subject subspace capture attention must be finite")
+        if torch.any(value < 0):
+            raise ValueError("subject subspace capture attention must be nonnegative")
+        if int(value.shape[1]) != int(role_counts[role_id]):
+            raise ValueError("subject subspace capture attention columns mismatch role token count")
+        if not torch.allclose(
+            value.detach().float().sum(dim=-1),
+            torch.ones(int(value.shape[0]), device=value.device),
+            atol=1e-5,
+            rtol=1e-5,
+        ):
+            raise ValueError("subject subspace capture attention rows must sum to one")
+        total_attention_rows += int(value.shape[0])
+    if int(encoded_slots.shape[0]) != total_attention_rows:
+        raise ValueError("subject subspace capture encoded slot rows mismatch attention rows")
+
+
+def _validate_subject_subspace_provenance(provenance):
+    required = {
+        "source_json_path",
+        "source_json_sha256",
+        "reference_file_sha256",
+        "fixed_reference_scope",
+        "source_seed",
+        "code_identity",
+        "runtime_identity",
+        "model_identity",
+    }
+    if not isinstance(provenance, dict) or not required.issubset(provenance):
+        raise ValueError("subject subspace capture provenance is incomplete")
+
+    def valid_sha256(value):
+        return (
+            isinstance(value, str)
+            and len(value) == 64
+            and all(char in "0123456789abcdefABCDEF" for char in value)
+        )
+
+    if not str(provenance["source_json_path"]).strip():
+        raise ValueError("subject subspace capture provenance source path is empty")
+    if not valid_sha256(provenance["source_json_sha256"]):
+        raise ValueError("subject subspace capture provenance source SHA-256 is invalid")
+    if not valid_sha256(provenance["reference_file_sha256"]):
+        raise ValueError("subject subspace capture provenance reference SHA-256 is invalid")
+    if provenance["fixed_reference_scope"] not in {"all_chunks", "source_only"}:
+        raise ValueError("subject subspace capture provenance reference scope is invalid")
+    if isinstance(provenance["source_seed"], bool) or not isinstance(provenance["source_seed"], int):
+        raise ValueError("subject subspace capture provenance source seed is invalid")
+    code_identity = provenance["code_identity"]
+    runtime_identity = provenance["runtime_identity"]
+    if not isinstance(code_identity, dict) or not all(
+        valid_sha256(code_identity.get(key))
+        for key in ("infer_slotmem_sha256", "mem_encoder_utils_sha256")
+    ):
+        raise ValueError("subject subspace capture provenance code identity is invalid")
+    if not isinstance(runtime_identity, dict) or not all(
+        str(runtime_identity.get(key, "")).strip()
+        for key in ("python_version", "torch_version")
+    ):
+        raise ValueError("subject subspace capture provenance runtime identity is invalid")
+    if not valid_sha256(runtime_identity.get("inference_args_sha256")):
+        raise ValueError("subject subspace capture provenance invocation identity is invalid")
+    model_identity = provenance["model_identity"]
+    if (
+        not isinstance(model_identity, dict)
+        or set(model_identity) != {"high_noise", "low_noise"}
+        or not all(isinstance(model_identity[domain], list) for domain in model_identity)
+    ):
+        raise ValueError("subject subspace capture provenance model identity is invalid")
+    configured_files = [
+        item
+        for domain in ("high_noise", "low_noise")
+        for item in model_identity[domain]
+    ]
+    if not configured_files or any(
+        not isinstance(item, dict)
+        or not str(item.get("path", "")).strip()
+        or not valid_sha256(item.get("sha256"))
+        for item in configured_files
+    ):
+        raise ValueError("subject subspace capture provenance model identity is invalid")
+
+
+def _prepare_subject_subspace_capture_output(path, *, processed_chunk_indices):
+    if path is None or not str(path).strip():
+        return None
+    output_path = Path(path)
+    if 0 not in {int(index) for index in processed_chunk_indices}:
+        raise ValueError("subject subspace capture requires processing source chunk 0")
+    if output_path.exists():
+        raise ValueError("subject subspace capture output already exists")
+    return output_path
+
+
+def _validate_subject_subspace_capture_preflight(
+    path,
+    *,
+    defer_lora_until_after_first_chunk,
+):
+    if (
+        path is not None
+        and str(path).strip()
+        and bool(defer_lora_until_after_first_chunk)
+    ):
+        raise ValueError(
+            "subject subspace capture is incompatible with "
+            "defer_lora_until_after_first_chunk"
+        )
+
+
+def _write_subject_subspace_capture(path, *, source_chunk_idx, captures, provenance):
+    if path is None or not str(path).strip():
+        return False
+    if int(source_chunk_idx) != 0:
+        raise ValueError("subject subspace capture is restricted to source chunk 0")
+    if not captures:
+        raise ValueError("subject subspace capture requires at least one encoded payload")
+    _validate_subject_subspace_provenance(provenance)
+    serialized = []
+    for capture in captures:
+        _validate_subject_subspace_capture(capture)
+        raw_tokens = capture["raw_tokens"].detach().cpu()
+        encoded_slots = capture["encoded_slots"].detach().cpu()
+        attention = {
+            str(role): tensor.detach().cpu()
+            for role, tensor in dict(capture["attention"]).items()
+        }
+        raw_token_meta = list(capture["raw_token_meta"])
+        serialized.append({
+            **{key: capture[key] for key in ("character", "bank", "layer")},
+            "raw_tokens": raw_tokens,
+            "raw_token_meta": raw_token_meta,
+            "encoded_slots": encoded_slots,
+            "attention": attention,
+            "tensor_shapes": {
+                "raw_tokens": list(raw_tokens.shape),
+                "encoded_slots": list(encoded_slots.shape),
+                "attention": {role: list(tensor.shape) for role, tensor in attention.items()},
+            },
+            "sha256": {
+                "raw_tokens": _subject_subspace_tensor_sha256(raw_tokens),
+                "raw_token_meta": hashlib.sha256(json.dumps(
+                    _json_safe(raw_token_meta),
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ).encode("utf-8")).hexdigest(),
+                "encoded_slots": _subject_subspace_tensor_sha256(encoded_slots),
+                "attention": _subject_subspace_tensor_sha256(attention),
+            },
+        })
+    canonical = {
+        "schema_version": 1,
+        "source_chunk_idx": 0,
+        "target_evidence_read": False,
+        "provenance": dict(provenance),
+        "captures": [
+            {key: capture[key] for key in ("character", "bank", "layer", "tensor_shapes", "sha256")}
+            for capture in serialized
+        ],
+    }
+    output_path = Path(path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        **canonical,
+        "captures": serialized,
+        "canonical_artifact_sha256": hashlib.sha256(json.dumps(
+            canonical,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")).hexdigest(),
+    }
+    if output_path.exists():
+        raise ValueError("subject subspace capture output already exists")
+    temp_path = output_path.with_name(f".{output_path.name}.{os.getpid()}.tmp")
+    if temp_path.exists():
+        raise ValueError("subject subspace capture temporary output already exists")
+    try:
+        torch.save(payload, temp_path)
+        os.link(temp_path, output_path)
+    finally:
+        if temp_path.exists():
+            temp_path.unlink()
+    return True
+
+
 def _runtime_evidence(records, engine):
     reads = [row.get("memory_read", {}) for row in records if isinstance(row, dict)]
     nonempty_reads = sum(1 for row in reads if bool(row.get("nonempty", False)))
@@ -1314,8 +1549,17 @@ class SlotMemInferenceEngine(ReferenceInferenceEngine):
         return t_embed
 
     @torch.no_grad()
-    def _encode_memory_payload_to_stage2_slots(self, tokens, token_meta, noise_domain=None, layer_idx=0):
+    def _encode_memory_payload_to_stage2_slots(
+        self,
+        tokens,
+        token_meta,
+        noise_domain=None,
+        layer_idx=0,
+        attention_sink=None,
+    ):
         if self._memory_meta_is_encoded_slots(token_meta):
+            if attention_sink is not None:
+                raise ValueError("subject subspace capture cannot use already-encoded slot metadata")
             return tokens, list(token_meta or []), {
                 "enabled": 0.0,
                 "already_encoded": 1.0,
@@ -1323,6 +1567,8 @@ class SlotMemInferenceEngine(ReferenceInferenceEngine):
                 "output_slots": int(tokens.shape[0]) if isinstance(tokens, torch.Tensor) else 0,
             }
         if not (isinstance(tokens, torch.Tensor) and tokens.ndim >= 2 and int(tokens.shape[0]) > 0):
+            if attention_sink is not None:
+                raise ValueError("subject subspace capture requires nonempty raw tokens")
             return tokens, [], {"enabled": 0.0, "input_tokens": 0, "output_slots": 0}
         domain = str(noise_domain or self.train_noise_domain).strip().lower()
         encoder = self._get_jigsaw_extra_encoder_for_domain(domain)
@@ -1337,6 +1583,7 @@ class SlotMemInferenceEngine(ReferenceInferenceEngine):
             list(token_meta or []) if isinstance(token_meta, list) else [],
             layer_idx=layer_idx,
             t_embed=t_embed,
+            attention_sink=attention_sink,
         )
         return slots.detach().cpu(), list(slot_meta), dict(stats)
 
@@ -3290,6 +3537,7 @@ def parse_args(argv=None):
     parser.add_argument("--slotmem_memory_encoder_use_slot_index_embed", dest="slotmem_memory_encoder_use_slot_index_embed", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--slotmem_memory_encoder_aux_weight", dest="slotmem_memory_encoder_aux_weight", type=float, default=0.05)
     parser.add_argument("--slotmem_memory_encoder_bg_tokens", dest="slotmem_memory_encoder_bg_tokens", type=int, default=64)
+    parser.add_argument("--subject_subspace_capture_path", type=str, default=None)
     parser.add_argument("--slotmem_memory_writer_mode", dest="slotmem_memory_writer_mode", type=str, default="auto",
                         choices=["auto", "off", "on", "true", "1", "false", "0", "none", "residual"])
     parser.add_argument("--slotmem_memory_writer_hidden_dim", dest="slotmem_memory_writer_hidden_dim", type=int, default=1024)
@@ -3537,6 +3785,12 @@ def _load_resume_state(path):
 
 def main():
     args = parse_args()
+    _validate_subject_subspace_capture_preflight(
+        getattr(args, "subject_subspace_capture_path", None),
+        defer_lora_until_after_first_chunk=bool(
+            getattr(args, "defer_lora_until_after_first_chunk", False)
+        ),
+    )
     os.makedirs(args.output_path, exist_ok=True)
     resume_path = Path(str(getattr(args, "resume_state_path", "") or "").strip())
     resume_requested = bool(resume_path.is_file()) or int(getattr(args, "start_chunk_idx", -1)) > 0
@@ -3594,6 +3848,32 @@ def main():
         and getattr(engine, "jigsaw_extra_encoder_enabled", False)
     )
     stage2_slot_update_domain = str(getattr(args, "train_noise_domain", "low_noise")).strip().lower()
+    subject_subspace_captures = []
+
+    def _record_subject_subspace_capture(
+        char,
+        bank_id,
+        layer_idx,
+        raw_tokens,
+        raw_token_meta,
+        encoded_slots,
+        attention_sink,
+        chunk_idx,
+    ):
+        if not (
+            getattr(args, "subject_subspace_capture_path", None)
+            and int(chunk_idx) == 0
+        ):
+            return
+        subject_subspace_captures.append({
+            "character": str(char),
+            "bank": int(bank_id),
+            "layer": int(layer_idx),
+            "raw_tokens": raw_tokens.detach().cpu(),
+            "raw_token_meta": list(raw_token_meta or []),
+            "encoded_slots": encoded_slots.detach().cpu(),
+            "attention": dict(attention_sink or {}),
+        })
 
     def _stage2_prepare_payload_for_bank(char, bank_id, mem, token_meta, chunk_idx):
         if not role_wise_slot_memory_bank_enabled:
@@ -3622,11 +3902,26 @@ def main():
                     )
                     mode = "writer_update"
                 else:
+                    attention_sink = {} if (
+                        getattr(args, "subject_subspace_capture_path", None)
+                        and int(chunk_idx) == 0
+                    ) else None
                     stored_tokens, stored_meta, stats = engine._encode_memory_payload_to_stage2_slots(
                         update_layer_tokens,
                         layer_meta if isinstance(layer_meta, list) else [],
                         noise_domain=stage2_slot_update_domain,
                         layer_idx=layer,
+                        attention_sink=attention_sink,
+                    )
+                    _record_subject_subspace_capture(
+                        char,
+                        bank_id,
+                        layer,
+                        update_layer_tokens,
+                        layer_meta if isinstance(layer_meta, list) else [],
+                        stored_tokens,
+                        attention_sink,
+                        chunk_idx,
                     )
                     mode = "initial_slot_extract"
                 out_layers[_layer_key(layer)] = stored_tokens
@@ -3650,11 +3945,26 @@ def main():
             )
             mode = "writer_update"
         else:
+            attention_sink = {} if (
+                getattr(args, "subject_subspace_capture_path", None)
+                and int(chunk_idx) == 0
+            ) else None
             stored_tokens, stored_meta, stats = engine._encode_memory_payload_to_stage2_slots(
                 mem,
                 token_meta if isinstance(token_meta, list) else [],
                 noise_domain=stage2_slot_update_domain,
                 layer_idx=0,
+                attention_sink=attention_sink,
+            )
+            _record_subject_subspace_capture(
+                char,
+                bank_id,
+                0,
+                mem,
+                token_meta if isinstance(token_meta, list) else [],
+                stored_tokens,
+                attention_sink,
+                chunk_idx,
             )
             mode = "initial_slot_extract"
         return stored_tokens, stored_meta, dict(stats, enabled=1.0, mode=mode)
@@ -3762,6 +4072,47 @@ def main():
             restored_previous_frames=restored_previous_frames,
             resume_next_chunk_idx=resume_next_chunk_idx,
         )
+    subject_subspace_capture_output = _prepare_subject_subspace_capture_output(
+        getattr(args, "subject_subspace_capture_path", None),
+        processed_chunk_indices=range(
+            start_chunk_idx,
+            start_chunk_idx + len(chunks_to_iterate),
+        ),
+    )
+    subject_subspace_provenance = None
+    if subject_subspace_capture_output is not None:
+        source_path = Path(args.json_path).resolve()
+        target_seed_override = getattr(args, "target_seed_override", None)
+        source_seed = (
+            int(target_seed_override)
+            if target_seed_override is not None and start_chunk_idx == 0
+            else int(getattr(args, "seed_base", 42))
+        )
+        subject_subspace_provenance = {
+            "source_json_path": str(source_path),
+            "source_json_sha256": sha256_file(source_path),
+            "reference_file_sha256": slotmem_inference_manifest[
+                "resolved_reference_file_sha256"
+            ],
+            "fixed_reference_scope": str(args.fixed_reference_scope),
+            "source_seed": int(source_seed),
+            "code_identity": {
+                "infer_slotmem_sha256": sha256_file(Path(__file__).resolve()),
+                "mem_encoder_utils_sha256": sha256_file(
+                    (SCRIPT_DIR / "mem_encoder_utils.py").resolve()
+                ),
+            },
+            "runtime_identity": {
+                "python_version": sys.version,
+                "torch_version": str(torch.__version__),
+                "inference_args_sha256": sha256_file(Path(args_dump_path)),
+            },
+            "model_identity": _subject_subspace_model_identity(
+                high_noise=getattr(args, "high_expert_checkpoint_path", None),
+                low_noise=getattr(args, "low_expert_checkpoint_path", None),
+            ),
+        }
+        _validate_subject_subspace_provenance(subject_subspace_provenance)
     if start_chunk_idx > 0:
         print(f"[ResumeState] starting from chunk_idx={start_chunk_idx}", flush=True)
 
@@ -4094,6 +4445,13 @@ def main():
                             source_video_frames=video_frames,
                             first_appearance_only=bool(args.use_first_appearance_memory_only),
                         )
+            if subject_subspace_capture_output is not None and int(chunk_idx) == 0:
+                _write_subject_subspace_capture(
+                    subject_subspace_capture_output,
+                    source_chunk_idx=0,
+                    captures=subject_subspace_captures,
+                    provenance=subject_subspace_provenance,
+                )
         memory_bank_stats = _summarize_memory_manager_bytes(mem_manager)
         memory_bank_hash_after_write = _memory_bank_sha256(mem_manager)
         full_buffer_status_after_write = _full_buffer_status(

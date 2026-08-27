@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Any, Dict, Iterable, List, MutableMapping, Optional, Sequence, Tuple
 
 import torch
 import torch.nn.functional as F
@@ -198,7 +198,12 @@ class GroupedMemoryEncoder(torch.nn.Module):
             torch.nn.Linear(int(hidden_dim), self.dim),
         )
 
-    def forward(self, tokens: torch.Tensor, t_embed: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def forward(
+        self,
+        tokens: torch.Tensor,
+        t_embed: Optional[torch.Tensor] = None,
+        return_attention: bool = False,
+    ) -> Any:
         if not isinstance(tokens, torch.Tensor) or tokens.ndim != 2 or int(tokens.shape[0]) <= 0:
             raise ValueError("GroupedMemoryEncoder expects [N,D] non-empty tokens")
         orig_dtype = tokens.dtype
@@ -222,14 +227,18 @@ class GroupedMemoryEncoder(torch.nn.Module):
             h = h * (1.0 + gamma.unsqueeze(0)) + beta.unsqueeze(0)
         q = self.query.to(device=h.device, dtype=h.dtype)
         scores = torch.matmul(q, h.transpose(0, 1)) / max(float(self.encoder_dim) ** 0.5, 1.0)
-        attn = torch.softmax(scores.float(), dim=-1).to(dtype=h.dtype)
+        attn = torch.softmax(scores.float(), dim=-1)
+        if return_attention:
+            capture_attn = attn
+        attn = attn.to(dtype=h.dtype)
         pooled = torch.matmul(attn, h)
         out = self.ff(pooled)
         if self.use_slot_index_embed and isinstance(self.slot_index_embed, torch.nn.Parameter):
             slot_pos = self.slot_index_embed.to(device=out.device, dtype=out.dtype)
             slot_scale = self.slot_index_embed_scale.to(device=out.device, dtype=out.dtype)
             out = out + slot_pos * slot_scale
-        return out.to(dtype=orig_dtype)
+        out = out.to(dtype=orig_dtype)
+        return (out, capture_attn) if return_attention else out
 
 
 class MemoryEncoderBank(torch.nn.Module):
@@ -272,9 +281,19 @@ class MemoryEncoderBank(torch.nn.Module):
             layer_int = 0
         return int(self.layer_to_group.get(layer_int, 0))
 
-    def encode_role_tokens(self, tokens: torch.Tensor, layer_idx: Any, t_embed: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def encode_role_tokens(
+        self,
+        tokens: torch.Tensor,
+        layer_idx: Any,
+        t_embed: Optional[torch.Tensor] = None,
+        return_attention: bool = False,
+    ) -> Any:
         gid = self.group_for_layer(layer_idx)
-        return self.group_encoders[gid](tokens, t_embed=t_embed)
+        return self.group_encoders[gid](
+            tokens,
+            t_embed=t_embed,
+            return_attention=return_attention,
+        )
 
     def classify_slots(self, slots: torch.Tensor, layer_idx: Any) -> torch.Tensor:
         del layer_idx
@@ -481,6 +500,7 @@ def encode_role_tokens_to_slots(
     token_meta: Optional[List[Any]],
     layer_idx: Any,
     t_embed: Optional[torch.Tensor] = None,
+    attention_sink: Optional[MutableMapping[str, torch.Tensor]] = None,
 ) -> Tuple[torch.Tensor, List[Dict[str, Any]], List[int], Dict[str, Any]]:
     if not isinstance(tokens, torch.Tensor) or tokens.ndim < 2 or int(tokens.shape[0]) <= 0:
         return tokens, [], [], {"enabled": 0.0, "input_tokens": 0, "output_slots": 0}
@@ -501,7 +521,17 @@ def encode_role_tokens_to_slots(
     for role_id in sorted(role_to_idx.keys()):
         idx = torch.tensor(role_to_idx[role_id], device=tokens.device, dtype=torch.long)
         role_tokens = tokens.index_select(0, idx)
-        slots = encoder_bank.encode_role_tokens(role_tokens, layer_idx, t_embed=t_embed)
+        encoded = encoder_bank.encode_role_tokens(
+            role_tokens,
+            layer_idx,
+            t_embed=t_embed,
+            return_attention=attention_sink is not None,
+        )
+        if attention_sink is not None:
+            slots, attn = encoded
+            attention_sink[role_id] = attn.detach().cpu()
+        else:
+            slots = encoded
         out_tokens.append(slots)
         lengths.append(int(slots.shape[0]))
         role_meta = [meta[i] for i in role_to_idx[role_id]]
