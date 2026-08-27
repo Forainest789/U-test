@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "delta_id": 0.01,
+  "quality_margins": {
+    "A_prompt": 0.02,
+    "Q_bg": 0.02,
+    "Q_motion_smoothness": 0.02,
+    "Q_flicker": 0.02,
+    "Q_boundary": 0.02,
+    "Q_anatomy": 0.02,
+    "Q_non_target": 0.02
+  },
+  "dynamic_degree_floor": 0.2,
+  "source": "pre-target pilot rules reused from the existing U-test outcome schema"
+}
