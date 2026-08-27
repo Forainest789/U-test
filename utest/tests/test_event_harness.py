@@ -80,6 +80,24 @@ def test_prefix_generation_saves_new_state_without_resuming(tmp_path: Path) -> N
     assert "--target_character" not in args
 
 
+def test_prefix_contract_can_freeze_the_future_target_seed_without_changing_source_seed_base(
+    tmp_path: Path,
+) -> None:
+    event = {
+        "source_json_path": str(tmp_path / "story.json"),
+        "target_chunk_idx": 6,
+    }
+    args = build_prefix_inference_args(
+        event,
+        tmp_path,
+        ["--seed_base", "2", "--target_seed_override", "stale"],
+        target_seed_override=2,
+    )
+
+    assert args[args.index("--seed_base") + 1] == "2"
+    assert args[args.index("--target_seed_override") + 1] == "2"
+
+
 def test_arm_commands_apply_one_target_seed_override(tmp_path: Path) -> None:
     contract = {
         "snapshot": {"path": str(tmp_path / "prefix.pt"), "sha256": "abc"},

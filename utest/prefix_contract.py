@@ -19,6 +19,7 @@ RUNTIME_ONLY_ARGS = {
     "efficiency_runtime_log",
     "merge_chunks",
     "merged_output_name",
+    "subject_subspace_capture_path",
 }
 
 

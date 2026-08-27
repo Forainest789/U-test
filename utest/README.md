@@ -448,6 +448,61 @@ The frozen rules file has this shape (replace the numeric margins with W2 values
 }
 ```
 
+### ViStoryBench subject reappearance
+
+This is a local SlotMem video slicing protocol over the three frozen ViStoryBench
+source–absence–reappearance intervals. CIDS is computed later with the frozen official
+ViStoryBench evaluator; the derived video protocol itself is not the official image
+sequence protocol.
+
+Prepare the official inputs, then create the immutable zero-GPU 3-event × 3-seed plan:
+
+```bash
+python tools/prepare_slotmem_vistory_reappearance.py \
+  --data-root /data/ViStoryBench --output-root runs/vistorybench_reappearance_v1/inputs
+
+python -m utest.subject_reappearance_harness dry-run \
+  --inputs runs/vistorybench_reappearance_v1/inputs/manifest.json \
+  --output runs/vistorybench_reappearance_v1/run \
+  --base-inference-args /data/config/inference_args.json \
+  --platform-manifest /data/config/platform.manifest.json \
+  --donor-map /data/config/vistory_donors.json
+```
+
+`--base-inference-args` accepts JSON argv only: either `["--flag","value"]` or
+`{"argv":["--flag","value"]}`. Shell command text is
+rejected. Dry-run records arm and Q* stages as deferred templates; after a validated
+prefix exists, the harness atomically freezes their real argv in each block's
+`stage_commands.json` and executes only that artifact.
+
+`semantic_scores.json` is a required external, source-only probe artifact for every
+block; the harness records its path and never fabricates a producer command. After each
+prefix, review the source video and write that block's `source_qualification.json` as
+`{"status":"passed"}` only when the named subject is visible, distinguishable, and
+unambiguous. The optional donor map is `{"events":{"<event_id>":{"payload":"...pt",
+"manifest":"...json"}}}`; omitting it keeps both arm phases explicitly blocked. A
+teacher map uses the same event keys with `video` and `manifest` fields. Then run each
+frozen stage (optionally select one block with `--event-id`
+and `--seed`):
+
+```bash
+python -m utest.subject_reappearance_harness prefix --manifest runs/vistorybench_reappearance_v1/run/run_manifest.json
+python -m utest.subject_reappearance_harness probe --manifest runs/vistorybench_reappearance_v1/run/run_manifest.json
+python -m utest.subject_reappearance_harness preflight --manifest runs/vistorybench_reappearance_v1/run/run_manifest.json
+python -m utest.subject_reappearance_harness full --manifest runs/vistorybench_reappearance_v1/run/run_manifest.json
+python -m utest.subject_reappearance_harness qstar --manifest runs/vistorybench_reappearance_v1/run/run_manifest.json
+python -m utest.subject_reappearance_harness resume --manifest runs/vistorybench_reappearance_v1/run/run_manifest.json
+```
+
+Preflight order is `full_correct,no_memory,zero_path,wrong_subject`; the full order is
+the fixed eight-arm subject-subspace table. All arms reuse one immutable pre-target
+snapshot and target seed, use `max_memory_characters=4`, clear `target_character`, and
+use `fixed_reference_scope=source_only`. With no validated teacher map, Q* is recorded
+as `not_available` and no teacher command exists. With a teacher but no donor, Q* is
+`blocked_missing_donor`. `resume` revalidates completed prefix, probe, arm, decoded
+preflight, and Q* artifacts; it skips only intact outputs and archives failed/partial
+attempts beside their replacement so logs are retained.
+
 ## Setup
 
 ```bash

@@ -39,7 +39,11 @@ def _write_json(path: Path, payload: Mapping | Sequence) -> None:
 
 
 def build_prefix_inference_args(
-    event: Mapping, output: Path, argv: Sequence[str]
+    event: Mapping,
+    output: Path,
+    argv: Sequence[str],
+    *,
+    target_seed_override: int | None = None,
 ) -> list[str]:
     """Build native inference args that create, rather than load, a prefix state."""
     result = _set_option(
@@ -60,7 +64,11 @@ def build_prefix_inference_args(
     result = _set_option(result, "--target_character", None)
     result = _set_option(result, "--resume_state_path", None)
     result = _set_option(result, "--start_chunk_idx", None)
-    result = _set_option(result, "--target_seed_override", None)
+    result = _set_option(
+        result,
+        "--target_seed_override",
+        str(target_seed_override) if target_seed_override is not None else None,
+    )
     result = _set_option(result, "--save_state_path", str(output / "prefix_state.pt"))
     result = _set_option(result, "--output_path", str(output / "prefix_generation"))
     return _set_option(
@@ -398,7 +406,12 @@ def prepare_prefix(args: argparse.Namespace) -> int:
         inference_args = list(args.inference_args)
     if inference_args[:1] == ["--"]:
         inference_args = inference_args[1:]
-    inference_args = build_prefix_inference_args(event, output, inference_args)
+    inference_args = build_prefix_inference_args(
+        event,
+        output,
+        inference_args,
+        target_seed_override=args.target_seed_override,
+    )
     repo = Path(__file__).resolve().parents[1]
     _run([args.python, "-u", str(repo / "infer_slotmem.py"), *inference_args], output / "prepare.log")
     if not snapshot.is_file():
@@ -581,6 +594,7 @@ def main() -> int:
     prepare.add_argument("--platform-manifest", type=Path, required=True)
     prepare.add_argument("--inference-args-file", type=Path)
     prepare.add_argument("--arm-seed", type=int, default=0)
+    prepare.add_argument("--target-seed-override", type=int)
     prepare.add_argument("--future-target-video", type=Path)
     prepare.add_argument("--future-target-manifest", type=Path)
     prepare.add_argument("--arms-root", type=Path)
