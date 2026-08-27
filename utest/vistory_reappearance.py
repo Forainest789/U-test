@@ -207,6 +207,7 @@ def prepare_dataset(
                 "manifest_sha256": sha256_file(manifest_output),
             }
         )
+    _write_json(output_root / "manifest.json", report)
     return report
 
 

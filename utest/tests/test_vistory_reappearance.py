@@ -198,6 +198,9 @@ def test_prepare_writes_hashed_portable_event_bundle(tmp_path) -> None:
     report = prepare_dataset(data_root, tmp_path / "output", selection)
 
     event_root = tmp_path / "output" / "fixture_event"
+    top_level_manifest = json.loads(
+        (tmp_path / "output" / "manifest.json").read_text(encoding="utf-8")
+    )
     derived = json.loads((event_root / "story.json").read_text(encoding="utf-8"))
     event = json.loads((event_root / "event.json").read_text(encoding="utf-8"))
     manifest = json.loads((event_root / "manifest.json").read_text(encoding="utf-8"))
@@ -229,6 +232,7 @@ def test_prepare_writes_hashed_portable_event_bundle(tmp_path) -> None:
             "manifest_sha256": sha256_file(event_root / "manifest.json"),
         }
     ]
+    assert top_level_manifest == report
 
 
 def test_frozen_selection_keeps_approved_events_shots_and_hashes() -> None:
