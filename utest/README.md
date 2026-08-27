@@ -455,18 +455,334 @@ source–absence–reappearance intervals. CIDS is computed later with the froze
 ViStoryBench evaluator; the derived video protocol itself is not the official image
 sequence protocol.
 
-Prepare the official inputs, then create the immutable zero-GPU 3-event × 3-seed plan:
+Run this only from the already-active `slotmem` Conda environment. Do not create or
+activate another environment. The commands below reuse the existing Wan2.2 directory and
+the existing Stage-1/Stage-2 low/high checkpoints. All frozen producers are no-clobber.
+
+```bash
+cd /data/long_term_data/shixiao/videomem/U-test-vistory-8f0b728
+
+export REPO_ROOT="$PWD"
+export VM_ROOT=/data/long_term_data/shixiao/videomem
+export WAN22_DIR="$VM_ROOT/wan_models/Wan2.2-I2V-A14B"
+export CKPT_ROOT="$VM_ROOT/U-test"
+export STAGE1_LOW_CKPT_PATH="$CKPT_ROOT/ckpt/stage1/stage1_low.pt"
+export STAGE1_HIGH_CKPT_PATH="$CKPT_ROOT/ckpt/stage1/stage1_high.pt"
+export STAGE2_LOW_CKPT_PATH="$CKPT_ROOT/ckpt/stage2/stage2_low.pt"
+export STAGE2_HIGH_CKPT_PATH="$CKPT_ROOT/ckpt/stage2/stage2_high.pt"
+export PLATFORM_MANIFEST="$REPO_ROOT/platform.manifest.json"
+export VISTORY_DATASET_REVISION=92f845531b67e97a67ae04b256ec5d8c020e8341
+```
+
+After the final reviewed commit is pulled, refresh the platform manifest once without
+installing packages or changing the active environment:
+
+```bash
+SKIP_PIP=1 CKPT_ROOT="$CKPT_ROOT" WAN22_DIR="$WAN22_DIR" \
+  bash scripts/fetch_weights.sh
+```
+
+The formal line must synchronize the frozen Hugging Face revision into a new directory.
+The earlier custom server directory is not revision-attested and is excluded even if a
+structural completeness check would pass. Hugging Face may reuse already cached blobs,
+but `--local-dir` itself must not exist before this command. Leave every older directory
+untouched:
+
+```bash
+export VISTORY_SNAPSHOT_ROOT="$VM_ROOT/datasets/ViStoryBench-92f845531b67e97a67ae04b256ec5d8c020e8341"
+
+python - <<'PY'
+import os
+from pathlib import Path
+
+root = Path(os.environ["VISTORY_SNAPSHOT_ROOT"])
+assert not root.exists(), f"refusing to overwrite existing snapshot root: {root}"
+PY
+
+hf download ViStoryBench/ViStoryBench \
+  --repo-type dataset \
+  --revision "$VISTORY_DATASET_REVISION" \
+  --local-dir "$VISTORY_SNAPSHOT_ROOT"
+
+export VISTORY_DATA="$VISTORY_SNAPSHOT_ROOT/ViStoryBench"
+```
+
+Then run the zero-GPU completeness gate before creating any survey. It requires exactly
+the official story IDs `01..80`, parses every `story.json`, and reads every character
+reference file:
+
+```bash
+python - <<'PY'
+import os
+from pathlib import Path
+
+from utest.vistory_donors import validate_frozen_vistory_tree
+
+root = Path(os.environ["VISTORY_DATA"])
+validate_frozen_vistory_tree(root)
+print("complete frozen ViStoryBench tree:", root.resolve())
+PY
+```
+
+**Current formal status: BLOCKED at the zero-GPU geometry gate.** The measured M0 argv
+uses 64 slots, while the frozen protocol requires MemoryEncoder layers `0..15` and 32
+slots. The following command is expected to reject the current server M0 artifact and
+does not launch inference:
+
+```bash
+export M0_BASE_ARGS_YAML="$REPO_ROOT/runs/m0a_slotmem_stage2/inference_args.yaml"
+
+python - <<'PY'
+import os
+from pathlib import Path
+import yaml
+
+from utest.prefix_contract import (
+    normalized_frozen_args,
+    validate_slotmem_memory_encoder_geometry,
+)
+
+payload = yaml.safe_load(
+    Path(os.environ["M0_BASE_ARGS_YAML"]).read_text(encoding="utf-8")
+)
+validate_slotmem_memory_encoder_geometry(normalized_frozen_args(payload["argv"]))
+PY
+```
+
+Do **not** edit only `--slotmem_memory_encoder_slots 64` to `32`. Variable-slot
+compatibility of the existing checkpoints has not been established. Every command below
+this point is conditional and must run only after an independently validated,
+32-slot-compatible config/checkpoint has been supplied. There is no fabricated 32-slot
+artifact in this repository.
+
+After that independent validation, point `SLOTMEM32_BASE_ARGS_YAML` at its real recorded
+argv. Use a new v2 root; the server's existing v1 evidence remains untouched. The checks
+below refuse both an empty/missing source and any pre-existing formal output root, validate
+last-option-wins geometry, and only then publish the JSON argv:
+
+```bash
+export EXP_ROOT="$REPO_ROOT/runs/vistorybench_reappearance_v2_32slot"
+export BASE_ARGS_YAML="$SLOTMEM32_BASE_ARGS_YAML"
+export BASE_ARGS_JSON="$EXP_ROOT/config/base_inference_args.json"
+
+python - <<'PY'
+import json
+import os
+from pathlib import Path
+import yaml
+
+from utest.prefix_contract import (
+    normalized_frozen_args,
+    validate_slotmem_memory_encoder_geometry,
+)
+
+source_text = os.environ.get("BASE_ARGS_YAML", "")
+assert source_text, "SLOTMEM32_BASE_ARGS_YAML must name a real validated artifact"
+source = Path(source_text)
+root = Path(os.environ["EXP_ROOT"])
+target = Path(os.environ["BASE_ARGS_JSON"])
+assert source.is_file(), source
+assert not root.exists(), f"refusing to reuse formal output root: {root}"
+assert not target.exists(), f"refusing to overwrite base argv: {target}"
+payload = yaml.safe_load(source.read_text(encoding="utf-8"))
+argv = payload["argv"]
+validate_slotmem_memory_encoder_geometry(normalized_frozen_args(argv))
+target.parent.mkdir(parents=True)
+with target.open("x", encoding="utf-8") as handle:
+    json.dump({"argv": argv}, handle, indent=2)
+    handle.write("\n")
+print(target.resolve())
+PY
+```
+
+Prepare the official three target events, then survey all structurally eligible official
+donors. This phase is CPU-only:
 
 ```bash
 python tools/prepare_slotmem_vistory_reappearance.py \
-  --data-root /data/ViStoryBench --output-root runs/vistorybench_reappearance_v1/inputs
+  --data-root "$VISTORY_DATA" \
+  --output-root "$EXP_ROOT/inputs"
+
+python tools/prepare_vistory_donors.py survey \
+  --data-root "$VISTORY_DATA" \
+  --targets "$EXP_ROOT/inputs/manifest.json" \
+  --output "$EXP_ROOT/donors/survey.json"
+```
+
+Inspect every candidate's two prompts and official reference before making a decision:
+
+```bash
+python - <<'PY'
+import json
+import os
+from pathlib import Path
+
+root = Path(os.environ["VISTORY_DATA"])
+survey = json.loads(
+    (Path(os.environ["EXP_ROOT"]) / "donors/survey.json").read_text(encoding="utf-8")
+)
+for row in survey["candidates"]:
+    print("\n", row["target_event_id"], row["candidate_id"])
+    print("reference:", root / row["reference"]["path"])
+    print("source:", row["source_prompt"])
+    print("read-check:", row["read_prompt"])
+PY
+```
+
+Create the strict review skeleton once. A human must replace the placeholder classes,
+record both visibility decisions, review every eligible candidate, and approve exactly
+one candidate per target (or declare one common non-empty `tie_group` for an explicit
+tie). Do not set visibility to true without inspecting the official images/prompts.
+
+```bash
+python - <<'PY'
+import hashlib
+import json
+import os
+from pathlib import Path
+
+root = Path(os.environ["EXP_ROOT"]) / "donors"
+survey_path = root / "survey.json"
+survey = json.loads(survey_path.read_text(encoding="utf-8"))
+review = {
+    "schema_version": 1,
+    "dataset_commit": survey["dataset_commit"],
+    "survey_sha256": hashlib.sha256(survey_path.read_bytes()).hexdigest(),
+    "reviews": [
+        {
+            "target_event_id": row["target_event_id"],
+            "candidate_id": row["candidate_id"],
+            "target_presentation_class": "REVIEW_REQUIRED",
+            "donor_presentation_class": "REVIEW_REQUIRED",
+            "target_dominant_colour": "REVIEW_REQUIRED",
+            "donor_dominant_colour": "REVIEW_REQUIRED",
+            "donor_source_visible": False,
+            "donor_read_check_visible": False,
+            "approved": False,
+            "tie_group": None,
+            "reviewer": "human-review-required",
+        }
+        for row in survey["candidates"]
+    ],
+}
+path = root / "review.json"
+with path.open("x", encoding="utf-8") as handle:
+    json.dump(review, handle, ensure_ascii=False, indent=2, sort_keys=True)
+    handle.write("\n")
+print(path.resolve())
+PY
+
+python tools/prepare_vistory_donors.py freeze \
+  --data-root "$VISTORY_DATA" \
+  --targets "$EXP_ROOT/inputs/manifest.json" \
+  --survey "$EXP_ROOT/donors/survey.json" \
+  --review "$EXP_ROOT/donors/review.json" \
+  --output-root "$EXP_ROOT/donors/selection"
+```
+
+Build the three-job donor manifest. This is the mandatory zero-GPU protocol gate; a
+missing option, layers other than `0..15`, or an effective slot count other than 32 stops
+here with the actual and expected values in the error:
+
+```bash
+export DONOR_RUN_ROOT="$EXP_ROOT/donors/run"
+export DONOR_RUN_MANIFEST="$DONOR_RUN_ROOT/run_manifest.json"
+export SLOTMEM_OFFLOAD_MODELS=0
+
+python -m utest.vistory_donor_harness dry-run \
+  --selection "$EXP_ROOT/donors/selection/selection.json" \
+  --output "$DONOR_RUN_ROOT" \
+  --base-inference-args "$BASE_ARGS_JSON" \
+  --platform-manifest "$PLATFORM_MANIFEST"
+
+python - <<'PY'
+import json
+import os
+from pathlib import Path
+
+run = json.loads(Path(os.environ["DONOR_RUN_MANIFEST"]).read_text(encoding="utf-8"))
+assert len(run["jobs"]) == 3
+assert {job["donor_seed"] for job in run["jobs"]} == {0}
+print("donor jobs:", len(run["jobs"]), "donor seeds:", [0])
+PY
+```
+
+Run all three seed-0 donors on one GPU. The donor harness has no `full` subcommand:
+`prefix` plus `dump` is its complete run, and each successful dump writes the immutable
+completion record. From a completely fresh donor run directory, `resume` may be used
+instead as the combined prefix-plus-dump driver.
+
+```bash
+export CUDA_VISIBLE_DEVICES=0
+export TOKENIZERS_PARALLELISM=false
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+export DUAL_EXPERT_LOAD_MODE=active
+export DUAL_EXPERT_MANAGE_AUX_MODELS=1
+
+python -m utest.vistory_donor_harness prefix \
+  --manifest "$DONOR_RUN_MANIFEST"
+
+python -m utest.vistory_donor_harness dump \
+  --manifest "$DONOR_RUN_MANIFEST"
+```
+
+Donor `resume` is suitable only as the combined driver from a fresh dry-run or when a
+job already has its complete immutable completion record. It deliberately refuses a
+prefix-only/partial job. If `prefix` or `dump` fails midway, preserve the entire failed
+run directory by atomically renaming it to a timestamped sibling, then rebuild the same
+clean path with `dry-run` and rerun. Do not delete the failed evidence:
+
+```bash
+python - <<'PY'
+import os
+from datetime import datetime, timezone
+from pathlib import Path
+
+source = Path(os.environ["DONOR_RUN_ROOT"])
+stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S.%fZ")
+failed = source.with_name(f"{source.name}.failed-{stamp}")
+assert source.is_dir(), source
+assert not failed.exists(), failed
+source.rename(failed)
+print("preserved partial donor run:", failed)
+PY
+
+python -m utest.vistory_donor_harness dry-run \
+  --selection "$EXP_ROOT/donors/selection/selection.json" \
+  --output "$DONOR_RUN_ROOT" \
+  --base-inference-args "$BASE_ARGS_JSON" \
+  --platform-manifest "$PLATFORM_MANIFEST"
+
+python -m utest.vistory_donor_harness resume \
+  --manifest "$DONOR_RUN_MANIFEST"
+```
+
+Freeze one validated event-level donor map, shared by target seeds 0, 1, and 2. This
+command revalidates all three completion records and payloads before publishing:
+
+```bash
+export DONOR_BUNDLE_ROOT="$EXP_ROOT/donors/bundle"
+export DONOR_MAP="$DONOR_BUNDLE_ROOT/donor_map.json"
+
+python tools/freeze_vistory_donor_map.py \
+  --targets "$EXP_ROOT/inputs/manifest.json" \
+  --selection "$EXP_ROOT/donors/selection/selection.json" \
+  --donor-run-manifest "$DONOR_RUN_MANIFEST" \
+  --output-root "$DONOR_BUNDLE_ROOT"
+```
+
+Only now build the formal immutable 3-event × 3-seed target plan:
+
+```bash
+export TARGET_RUN_ROOT="$EXP_ROOT/formal"
+export TARGET_RUN_MANIFEST="$TARGET_RUN_ROOT/run_manifest.json"
 
 python -m utest.subject_reappearance_harness dry-run \
-  --inputs runs/vistorybench_reappearance_v1/inputs/manifest.json \
-  --output runs/vistorybench_reappearance_v1/run \
-  --base-inference-args /data/config/inference_args.json \
-  --platform-manifest /data/config/platform.manifest.json \
-  --donor-map /data/config/vistory_donors.json
+  --inputs "$EXP_ROOT/inputs/manifest.json" \
+  --output "$TARGET_RUN_ROOT" \
+  --base-inference-args "$BASE_ARGS_JSON" \
+  --platform-manifest "$PLATFORM_MANIFEST" \
+  --donor-map "$DONOR_MAP"
 ```
 
 `--base-inference-args` accepts JSON argv only: either `["--flag","value"]` or
@@ -475,35 +791,233 @@ rejected. Dry-run records arm and Q* stages as deferred templates; after a valid
 prefix exists, the harness atomically freezes their real argv in each block's
 `stage_commands.json` and executes only that artifact.
 
-`semantic_scores.json` is a required external, source-only probe artifact for every
-block; the harness records its path and never fabricates a producer command. After each
-prefix, review the source video and write that block's `source_qualification.json` as
-`{"status":"passed"}` only when the named subject is visible, distinguishable, and
-unambiguous. The optional donor map is `{"events":{"<event_id>":{"payload":"...pt",
-"manifest":"...json"}}}`; omitting it keeps both arm phases explicitly blocked. A
-teacher map uses the same event keys with `video` and `manifest` fields. Then run each
-frozen stage (optionally select one block with `--event-id`
-and `--seed`):
+Generate all nine target prefixes/captures. Then inspect each block's source chunk and
+write `source_qualification.json` only when the named subject is visible,
+distinguishable, and unambiguous. The following publisher is intentionally a separate,
+manual post-review step; do not run it before reviewing all nine source videos.
 
 ```bash
-python -m utest.subject_reappearance_harness prefix --manifest runs/vistorybench_reappearance_v1/run/run_manifest.json
-python -m utest.subject_reappearance_harness probe --manifest runs/vistorybench_reappearance_v1/run/run_manifest.json
-python -m utest.subject_reappearance_harness preflight --manifest runs/vistorybench_reappearance_v1/run/run_manifest.json
-python -m utest.subject_reappearance_harness full --manifest runs/vistorybench_reappearance_v1/run/run_manifest.json
-python -m utest.subject_reappearance_harness qstar --manifest runs/vistorybench_reappearance_v1/run/run_manifest.json
-python -m utest.subject_reappearance_harness resume --manifest runs/vistorybench_reappearance_v1/run/run_manifest.json
+python -m utest.subject_reappearance_harness prefix \
+  --manifest "$TARGET_RUN_MANIFEST"
+
+python - <<'PY'
+import json
+import os
+from pathlib import Path
+
+run = json.loads(Path(os.environ["TARGET_RUN_MANIFEST"]).read_text(encoding="utf-8"))
+for block in run["blocks"]:
+    event = json.loads(Path(block["event_json"]).read_text(encoding="utf-8"))
+    source_video = (
+        Path(block["block_dir"])
+        / "prefix/prefix_generation"
+        / f"chunk_{int(event['source_chunk_idx']):03d}.mp4"
+    )
+    assert source_video.is_file(), source_video
+    print(block["event_id"], "seed", block["seed"], source_video)
+PY
+
+python - <<'PY'
+import json
+import os
+from pathlib import Path
+
+run = json.loads(Path(os.environ["TARGET_RUN_MANIFEST"]).read_text(encoding="utf-8"))
+for block in run["blocks"]:
+    path = Path(block["source_qualification"])
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("x", encoding="utf-8") as handle:
+        json.dump({"status": "passed"}, handle)
+        handle.write("\n")
+print("published reviewed source qualifications:", len(run["blocks"]))
+PY
+```
+
+The `probe` stage first produces and validates source-only `semantic_scores.json`, then
+freezes the three layer-group masks. It never reads target frames, decoded arms, CIDS, or
+Q*. Run the CPU probe, the four-arm GPU preflight, and only then the full eight arms:
+
+```bash
+python -m utest.subject_reappearance_harness probe \
+  --manifest "$TARGET_RUN_MANIFEST"
+
+python -m utest.subject_reappearance_harness preflight \
+  --manifest "$TARGET_RUN_MANIFEST"
+
+python -m utest.subject_reappearance_harness full \
+  --manifest "$TARGET_RUN_MANIFEST"
 ```
 
 Preflight order is `full_correct,no_memory,zero_path,wrong_subject`; the full order is
 the fixed eight-arm subject-subspace table. All arms reuse one immutable pre-target
 snapshot and target seed, use `max_memory_characters=4`, clear `target_character`, and
 use `fixed_reference_scope=source_only`. With no validated teacher map, Q* is recorded
-as `not_available` and no teacher command exists. With a teacher but no donor, Q* is
-`blocked_missing_donor`. `resume` revalidates completed prefix, probe, arm, decoded
-preflight, and Q* artifacts; it skips only intact outputs and archives failed/partial
-attempts beside their replacement so logs are retained.
+as `not_available` and no teacher command exists: do not run the `qstar` stage and do not
+reinterpret decoded CIDS as Q*. With a separately frozen independent teacher map, build
+a fresh formal run with `--teacher-map` and only then run the real `qstar` subcommand.
+With a teacher but no donor, Q* is `blocked_missing_donor`. `resume` revalidates completed
+prefix, probe, arm, decoded preflight, and Q* artifacts; it skips only intact outputs and
+archives failed/partial attempts beside their replacement so logs are retained.
 
-## Setup
+```bash
+# Run only when this manifest was built with a validated independent --teacher-map.
+python -m utest.subject_reappearance_harness qstar \
+  --manifest "$TARGET_RUN_MANIFEST"
+```
+
+Export the completed arms into the frozen eight-frame official CIDS adapter, then execute
+the exact evaluator argv recorded in that adapter. `VISTORY_EVALUATOR_ROOT` must be the
+checkout at evaluator commit `b44ec9108668cc2bcc8c5280886b235e9fb8bea9`.
+
+```bash
+export CIDS_ROOT="$EXP_ROOT/cids"
+export VISTORY_EVALUATOR_ROOT="$VM_ROOT/datasets/ViStoryBench-evaluator-b44ec910"
+
+python tools/prepare_vistory_cids_inputs.py \
+  --run-manifest "$TARGET_RUN_MANIFEST" \
+  --output "$CIDS_ROOT"
+
+python - <<'PY'
+import json
+import os
+import subprocess
+from pathlib import Path
+
+evaluator_root = Path(os.environ["VISTORY_EVALUATOR_ROOT"])
+commit = subprocess.check_output(
+    ["git", "-C", str(evaluator_root), "rev-parse", "HEAD"], text=True
+).strip()
+assert commit == "b44ec9108668cc2bcc8c5280886b235e9fb8bea9", commit
+manifest = json.loads(
+    (Path(os.environ["CIDS_ROOT"]) / "cids_input_manifest.json").read_text(
+        encoding="utf-8"
+    )
+)
+subprocess.run(
+    manifest["official_cids"]["cli_argv"],
+    cwd=evaluator_root,
+    check=True,
+)
+PY
+```
+
+The final report also requires the separately normalized source-continuity, VBench
+quality, and prompt-alignment result files; this repository does not fabricate them.
+Once those evaluators have produced the following files, aggregate the event-clustered
+report. Q* remains a descriptive field and is `not_available` without the independent
+teacher contract.
+
+```bash
+export CONTINUITY_RESULTS="$EXP_ROOT/metrics/source_continuity.json"
+export QUALITY_RESULTS="$EXP_ROOT/metrics/vbench_quality.json"
+export PROMPT_RESULTS="$EXP_ROOT/metrics/prompt_alignment.json"
+export IDENTITY_REPEAT_FLOOR_JSON="$EXP_ROOT/metrics/cids_repeat_floor.json"
+export FINAL_REPORT_ROOT="$EXP_ROOT/report"
+
+export CIDS_ITEMS="$(python - <<'PY'
+import json
+import os
+from pathlib import Path
+
+manifest = json.loads(
+    (Path(os.environ["CIDS_ROOT"]) / "cids_input_manifest.json").read_text(
+        encoding="utf-8"
+    )
+)
+official = manifest["official_cids"]
+items = Path(official["result_path"]) / official["items_relative_path"]
+assert items.is_file(), items
+print(items)
+PY
+)"
+
+export IDENTITY_REPEAT_FLOOR="$(python - <<'PY'
+import json
+import os
+from pathlib import Path
+
+payload = json.loads(
+    Path(os.environ["IDENTITY_REPEAT_FLOOR_JSON"]).read_text(encoding="utf-8")
+)
+value = payload["repeat_floor"]
+assert isinstance(value, (int, float)) and not isinstance(value, bool) and value >= 0
+print(value)
+PY
+)"
+
+python tools/analyze_subject_reappearance.py \
+  --run-manifest "$TARGET_RUN_MANIFEST" \
+  --cids-input-manifest "$CIDS_ROOT/cids_input_manifest.json" \
+  --cids-items "$CIDS_ITEMS" \
+  --continuity-results "$CONTINUITY_RESULTS" \
+  --quality-results "$QUALITY_RESULTS" \
+  --prompt-results "$PROMPT_RESULTS" \
+  --quality-rules "$REPO_ROOT/utest/events/vistorybench_reappearance_quality_rules.json" \
+  --repeat-floor "$IDENTITY_REPEAT_FLOOR" \
+  --n-boot 10000 \
+  --bootstrap-seed 0 \
+  --output "$FINAL_REPORT_ROOT"
+```
+
+After `probe` (and again after the complete run), this zero-GPU audit checks the frozen
+matrix, the donor geometry, the source-only semantic producer, mask budget, and Q* status:
+
+```bash
+python - <<'PY'
+import json
+import os
+from pathlib import Path
+
+donor_map = json.loads(Path(os.environ["DONOR_MAP"]).read_text(encoding="utf-8"))
+run = json.loads(Path(os.environ["TARGET_RUN_MANIFEST"]).read_text(encoding="utf-8"))
+assert len(donor_map["events"]) == 3
+assert len(run["blocks"]) == 9
+assert sorted({block["seed"] for block in run["blocks"]}) == [0, 1, 2]
+assert {block["commands"]["preflight"]["status"] for block in run["blocks"]} == {
+    "deferred_until_prefix"
+}
+
+for donor in donor_map["events"].values():
+    pair = json.loads(Path(donor["manifest"]).read_text(encoding="utf-8"))["pairs"][0]
+    shapes = pair["slot_shape"]
+    assert set(shapes) == {str(layer) for layer in range(16)}
+    assert {shape[0] for shape in shapes.values()} == {32}
+    assert pair["payload_key"].endswith("|0")
+
+for block in run["blocks"]:
+    scores = json.loads(Path(block["semantic_scores"]).read_text(encoding="utf-8"))
+    mask = json.loads(
+        Path(block["subject_subspace_manifest"]).read_text(encoding="utf-8")
+    )
+    assert scores["producer"]["kind"] == "slotmem_source_semantic_token_scores"
+    assert scores["target_evidence_read"] is False
+    assert mask["target_evidence_read"] is False
+    assert mask["primary_mask"] == "semantic_top8"
+    assert {row["bank"] for row in mask["layers"]} == {0}
+    assert {row["layer_group"] for row in mask["layers"]} == {
+        "0-4", "5-10", "11-15"
+    }
+    assert all(row["slot_count"] == 32 for row in mask["layers"])
+    assert all(len(row["semantic_top8"]) == 8 for row in mask["layers"])
+
+qstar = {block["qstar"]["status"] for block in run["blocks"]}
+assert qstar <= {"available", "not_available", "blocked_missing_donor"}
+print("donor jobs:                 3")
+print("donor seeds:                [0]")
+print("formal target blocks:       9")
+print("target seeds:               [0, 1, 2]")
+print("donor preflight statuses:   ready")
+print("semantic producer kind:     slotmem_source_semantic_token_scores")
+print("semantic mask cardinality:  8 / 32")
+print("semantic layer groups:      0-4, 5-10, 11-15")
+print("Q*:                         descriptive or unavailable", sorted(qstar))
+PY
+```
+
+## Legacy development setup
+
+This is not part of the ViStoryBench workflow above, which reuses the active `slotmem`
+environment.
 
 ```bash
 conda create -n utest python=3.10 -y

@@ -24,6 +24,8 @@ TARGET_EVENT_IDS = {
     "vistory15_gu_zhenzhen_s8_s20",
     "vistory16_chen_father_s1_s10",
 }
+VISTORY_DATASET_COMMIT = "92f845531b67e97a67ae04b256ec5d8c020e8341"
+VISTORY_STORY_IDS = frozenset(f"{story_id:02d}" for story_id in range(1, 81))
 REVIEW_FIELDS = {
     "target_event_id",
     "candidate_id",
@@ -360,8 +362,77 @@ def _candidate_id(candidate: Mapping[str, object]) -> str:
     )
 
 
+def validate_frozen_vistory_tree(data_root: Path) -> None:
+    """Fail closed unless the frozen official 80-story source tree is complete."""
+    data_root = Path(data_root).resolve()
+    discovered = sorted(
+        data_root.glob("*/story.json"), key=lambda path: path.parent.name
+    )
+    discovered_ids = {path.parent.name for path in discovered}
+    missing = sorted(VISTORY_STORY_IDS - discovered_ids)
+    extra = sorted(discovered_ids - VISTORY_STORY_IDS)
+    if len(discovered) != len(VISTORY_STORY_IDS) or missing or extra:
+        raise ValueError(
+            "official ViStoryBench tree is incomplete or unexpected: "
+            f"expected_story_json=80, actual_story_json={len(discovered)}, "
+            f"missing={missing}, extra={extra}"
+        )
+
+    for discovered_path in discovered:
+        story_id = discovered_path.parent.name
+        story_path = discovered_path.resolve()
+        if not story_path.is_relative_to(data_root):
+            raise ValueError(f"official story path escapes data root: {discovered_path}")
+        official = _read_json(story_path, f"official story {story_id}")
+        characters = official.get("Characters")
+        if not isinstance(characters, Mapping) or not characters:
+            raise ValueError(
+                f"official story {story_id} Characters must be a non-empty object"
+            )
+        for raw_character in characters:
+            character = _require_string(
+                raw_character, f"official story {story_id} character id"
+            )
+            if character in {".", ".."} or "/" in character or "\\" in character:
+                raise ValueError(
+                    f"official story {story_id} character id is not one path component: "
+                    f"{character!r}"
+                )
+            reference_dir = _resolve_within(
+                data_root,
+                Path(story_id) / "image" / character,
+                "official reference directory",
+            )
+            if not reference_dir.is_dir():
+                raise ValueError(
+                    f"official reference directory missing: {reference_dir}"
+                )
+            references = sorted(reference_dir.iterdir())
+            primary = reference_dir / "00.jpg"
+            if not primary.is_file():
+                raise ValueError(f"official primary reference missing: {primary}")
+            for reference in references:
+                resolved = reference.resolve()
+                if not resolved.is_relative_to(data_root):
+                    raise ValueError(
+                        f"official reference path escapes data root: {reference}"
+                    )
+                if not reference.is_file():
+                    raise ValueError(
+                        f"official reference is not a readable file: {reference}"
+                    )
+                try:
+                    sha256_file(resolved)
+                except OSError as error:
+                    raise ValueError(
+                        f"official reference is not readable: {reference}: {error}"
+                    ) from error
+
+
 def _build_survey(data_root: Path, target_inputs_path: Path) -> dict[str, object]:
     top, targets = _load_target_inputs(data_root, target_inputs_path)
+    if top["dataset_commit"] == VISTORY_DATASET_COMMIT:
+        validate_frozen_vistory_tree(data_root)
     candidates: list[dict] = []
     rejections: list[dict] = []
     for discovered_path in sorted(

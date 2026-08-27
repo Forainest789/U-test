@@ -23,6 +23,8 @@ RUNTIME_ONLY_ARGS = {
     "merged_output_name",
     "subject_subspace_capture_path",
 }
+FROZEN_MEMORY_ENCODER_LAYERS = tuple(range(16))
+FROZEN_MEMORY_ENCODER_SLOTS = 32
 
 
 def sha256_file(path: Path) -> str:
@@ -87,6 +89,44 @@ def normalized_frozen_args(argv: Sequence[str]) -> dict[str, str]:
     }
     frozen.setdefault("fixed_reference_scope", "all_chunks")
     return dict(sorted(frozen.items()))
+
+
+def validate_slotmem_memory_encoder_geometry(
+    frozen_args: Mapping[str, object],
+) -> tuple[tuple[int, ...], int]:
+    """Require the frozen 16-layer, 32-slot protocol without rewriting config."""
+    raw_layers = frozen_args.get("slotmem_memory_encoder_layers")
+    layers: list[int] = []
+    if type(raw_layers) is str and raw_layers.strip():
+        for part in raw_layers.split(","):
+            bounds = [item.strip() for item in part.strip().split("-")]
+            if len(bounds) not in {1, 2} or any(not item.isdigit() for item in bounds):
+                layers = []
+                break
+            first, last = int(bounds[0]), int(bounds[-1])
+            if last < first:
+                layers = []
+                break
+            layers.extend(range(first, last + 1))
+    if tuple(layers) != FROZEN_MEMORY_ENCODER_LAYERS or len(layers) != len(set(layers)):
+        raise ValueError(
+            "SlotMem donor protocol mismatch: --slotmem_memory_encoder_layers "
+            f"actual={raw_layers!r}, frozen expected='0-15'; use a 32-slot-compatible "
+            "checkpoint/config rather than changing an unproven checkpoint geometry"
+        )
+
+    raw_slots = frozen_args.get("slotmem_memory_encoder_slots")
+    try:
+        slots = int(raw_slots) if type(raw_slots) is str else -1
+    except ValueError:
+        slots = -1
+    if slots != FROZEN_MEMORY_ENCODER_SLOTS:
+        raise ValueError(
+            "SlotMem donor protocol mismatch: --slotmem_memory_encoder_slots "
+            f"actual={raw_slots!r}, frozen expected='32'; use a 32-slot-compatible "
+            "checkpoint/config rather than changing an unproven checkpoint geometry"
+        )
+    return FROZEN_MEMORY_ENCODER_LAYERS, FROZEN_MEMORY_ENCODER_SLOTS
 
 
 def _git_state(repo: Path) -> tuple[str, bool]:

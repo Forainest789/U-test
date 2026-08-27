@@ -153,6 +153,10 @@ def _inputs(tmp_path: Path) -> tuple[Path, Path]:
                 "stale.pt",
                 "--output_path",
                 "stale",
+                "--slotmem_memory_encoder_layers",
+                "0-15",
+                "--slotmem_memory_encoder_slots",
+                "32",
             ]
         },
     )
@@ -301,6 +305,77 @@ def test_dry_run_builds_exactly_three_seed_zero_event_harness_jobs(tmp_path: Pat
     assert run["platform_manifest_sha256"] == _sha256(platform)
     assert isinstance(run["repository"]["commit"], str) and run["repository"]["commit"]
     assert type(run["repository"]["dirty"]) is bool
+    frozen = prefix_contract.normalized_frozen_args(
+        run["jobs"][0]["prefix_inference_args"]
+    )
+    assert {
+        key: frozen[key]
+        for key in (
+            "slotmem_memory_encoder_layers",
+            "slotmem_memory_encoder_slots",
+        )
+    } == {
+        "slotmem_memory_encoder_layers": "0-15",
+        "slotmem_memory_encoder_slots": "32",
+    }
+
+
+def test_dry_run_rejects_64_slot_base_config_before_gpu(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    selection = _selection(tmp_path)
+    base, platform = _inputs(tmp_path)
+    value = json.loads(base.read_text(encoding="utf-8"))
+    value["argv"].extend(["--slotmem_memory_encoder_slots", "64"])
+    _write_json(base, value)
+    calls = []
+    monkeypatch.setattr(
+        "utest.vistory_donor_harness.subprocess.run",
+        lambda *args, **kwargs: calls.append((args, kwargs)),
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=r"actual='64'.*frozen expected='32'.*32-slot-compatible checkpoint/config",
+    ):
+        main(
+            [
+                "dry-run",
+                "--selection",
+                str(selection),
+                "--output",
+                str(tmp_path / "run"),
+                "--base-inference-args",
+                str(base),
+                "--platform-manifest",
+                str(platform),
+            ]
+        )
+
+    assert calls == []
+    assert not (tmp_path / "run" / "run_manifest.json").exists()
+
+
+def test_dry_run_uses_last_duplicate_memory_geometry_option(tmp_path: Path) -> None:
+    selection = _selection(tmp_path)
+    base, platform = _inputs(tmp_path)
+    value = json.loads(base.read_text(encoding="utf-8"))
+    value["argv"][-2:-2] = ["--slotmem_memory_encoder_slots", "64"]
+    _write_json(base, value)
+
+    run = build_donor_run_manifest(
+        selection_path=selection,
+        output_root=tmp_path / "run",
+        base_inference_args_path=base,
+        platform_manifest_path=platform,
+        python_executable=sys.executable,
+    )
+
+    assert len(run["jobs"]) == 3
+    frozen = prefix_contract.normalized_frozen_args(
+        run["jobs"][0]["prefix_inference_args"]
+    )
+    assert frozen["slotmem_memory_encoder_slots"] == "32"
 
 
 def test_dry_run_pins_dump_target_seed_override_to_zero(tmp_path: Path) -> None:

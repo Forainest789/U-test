@@ -13,9 +13,12 @@ import torch
 
 from .content_audit import LAYERS_KEY, _is_layerwise
 from .input_contract import payload_slot_shapes, validate_donor_bundle
-from .prefix_contract import sha256_file, write_json_no_clobber
+from .prefix_contract import (
+    sha256_file,
+    validate_slotmem_memory_encoder_geometry,
+    write_json_no_clobber,
+)
 from .subject_reappearance_harness import _prepared_events
-from .subject_subspace import FROZEN_LAYER_GROUPS
 from .vistory_donor_harness import (
     _json_equal_strict,
     validate_completed_donor_run,
@@ -54,45 +57,12 @@ def _strict_schema_and_seeds(value: Mapping, label: str) -> None:
         raise ValueError(f"{label} seeds must be the integer list [0, 1, 2]")
 
 
-def _strict_layer_list(value: object) -> tuple[int, ...]:
-    raw = "0-15" if value is None else value
-    if type(raw) is not str or not raw.strip():
-        raise ValueError("frozen memory encoder layers must be a non-empty range string")
-    layers: list[int] = []
-    for part in raw.split(","):
-        part = part.strip()
-        bounds = [item.strip() for item in part.split("-")]
-        if not part or len(bounds) not in {1, 2} or any(not item.isdigit() for item in bounds):
-            raise ValueError("frozen memory encoder layers are malformed")
-        first, last = int(bounds[0]), int(bounds[-1])
-        if last < first:
-            raise ValueError("frozen memory encoder layer ranges must be ascending")
-        layers.extend(range(first, last + 1))
-    if len(layers) != len(set(layers)):
-        raise ValueError("frozen memory encoder layers contain duplicates")
-    return tuple(layers)
-
-
 def _dump_geometry(job: Mapping) -> tuple[tuple[int, ...], int]:
     runtime = job.get("dump_runtime_contract")
     frozen_args = runtime.get("frozen_args") if isinstance(runtime, Mapping) else None
     if not isinstance(frozen_args, Mapping):
         raise ValueError("donor dump runtime is missing frozen args")
-    expected_layers = tuple(
-        layer for members in FROZEN_LAYER_GROUPS.values() for layer in members
-    )
-    if _strict_layer_list(frozen_args.get("slotmem_memory_encoder_layers")) != expected_layers:
-        raise ValueError("donor dump must freeze the exact memory encoder layers 0 through 15")
-    raw_slots = frozen_args.get("slotmem_memory_encoder_slots")
-    if type(raw_slots) is not str:
-        raise ValueError("donor dump must explicitly freeze memory encoder slots to 32")
-    try:
-        slots = int(raw_slots.strip())
-    except ValueError as error:
-        raise ValueError("frozen memory encoder slots must be an integer") from error
-    if slots != 32:
-        raise ValueError("donor dump must explicitly freeze memory encoder slots to 32")
-    return expected_layers, slots
+    return validate_slotmem_memory_encoder_geometry(frozen_args)
 
 
 def validate_target_inputs(target_inputs_path: Path) -> dict:

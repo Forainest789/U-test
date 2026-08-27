@@ -20,8 +20,10 @@ from .event_harness import (
 from .prefix_contract import (
     _git_state,
     build_runtime_contract,
+    normalized_frozen_args,
     sha256_file,
     validate_contract,
+    validate_slotmem_memory_encoder_geometry,
     write_json_no_clobber,
 )
 from .vistory_donors import TARGET_EVENT_IDS
@@ -156,7 +158,9 @@ def _canonical_jobs(
     platform_manifest_path: Path,
     offload_models: bool,
 ) -> list[dict]:
-    base = _set_option(_base_argv(base_inference_args_path), "--seed_base", "0")
+    base = _base_argv(base_inference_args_path)
+    validate_slotmem_memory_encoder_geometry(normalized_frozen_args(base))
+    base = _set_option(base, "--seed_base", "0")
     jobs = []
     for selected in sorted(selection["events"], key=lambda row: row["target_event_id"]):
         target_event_id = str(selected["target_event_id"])

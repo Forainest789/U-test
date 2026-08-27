@@ -107,6 +107,13 @@ def _completed_fixture(
 
     base, platform = _inputs(tmp_path / "donors")
     base_value = _read(base)
+    for option in (
+        "--slotmem_memory_encoder_layers",
+        "--slotmem_memory_encoder_slots",
+    ):
+        base_value["argv"] = donor_harness._set_option(
+            base_value["argv"], option, None
+        )
     if encoder_layers is not None:
         base_value["argv"].extend(["--slotmem_memory_encoder_layers", encoder_layers])
     if encoder_slots is not None:
@@ -484,15 +491,8 @@ def test_legacy_multi_bank_dump_runtime_is_rejected(tmp_path: Path) -> None:
 
 
 def test_encoder_slot_count_must_be_explicitly_frozen_to_32(tmp_path: Path) -> None:
-    targets, selection, donor_run, _ = _completed_fixture(tmp_path, encoder_slots=None)
-
-    with pytest.raises(ValueError, match="explicitly.*32"):
-        freeze_vistory_donor_map(
-            target_inputs_path=targets,
-            selection_path=selection,
-            donor_run_manifest_path=donor_run,
-            output_root=tmp_path / "bundle",
-        )
+    with pytest.raises(ValueError, match="actual=None.*frozen expected='32'"):
+        _completed_fixture(tmp_path, encoder_slots=None)
 
 
 @pytest.mark.parametrize(
@@ -502,36 +502,19 @@ def test_encoder_slot_count_must_be_explicitly_frozen_to_32(tmp_path: Path) -> N
 def test_frozen_encoder_geometry_must_match_the_formal_mask_universe(
     tmp_path: Path, encoder_layers: str, encoder_slots: str
 ) -> None:
-    targets, selection, donor_run, _ = _completed_fixture(
-        tmp_path,
-        encoder_layers=encoder_layers,
-        encoder_slots=encoder_slots,
-    )
-
-    with pytest.raises(ValueError, match="memory encoder"):
-        freeze_vistory_donor_map(
-            target_inputs_path=targets,
-            selection_path=selection,
-            donor_run_manifest_path=donor_run,
-            output_root=tmp_path / "bundle",
+    with pytest.raises(ValueError, match="SlotMem donor protocol mismatch"):
+        _completed_fixture(
+            tmp_path,
+            encoder_layers=encoder_layers,
+            encoder_slots=encoder_slots,
         )
 
 
-def test_default_encoder_layer_range_is_accepted_when_slots_are_explicit_32(
+def test_encoder_layer_range_must_be_explicitly_frozen_to_0_through_15(
     tmp_path: Path,
 ) -> None:
-    targets, selection, donor_run, _ = _completed_fixture(
-        tmp_path, encoder_layers=None, encoder_slots="32"
-    )
-
-    result = freeze_vistory_donor_map(
-        target_inputs_path=targets,
-        selection_path=selection,
-        donor_run_manifest_path=donor_run,
-        output_root=tmp_path / "bundle",
-    )
-
-    assert len(result["events"]) == 3
+    with pytest.raises(ValueError, match="actual=None.*frozen expected='0-15'"):
+        _completed_fixture(tmp_path, encoder_layers=None, encoder_slots="32")
 
 
 def test_all_three_payloads_must_share_one_platform_hidden_dimension(tmp_path: Path) -> None:

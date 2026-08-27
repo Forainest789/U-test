@@ -14,6 +14,7 @@ from utest.vistory_donors import (
     build_donor_candidate_survey,
     freeze_donor_selection,
     horizon_bucket,
+    validate_frozen_vistory_tree,
 )
 
 
@@ -62,6 +63,7 @@ def _write_target_inputs(
     source_shot: int,
     target_shot: int,
     event_id: str = "target_event",
+    dataset_commit: str = "dataset-commit",
 ) -> Path:
     story_path = data_root / story_id / "story.json"
     reference = data_root / story_id / "image" / character / "00.jpg"
@@ -69,7 +71,7 @@ def _write_target_inputs(
     event_root.mkdir(parents=True)
     event_manifest = {
         "schema_version": 1,
-        "dataset_commit": "dataset-commit",
+        "dataset_commit": dataset_commit,
         "event_id": event_id,
         "story_id": story_id,
         "character_name": character,
@@ -86,7 +88,7 @@ def _write_target_inputs(
     manifest_path.write_text(json.dumps(event_manifest), encoding="utf-8")
     top = {
         "schema_version": 1,
-        "dataset_commit": "dataset-commit",
+        "dataset_commit": dataset_commit,
         "events": [
             {
                 "event_id": event_id,
@@ -98,6 +100,100 @@ def _write_target_inputs(
     target_inputs = root / "manifest.json"
     target_inputs.write_text(json.dumps(top), encoding="utf-8")
     return target_inputs
+
+
+def _write_frozen_official_tree(data_root: Path) -> None:
+    for story_number in range(1, 81):
+        story_id = f"{story_number:02d}"
+        if story_id == "15":
+            character = "Target"
+            appearances = {2: [character], 8: [character]}
+        elif story_id == "20":
+            character = "Donor"
+            appearances = {3: [character], 9: [character]}
+        else:
+            character = f"Character{story_id}"
+            appearances = {}
+        _write_official_story(
+            data_root,
+            story_id,
+            _story({character: "realistic_human"}, appearances),
+            reference_names=(character,),
+        )
+
+
+def test_official_survey_accepts_and_publishes_a_complete_frozen_tree(
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "official"
+    _write_frozen_official_tree(data_root)
+    targets = _write_target_inputs(
+        tmp_path / "targets",
+        data_root,
+        story_id="15",
+        character="Target",
+        source_shot=2,
+        target_shot=8,
+        dataset_commit="92f845531b67e97a67ae04b256ec5d8c020e8341",
+    )
+    output = tmp_path / "survey.json"
+
+    validate_frozen_vistory_tree(data_root)
+    survey = build_donor_candidate_survey(
+        data_root=data_root,
+        target_inputs_path=targets,
+        output_path=output,
+    )
+
+    assert output.is_file()
+    assert any(row["donor_story_id"] == "20" for row in survey["candidates"])
+
+
+def test_official_survey_rejects_a_missing_non_target_story(tmp_path: Path) -> None:
+    data_root = tmp_path / "official"
+    _write_frozen_official_tree(data_root)
+    (data_root / "42" / "story.json").unlink()
+    targets = _write_target_inputs(
+        tmp_path / "targets",
+        data_root,
+        story_id="15",
+        character="Target",
+        source_shot=2,
+        target_shot=8,
+        dataset_commit="92f845531b67e97a67ae04b256ec5d8c020e8341",
+    )
+    output = tmp_path / "survey.json"
+
+    with pytest.raises(ValueError, match=r"official ViStoryBench tree.*42"):
+        build_donor_candidate_survey(
+            data_root=data_root,
+            target_inputs_path=targets,
+            output_path=output,
+        )
+
+    assert not output.exists()
+
+
+def test_official_survey_rejects_a_missing_non_target_reference(tmp_path: Path) -> None:
+    data_root = tmp_path / "official"
+    _write_frozen_official_tree(data_root)
+    (data_root / "42" / "image" / "Character42" / "00.jpg").unlink()
+    targets = _write_target_inputs(
+        tmp_path / "targets",
+        data_root,
+        story_id="15",
+        character="Target",
+        source_shot=2,
+        target_shot=8,
+        dataset_commit="92f845531b67e97a67ae04b256ec5d8c020e8341",
+    )
+
+    with pytest.raises(ValueError, match=r"official primary reference missing.*42"):
+        build_donor_candidate_survey(
+            data_root=data_root,
+            target_inputs_path=targets,
+            output_path=tmp_path / "survey.json",
+        )
 
 
 def _write_target_inputs_many(
