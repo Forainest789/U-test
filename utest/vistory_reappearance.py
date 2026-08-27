@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Mapping
 from pathlib import Path
 
@@ -82,12 +83,15 @@ def prepare_dataset(
             raise ValueError(f"duplicate event_id: {event_id}")
         seen_event_ids.add(event_id)
 
+        expected_sha = str(spec["story_sha256"])
+        if re.fullmatch(r"[0-9A-Fa-f]{64}", expected_sha) is None:
+            raise ValueError("story_sha256 must contain exactly 64 hexadecimal digits")
         story_path = data_root / str(spec["story_id"]) / "story.json"
         actual_sha = sha256_file(story_path)
-        if actual_sha.lower() != str(spec["story_sha256"]).lower():
+        if actual_sha.lower() != expected_sha.lower():
             raise ValueError(
                 f"story SHA-256 mismatch for {story_path}: "
-                f"expected {spec['story_sha256']}, got {actual_sha}"
+                f"expected {expected_sha}, got {actual_sha}"
             )
         official = json.loads(story_path.read_text(encoding="utf-8-sig"))
         derived, event = convert_event(official, spec)

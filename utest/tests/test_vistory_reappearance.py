@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -116,6 +117,25 @@ def test_prepare_rejects_story_hash_before_parsing(tmp_path) -> None:
 
     with pytest.raises(ValueError, match="story SHA-256 mismatch"):
         prepare_dataset(tmp_path / "data", tmp_path / "output", selection)
+
+
+def test_prepare_rejects_malformed_story_hash_before_reading_file(tmp_path) -> None:
+    selection = {
+        "schema_version": 1,
+        "task_id": "fixture_task",
+        "dataset_commit": "dataset",
+        "evaluator_commit": "evaluator",
+        "seeds": [0, 1, 2],
+        "events": [
+            {
+                **_event_spec("Ana", 2, 5),
+                "story_sha256": "A" * 63,
+            }
+        ],
+    }
+
+    with pytest.raises(ValueError, match="64 hexadecimal"):
+        prepare_dataset(tmp_path / "missing", tmp_path / "output", selection)
 
 
 def test_prepare_accepts_bom_story_when_raw_bytes_hash_matches(tmp_path) -> None:
@@ -250,9 +270,18 @@ def test_frozen_selection_keeps_approved_events_shots_and_hashes() -> None:
             "Chen Sihan's Father",
             1,
             10,
-            "6B1AD31634E5DA0108ACD51B16DA2E7F29B202858FCC5D0E556F4BEDB22D005",
+            "6B1AD31634E5DA0108ACD51B16DA2E7F29B202858FCC5D0E556F4BEDB22D005E",
         ),
     ]
+
+
+def test_frozen_selection_story_hashes_are_64_digit_uppercase_hex() -> None:
+    selection = json.loads(FROZEN_SELECTION.read_text(encoding="utf-8"))
+
+    assert all(
+        re.fullmatch(r"[0-9A-F]{64}", event["story_sha256"])
+        for event in selection["events"]
+    )
 
 
 def test_cli_prepares_dataset_from_explicit_selection(tmp_path, capsys) -> None:
