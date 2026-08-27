@@ -1,12 +1,8 @@
 #!/bin/bash
-REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
+main() (
 set -euo pipefail
 
-if [[ -n "${CONDA_ENV:-}" ]] && command -v conda >/dev/null 2>&1; then
-  eval "$(conda shell.bash hook)"
-  conda activate "${CONDA_ENV}"
-fi
+REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
 export TOKENIZERS_PARALLELISM=false
@@ -55,15 +51,15 @@ fi
 
 if [[ -z "${JSON_PATH}" ]]; then
   echo "JSON_PATH is required"
-  exit 1
+  return 1
 fi
 if [[ ! -f "${JSON_PATH}" ]]; then
   echo "JSON_PATH not found: ${JSON_PATH}"
-  exit 1
+  return 1
 fi
 if [[ "${native_wan_enabled}" == "0" && -z "${HIGH_EXPERT_CKPT_PATH}" && -z "${LOW_EXPERT_CKPT_PATH}" ]]; then
   echo "HIGH_EXPERT_CKPT_PATH/LOW_EXPERT_CKPT_PATH is required unless NATIVE_WAN_INFERENCE=1"
-  exit 1
+  return 1
 fi
 check_ckpt_list() {
   local label="$1"
@@ -74,7 +70,7 @@ check_ckpt_list() {
     path="$(echo "${path}" | xargs)"
     if [[ -n "${path}" && ! -f "${path}" ]]; then
       echo "${label} not found: ${path}"
-      exit 1
+      return 1
     fi
   done
 }
@@ -84,7 +80,7 @@ if [[ "${native_wan_enabled}" == "0" ]]; then
 fi
 if [[ -n "${REF_IMAGE_PATH}" && ! -f "${REF_IMAGE_PATH}" ]]; then
   echo "REF_IMAGE_PATH not found: ${REF_IMAGE_PATH}"
-  exit 1
+  return 1
 fi
 
 mkdir -p "${OUTPUT_DIR}"
@@ -192,3 +188,6 @@ else
   fi
 fi
 "${cmd[@]}"
+)
+
+main "$@"
