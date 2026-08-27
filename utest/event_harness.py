@@ -33,6 +33,15 @@ def _set_option(argv: Sequence[str], name: str, value: str | None) -> list[str]:
     return output
 
 
+def offload_models_from_environment() -> bool:
+    return os.environ.get("SLOTMEM_OFFLOAD_MODELS", "0").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
+
+
 def _write_json(path: Path, payload: Mapping | Sequence) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
@@ -115,6 +124,7 @@ def build_arm_commands(
     donor_manifest: Path | None = None,
     dump_correct_donor: Path | None = None,
     target_seed_override: int | None = None,
+    offload_models: bool | None = None,
     include_native: bool = False,
 ) -> dict[str, list[str]]:
     requested = tuple(str(arm) for arm in arms)
@@ -140,6 +150,7 @@ def build_arm_commands(
             target_idx,
             snapshot,
             target_seed_override,
+            offload_models,
         )
         command = [
             python,
@@ -172,6 +183,7 @@ def build_arm_commands(
             target_idx,
             snapshot,
             target_seed_override,
+            offload_models,
         )
         inference_args = _set_option(inference_args, "--no-native_wan_inference", None)
         inference_args = _set_option(inference_args, "--native_wan_inference", None)
@@ -187,15 +199,18 @@ def _branch_inference_args(
     target_idx: int,
     snapshot: str,
     target_seed_override: int | None,
+    offload_models: bool | None = None,
 ) -> list[str]:
     inference_args = list(contract["base_inference_args"])
     inference_args = _set_option(inference_args, "--offload_models", None)
     inference_args = _set_option(inference_args, "--no-offload_models", None)
-    offload_models = os.environ.get("SLOTMEM_OFFLOAD_MODELS", "0").strip().lower()
+    enabled = (
+        offload_models_from_environment()
+        if offload_models is None
+        else offload_models
+    )
     inference_args.append(
-        "--offload_models"
-        if offload_models in ("1", "true", "yes", "on")
-        else "--no-offload_models"
+        "--offload_models" if enabled else "--no-offload_models"
     )
     inference_args = _set_option(inference_args, "--resume_state_path", snapshot)
     inference_args = _set_option(inference_args, "--start_chunk_idx", str(target_idx))
@@ -550,6 +565,14 @@ def dump_donor(args: argparse.Namespace) -> int:
     contract = json.loads((prefix / "prefix_contract.json").read_text(encoding="utf-8"))
     snapshot = Path(contract["snapshot"]["path"])
     event_json = Path(contract.get("event_json", prefix / "event.json"))
+    target_seed_override = args.target_seed_override
+    if target_seed_override is None:
+        runtime = contract.get("runtime_contract")
+        if not isinstance(runtime, Mapping):
+            raise ValueError("prefix runtime_contract is missing")
+        target_seed_override = runtime.get("target_seed")
+    if type(target_seed_override) is not int:
+        raise ValueError("dump donor target seed override must be an integer")
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=True)
     commands = build_arm_commands(
@@ -559,6 +582,7 @@ def dump_donor(args: argparse.Namespace) -> int:
         arms=("correct",),
         python=args.python,
         dump_correct_donor=args.donor_payload,
+        target_seed_override=target_seed_override,
     )
     expected_hash = contract["snapshot"]["sha256"]
     _run(commands["correct"], output / "correct" / "run.log")
@@ -647,6 +671,7 @@ def main() -> int:
     donor.add_argument("--prefix", type=Path, required=True)
     donor.add_argument("--output", type=Path, required=True)
     donor.add_argument("--donor-payload", type=Path, required=True)
+    donor.add_argument("--target-seed-override", type=int)
     donor.add_argument("--python", default=sys.executable)
     donor.set_defaults(handler=dump_donor)
 

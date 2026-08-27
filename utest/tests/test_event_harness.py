@@ -7,15 +7,21 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
+import utest.event_harness as event_harness
 from utest.event_harness import (
     _writer_evidence,
     build_arm_commands,
     build_prefix_inference_args,
+    dump_donor,
     load_event,
+    prepare_prefix,
     score_event,
     validate_audit_group,
     validate_runtime_reports,
 )
+from utest.prefix_contract import build_runtime_contract
 from utest.qstar import classify_memory_regime
 from utest.memory_utility import REQUIRED_OUTCOMES
 
@@ -142,6 +148,194 @@ def test_arm_commands_apply_one_target_seed_override(tmp_path: Path) -> None:
     for command in commands.values():
         assert command[command.index("--target_seed_override") + 1] == "271"
         assert command[command.index("--start_chunk_idx") + 1] == "4"
+
+
+def test_donor_command_builder_derives_seed_zero_runtime_from_correct_branch(
+    tmp_path: Path,
+) -> None:
+    story = tmp_path / "story.json"
+    reference = tmp_path / "reference.jpg"
+    story.write_text(
+        json.dumps({"chunks": [{"content": f"chunk {index}"} for index in range(5)]}),
+        encoding="utf-8",
+    )
+    reference.write_bytes(b"reference")
+    event = {
+        "source_json_path": str(story),
+        "reference_path": str(reference),
+        "reference_sha256": hashlib.sha256(reference.read_bytes()).hexdigest(),
+        "character_name": "person",
+        "target_chunk_idx": 4,
+    }
+    contract = {
+        "snapshot": {"path": str(tmp_path / "prefix.pt"), "sha256": "abc"},
+        "event": event,
+        "arm_seed": 0,
+        "base_inference_args": [
+            "--json_path",
+            str(story),
+            "--ref_image_path",
+            str(reference),
+            "--seed_base",
+            "0",
+        ],
+    }
+
+    command = build_arm_commands(
+        contract,
+        output_root=tmp_path / "dump",
+        event_json=tmp_path / "event.json",
+        arms=("correct",),
+        dump_correct_donor=tmp_path / "payload.pt",
+        target_seed_override=0,
+        offload_models=False,
+    )["correct"]
+    inference_args = command[command.index("--") + 1 :]
+    runtime = build_runtime_contract(event, inference_args)
+
+    assert inference_args[inference_args.index("--target_seed_override") + 1] == "0"
+    assert "--no-offload_models" in inference_args
+    assert runtime["target_seed"] == 0
+
+
+def test_prepare_prefix_still_returns_zero_and_writes_contract(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    import torch
+
+    story = tmp_path / "story.json"
+    reference = tmp_path / "reference.jpg"
+    platform = tmp_path / "platform.json"
+    event_path = tmp_path / "event.json"
+    story.write_text(
+        json.dumps({"chunks": [{"content": f"chunk {index}"} for index in range(5)]}),
+        encoding="utf-8",
+    )
+    reference.write_bytes(b"reference")
+    platform.write_text("{}", encoding="utf-8")
+    event_path.write_text(
+        json.dumps(
+            {
+                "source_json_path": str(story),
+                "reference_path": str(reference),
+                "reference_sha256": hashlib.sha256(reference.read_bytes()).hexdigest(),
+                "character_name": "person",
+                "target_chunk_idx": 4,
+            }
+        ),
+        encoding="utf-8",
+    )
+    output = tmp_path / "prefix"
+
+    def materialize_snapshot(_command, _log_path):
+        output.mkdir(parents=True, exist_ok=True)
+        torch.save({"next_chunk_idx": 4}, output / "prefix_state.pt")
+
+    monkeypatch.setattr(event_harness, "_run", materialize_snapshot)
+    args = argparse.Namespace(
+        event=event_path,
+        output=output,
+        inference_args_file=None,
+        inference_args=["--seed_base", "0"],
+        target_seed_override=0,
+        python=sys.executable,
+        platform_manifest=platform,
+        arm_seed=0,
+        future_target_video=None,
+        future_target_manifest=None,
+        timestep_indices="0",
+        arms_root=None,
+        allow_dirty_source=True,
+    )
+
+    assert prepare_prefix(args) == 0
+    assert (output / "prefix_contract.json").is_file()
+
+
+def test_dump_donor_defaults_to_strict_frozen_prefix_target_seed(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    import torch
+
+    prefix = tmp_path / "prefix"
+    prefix.mkdir()
+    snapshot = prefix / "prefix_state.pt"
+    snapshot.write_bytes(b"snapshot")
+    event_json = prefix / "event.json"
+    event_json.write_text("{}", encoding="utf-8")
+    (prefix / "prefix_contract.json").write_text(
+        json.dumps(
+            {
+                "snapshot": {
+                    "path": str(snapshot),
+                    "sha256": hashlib.sha256(snapshot.read_bytes()).hexdigest(),
+                },
+                "event": {},
+                "event_json": str(event_json),
+                "runtime_contract": {"target_seed": 271},
+            }
+        ),
+        encoding="utf-8",
+    )
+    output = tmp_path / "dump"
+    payload = tmp_path / "payload.pt"
+    captured = []
+
+    def capture_builder(*args, target_seed_override, **kwargs):
+        captured.append(target_seed_override)
+        return {"correct": ["fake-command"]}
+
+    def materialize_dump(_command, _log_path):
+        torch.save(
+            {"format": "slotmem_donor_payload_v2", "payloads": {}},
+            payload,
+        )
+        audit = output / "correct" / "audit.json"
+        audit.parent.mkdir(parents=True)
+        audit.write_text(
+            json.dumps({"target_read_hits": 1, "intervention_effective": True}),
+            encoding="utf-8",
+        )
+
+    monkeypatch.setattr(event_harness, "build_arm_commands", capture_builder)
+    monkeypatch.setattr(event_harness, "_run", materialize_dump)
+    args = argparse.Namespace(
+        prefix=prefix,
+        output=output,
+        donor_payload=payload,
+        target_seed_override=None,
+        python=sys.executable,
+    )
+
+    assert dump_donor(args) == 0
+    assert captured == [271]
+
+
+@pytest.mark.parametrize("value", [True, 271.0])
+def test_dump_donor_rejects_non_integer_frozen_prefix_target_seed(
+    tmp_path: Path, value: object,
+) -> None:
+    prefix = tmp_path / "prefix"
+    prefix.mkdir()
+    (prefix / "prefix_contract.json").write_text(
+        json.dumps(
+            {
+                "snapshot": {"path": str(prefix / "prefix_state.pt")},
+                "runtime_contract": {"target_seed": value},
+            }
+        ),
+        encoding="utf-8",
+    )
+    args = argparse.Namespace(
+        prefix=prefix,
+        output=tmp_path / "dump",
+        donor_payload=tmp_path / "payload.pt",
+        target_seed_override=None,
+        python=sys.executable,
+    )
+
+    with pytest.raises(ValueError, match="target seed override"):
+        dump_donor(args)
 
 
 def test_seven_run_commands_keep_repeat_adjacent_and_native_last(tmp_path: Path) -> None:
