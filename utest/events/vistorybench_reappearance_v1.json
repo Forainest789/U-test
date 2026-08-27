@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "task_id": "vistorybench_subject_reappearance_v1",
+  "dataset_commit": "92f845531b67e97a67ae04b256ec5d8c020e8341",
+  "evaluator_commit": "b44ec9108668cc2bcc8c5280886b235e9fb8bea9",
+  "seeds": [0, 1, 2],
+  "events": [
+    {
+      "story_id": "79",
+      "event_id": "vistory79_song_yuchen_s2_s8",
+      "character_name": "Song Yuchen",
+      "source_shot": 2,
+      "target_shot": 8,
+      "story_sha256": "4298F6EFAA5F2D4A9D69C86E169E0167CE324334F656033A6D692CAFD9484109"
+    },
+    {
+      "story_id": "15",
+      "event_id": "vistory15_gu_zhenzhen_s8_s20",
+      "character_name": "Gu Zhenzhen",
+      "source_shot": 8,
+      "target_shot": 20,
+      "story_sha256": "AA0412EC1A09C1AB17E3B9426801F7326537BFDB1437C238CEC36AAE1BB4D76D"
+    },
+    {
+      "story_id": "16",
+      "event_id": "vistory16_chen_father_s1_s10",
+      "character_name": "Chen Sihan's Father",
+      "source_shot": 1,
+      "target_shot": 10,
+      "story_sha256": "6B1AD31634E5DA0108ACD51B16DA2E7F29B202858FCC5D0E556F4BEDB22D005"
+    }
+  ]
+}
