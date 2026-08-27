@@ -29,6 +29,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Callable, Mapping
@@ -153,6 +154,77 @@ def transform_tokens(
     raise ValueError(f"unknown arm: {arm}")
 
 
+def _slot_row_indices(rows: int, arm: str, masks: Mapping[str, list[int]]) -> list[int]:
+    mask_name = "random_top8" if arm in {"random_only", "drop_random"} else "semantic_top8"
+    if arm not in {"subject_only", "drop_subject", "random_only", "drop_random", "wrong_subject"}:
+        raise ValueError(f"unknown subject-subspace arm: {arm}")
+    indices = masks.get(mask_name)
+    if not isinstance(indices, list) or not indices:
+        raise ValueError(f"{mask_name} must contain unique ascending in-range slot indices")
+    if any(isinstance(index, bool) or not isinstance(index, int) for index in indices):
+        raise ValueError(f"{mask_name} must contain unique ascending in-range slot indices")
+    if indices != sorted(indices) or len(indices) != len(set(indices)) or indices[0] < 0 or indices[-1] >= rows:
+        raise ValueError(f"{mask_name} must contain unique ascending in-range slot indices")
+    selected = indices if arm.endswith("_only") or arm == "wrong_subject" else [index for index in range(rows) if index not in set(indices)]
+    if not selected:
+        raise ValueError(f"{arm} selected an empty slot payload")
+    return selected
+
+
+def _select_slot_rows(tokens: torch.Tensor, arm: str, selected: list[int], donor=None) -> torch.Tensor:
+    if arm == "wrong_subject":
+        if donor is None:
+            raise ValueError("wrong_subject requires donor tokens")
+        tokens = _match_rows(donor.to(tokens.device, tokens.dtype), tokens)
+    return tokens[selected]
+
+
+def transform_slot_rows(
+    tokens: torch.Tensor,
+    arm: str,
+    masks: Mapping[str, list[int]],
+    donor: torch.Tensor | None = None,
+) -> torch.Tensor:
+    """Apply one frozen equal-budget slot mask to a 2D payload tensor."""
+    if not isinstance(tokens, torch.Tensor) or tokens.ndim != 2 or not tokens.shape[0]:
+        raise ValueError("slot payload must be a nonempty 2D tensor")
+    selected = _slot_row_indices(int(tokens.shape[0]), arm, masks)
+    return _select_slot_rows(tokens, arm, selected, donor)
+
+
+def transform_slot_payload(payload, arm: str, masks_by_layer: Mapping[str, Mapping], donor_tokens=None):
+    """Select layerwise token and metadata rows together at the reader boundary."""
+    tokens = payload.get("tokens") if isinstance(payload, Mapping) else None
+    metadata = payload.get("token_meta") if isinstance(payload, Mapping) else None
+    if not _is_layerwise(tokens) or not _is_layerwise(metadata):
+        raise ValueError("subject-subspace arms require layerwise tokens and token_meta")
+    token_layers, meta_layers = tokens[LAYERS_KEY], metadata[LAYERS_KEY]
+    if set(token_layers) != set(meta_layers):
+        raise ValueError("layerwise token metadata does not match token layers")
+    donor_layers = donor_tokens.get(LAYERS_KEY, {}) if _is_layerwise(donor_tokens) else {}
+    if arm == "wrong_subject" and set(donor_layers) != set(token_layers):
+        raise ValueError("wrong_subject donor layers must exactly match target layers")
+    output_tokens, output_meta, selected = {}, {}, {}
+    for layer, layer_tokens in token_layers.items():
+        key = str(layer)
+        masks = masks_by_layer.get(key)
+        if masks is None:
+            raise ValueError(f"mask manifest has no layer {key}")
+        layer_meta = meta_layers[layer]
+        if not isinstance(layer_meta, list) or len(layer_meta) != int(layer_tokens.shape[0]):
+            raise ValueError(f"token metadata row count does not match layer {key}")
+        donor = donor_layers.get(layer)
+        rows = _slot_row_indices(int(layer_tokens.shape[0]), arm, masks)
+        output_tokens[layer] = _select_slot_rows(layer_tokens, arm, rows, donor)
+        output_meta[layer] = [layer_meta[index] for index in rows]
+        selected[key] = list(rows)
+    return {
+        **payload,
+        "tokens": {LAYERWISE_MARKER: True, LAYERS_KEY: output_tokens},
+        "token_meta": {LAYERWISE_MARKER: True, LAYERS_KEY: output_meta},
+    }, len(output_tokens), selected
+
+
 def transform_payload(
     payload,
     arm: str,
@@ -197,6 +269,10 @@ def sha256_file(path: Path) -> str:
         for block in iter(lambda: handle.read(1 << 20), b""):
             digest.update(block)
     return digest.hexdigest()
+
+
+def _load_tensor_artifact(path: Path | str):
+    return torch.load(path, map_location="cpu", weights_only=True)
 
 
 def validate_donor_manifest(entry: dict, event: dict, donor_path: Path) -> dict:
@@ -248,6 +324,37 @@ def _payload_summary(payload) -> dict:
     return {"layers": 0, "slots": 0, "shapes": {}, "dtypes": {}}
 
 
+def _layer_tensor_hashes(payload, hasher: Callable[[torch.Tensor], str]) -> dict[str, str]:
+    tokens = payload.get("tokens") if isinstance(payload, Mapping) else None
+    if not _is_layerwise(tokens):
+        return {}
+    return {
+        str(layer): hasher(tensor)
+        for layer, tensor in tokens[LAYERS_KEY].items()
+        if isinstance(tensor, torch.Tensor)
+    }
+
+
+def _write_report(path: Path, stats: Mapping, *, exclusive: bool) -> None:
+    data = json.dumps(stats, indent=2).encode("utf-8")
+    if not exclusive:
+        path.write_bytes(data)
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    created = False
+    try:
+        with temporary.open("xb") as handle:
+            created = True
+            handle.write(data)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.link(temporary, path)
+    finally:
+        if created and temporary.exists():
+            temporary.unlink()
+
+
 def _cpu_clone(tokens):
     if isinstance(tokens, torch.Tensor):
         return tokens.detach().cpu().clone()
@@ -272,19 +379,24 @@ def install(
     event: dict | None = None,
     donor_entry: dict | None = None,
     runtime_contract: dict | None = None,
+    subject_contract: Mapping | None = None,
 ):
     """Patch SlotMem's single memory read point. Call before infer_slotmem.main()."""
     import infer_slotmem
 
     gen = None
-    loaded_donor = torch.load(donor_path, map_location="cpu", weights_only=False) if donor_path else {}
+    loaded_donor = (
+        subject_contract["donor_artifact"]
+        if subject_contract and "donor_artifact" in subject_contract
+        else _load_tensor_artifact(donor_path) if donor_path else {}
+    )
     donor = (
         loaded_donor.get("payloads", {})
         if isinstance(loaded_donor, dict) and loaded_donor.get("format") == "slotmem_donor_payload_v2"
         else loaded_donor
     )
     donor_key = str(donor_entry.get("payload_key")) if donor_entry and donor_entry.get("payload_key") else None
-    if arm == "wrong":
+    if arm in {"wrong", "wrong_subject"}:
         if donor_key is None or not isinstance(donor, dict) or donor_key not in donor:
             raise ValueError("wrong donor manifest must select one existing payload_key")
         selected_donor = donor[donor_key]
@@ -293,7 +405,7 @@ def install(
     dumped: dict = {}
     target_character = str((event or {}).get("character_name", ""))
     stats = {
-        "arm": arm,
+        "arm": str(subject_contract.get("arm", arm)) if subject_contract else arm,
         "seed": seed,
         "attempted_reads": 0,
         "source_non_null_reads": 0,
@@ -310,8 +422,11 @@ def install(
         "read_records": [],
         "runtime_contract": dict(runtime_contract or {}),
     }
+    if subject_contract:
+        stats["subject_subspace_contract"] = dict(subject_contract["provenance"])
 
-    original = infer_slotmem.RoleWiseSlotMemoryBank.get_memory_payload_for_read
+    reader_class = infer_slotmem.RoleWiseSlotMemoryBank
+    original = reader_class.get_memory_payload_for_read
 
     def patched(self, char_id, bank_idx=0):
         payload = original(self, char_id, bank_idx)
@@ -342,6 +457,25 @@ def install(
         if dump_path is not None and is_target:
             dumped.setdefault(key, _cpu_clone(payload.get("tokens")))
         if is_target:
+            if subject_contract:
+                from .subject_subspace import capture_tensor_sha256
+                from .subject_subspace_audit import validate_subject_payload
+
+                layers = subject_contract["banks"].get(int(bank_idx))
+                if layers is None:
+                    raise ValueError(f"mask manifest has no bank {bank_idx}")
+                validate_subject_payload(payload, bank_idx=int(bank_idx), layers=layers)
+                record["source_manifest_sha256_by_layer"] = _layer_tensor_hashes(
+                    payload, capture_tensor_sha256
+                )
+                if arm not in {
+                    "subject_only", "drop_subject", "random_only", "drop_random", "wrong_subject"
+                }:
+                    keep = arm != "no_memory"
+                    record["selected_indices_by_layer"] = {
+                        layer: list(range(contract["slot_count"])) if keep else []
+                        for layer, contract in layers.items()
+                    }
             generator_for_layer = None
             if arm == "random":
                 generator_for_layer = lambda layer: torch.Generator().manual_seed(
@@ -354,13 +488,21 @@ def install(
                         layer,
                     )
                 )
-            new_payload, n = transform_payload(
-                payload,
-                arm,
-                gen,
-                selected_donor,
-                generator_for_layer=generator_for_layer,
-            )
+            if subject_contract and arm in {
+                "subject_only", "drop_subject", "random_only", "drop_random", "wrong_subject"
+            }:
+                new_payload, n, selected = transform_slot_payload(
+                    payload, arm, layers, selected_donor
+                )
+                record["selected_indices_by_layer"] = selected
+            else:
+                new_payload, n = transform_payload(
+                    payload,
+                    arm,
+                    gen,
+                    selected_donor,
+                    generator_for_layer=generator_for_layer,
+                )
         else:
             new_payload, n = payload, 0
         stats["layers_transformed"] += n
@@ -370,6 +512,12 @@ def install(
         record["returned_shapes"] = returned["shapes"]
         record["returned_dtypes"] = returned["dtypes"]
         record["returned_sha256"] = _payload_sha256(new_payload)
+        if is_target and subject_contract:
+            from .subject_subspace import capture_tensor_sha256
+
+            record["returned_manifest_sha256_by_layer"] = _layer_tensor_hashes(
+                new_payload, capture_tensor_sha256
+            )
         if not is_target and record["source_sha256"] != record["returned_sha256"]:
             stats["native_read_mismatches"] += 1
         if (
@@ -385,36 +533,45 @@ def install(
         stats["read_records"].append(record)
         return new_payload
 
-    infer_slotmem.RoleWiseSlotMemoryBank.get_memory_payload_for_read = patched
+    reader_class.get_memory_payload_for_read = patched
 
+    flushed = False
     def flush():
-        if dump_path is not None and dumped:
-            torch.save(
-                {
-                    "format": "slotmem_donor_payload_v2",
-                    "event": dict(event or {}),
-                    "payloads": dumped,
-                },
-                dump_path,
-            )
-            stats["donor_dumped"] = str(dump_path)
-            stats["donor_sha256"] = sha256_file(Path(dump_path))
-        if arm == "correct":
-            effective = stats["target_source_non_null_reads"] > 0
-        elif arm == "no_memory":
-            effective = (
-                stats["target_source_non_null_reads"] > 0
-                and stats["target_returned_non_null_reads"] == 0
-            )
-        else:
-            effective = stats["layers_transformed"] > 0
-        if target_character:
-            effective = effective and stats["target_read_hits"] > 0
-        stats["intervention_effective"] = bool(effective)
-        stats["reads"] = stats["attempted_reads"]
-        stats["reads_none"] = stats["attempted_reads"] - stats["source_non_null_reads"]
-        Path(report_path).write_text(json.dumps(stats, indent=2), encoding="utf-8")
-        print(f"[audit] {json.dumps(stats)}", flush=True)
+        nonlocal flushed
+        if flushed:
+            return
+        flushed = True
+        try:
+            if dump_path is not None and dumped:
+                torch.save(
+                    {
+                        "format": "slotmem_donor_payload_v2",
+                        "event": dict(event or {}),
+                        "payloads": dumped,
+                    },
+                    dump_path,
+                )
+                stats["donor_dumped"] = str(dump_path)
+                stats["donor_sha256"] = sha256_file(Path(dump_path))
+            if arm == "correct":
+                effective = stats["target_source_non_null_reads"] > 0
+            elif arm == "no_memory":
+                effective = (
+                    stats["target_source_non_null_reads"] > 0
+                    and stats["target_returned_non_null_reads"] == 0
+                )
+            else:
+                effective = stats["layers_transformed"] > 0
+            if target_character:
+                effective = effective and stats["target_read_hits"] > 0
+            stats["intervention_effective"] = bool(effective)
+            stats["reads"] = stats["attempted_reads"]
+            stats["reads_none"] = stats["attempted_reads"] - stats["source_non_null_reads"]
+            _write_report(Path(report_path), stats, exclusive=subject_contract is not None)
+            print(f"[audit] {json.dumps(stats)}", flush=True)
+        finally:
+            if reader_class.get_memory_payload_for_read is patched:
+                reader_class.get_memory_payload_for_read = original
 
     return flush
 
@@ -485,7 +642,12 @@ def main() -> int:
     donor_entry = None
     if args.arm == "wrong":
         manifest = json.loads(Path(args.donor_manifest).read_text(encoding="utf-8"))
-        validate_donor_bundle(event, Path(args.donor), Path(args.donor_manifest))
+        validate_donor_bundle(
+            event,
+            Path(args.donor),
+            Path(args.donor_manifest),
+            loader=_load_tensor_artifact,
+        )
         donor_entry = validate_donor_manifest(
             select_donor_entry(manifest, event), event, Path(args.donor)
         )

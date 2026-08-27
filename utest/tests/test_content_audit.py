@@ -9,20 +9,125 @@ from pathlib import Path
 import pytest
 import torch
 
+import utest.content_audit as content_audit
 from utest.content_audit import (
     LAYERS_KEY,
     LAYERWISE_MARKER,
+    _load_tensor_artifact,
     install,
     intervention_applies,
     stable_transform_seed,
     transform_payload,
+    transform_slot_payload,
     transform_tokens,
     validate_donor_manifest,
 )
 
 
+def test_subject_slot_payload_keeps_layer_metadata_in_lockstep() -> None:
+    tokens = torch.arange(12, dtype=torch.float32).reshape(4, 3)
+    metadata = [{"slot": index} for index in range(4)]
+    payload = {
+        "tokens": {LAYERWISE_MARKER: True, LAYERS_KEY: {"0": tokens}},
+        "token_meta": {LAYERWISE_MARKER: True, LAYERS_KEY: {"0": metadata}},
+    }
+
+    output, layers, selected = transform_slot_payload(
+        payload,
+        "subject_only",
+        {"0": {"semantic_top8": [1, 3], "random_top8": [0, 2]}},
+    )
+
+    assert layers == 1
+    assert selected == {"0": [1, 3]}
+    assert torch.equal(output["tokens"][LAYERS_KEY]["0"], tokens[[1, 3]])
+    assert output["token_meta"][LAYERS_KEY]["0"] == [metadata[1], metadata[3]]
+
+
+def test_wrong_subject_requires_exact_donor_layers_and_keeps_target_metadata() -> None:
+    correct = torch.zeros(4, 3)
+    donor = torch.arange(12, dtype=torch.float32).reshape(4, 3)
+    metadata = [{"target_slot": index} for index in range(4)]
+    payload = {
+        "tokens": {LAYERWISE_MARKER: True, LAYERS_KEY: {"0": correct}},
+        "token_meta": {LAYERWISE_MARKER: True, LAYERS_KEY: {"0": metadata}},
+    }
+    masks = {"0": {"semantic_top8": [1, 3], "random_top8": [0, 2]}}
+    donor_tokens = {
+        LAYERWISE_MARKER: True,
+        LAYERS_KEY: {"0": donor, "1": donor},
+    }
+
+    with pytest.raises(ValueError, match="donor layers"):
+        transform_slot_payload(payload, "wrong_subject", masks, donor_tokens)
+
+    donor_tokens[LAYERS_KEY].pop("1")
+    output, _, _ = transform_slot_payload(payload, "wrong_subject", masks, donor_tokens)
+    assert torch.equal(output["tokens"][LAYERS_KEY]["0"], donor[[1, 3]])
+    assert output["token_meta"][LAYERS_KEY]["0"] == [metadata[1], metadata[3]]
+
+
 def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def test_tensor_artifact_loader_is_weights_only(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seen = {}
+
+    def fake_load(path, **kwargs):
+        seen.update(kwargs)
+        return {}
+
+    monkeypatch.setattr(torch, "load", fake_load)
+    _load_tensor_artifact(tmp_path / "donor.pt")
+    assert seen["weights_only"] is True
+
+
+def test_flush_restores_reader_hook_and_keeps_consecutive_arms_isolated(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    payload = {"tokens": torch.ones(2, 3), "token_meta": [{}, {}]}
+
+    class FakeBank:
+        def get_memory_payload_for_read(self, char_id, bank_idx=0):
+            return payload
+
+    original = FakeBank.get_memory_payload_for_read
+    monkeypatch.setitem(sys.modules, "infer_slotmem", types.SimpleNamespace(RoleWiseSlotMemoryBank=FakeBank))
+    event = {"character_name": "ana", "target_chunk_idx": 4}
+
+    first = install("no_memory", 0, None, None, str(tmp_path / "first.json"), event=event)
+    bank = FakeBank()
+    bank.current_chunk_idx = 4
+    assert bank.get_memory_payload_for_read("ana") is None
+    first()
+    first()
+    assert FakeBank.get_memory_payload_for_read is original
+
+    second = install("correct", 0, None, None, str(tmp_path / "second.json"), event=event)
+    assert bank.get_memory_payload_for_read("ana") is payload
+    second()
+    assert FakeBank.get_memory_payload_for_read is original
+
+
+def test_flush_restores_reader_hook_when_report_publish_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class FakeBank:
+        def get_memory_payload_for_read(self, char_id, bank_idx=0):
+            return None
+
+    original = FakeBank.get_memory_payload_for_read
+    monkeypatch.setitem(sys.modules, "infer_slotmem", types.SimpleNamespace(RoleWiseSlotMemoryBank=FakeBank))
+    flush = install("correct", 0, None, None, str(tmp_path / "audit.json"), event={})
+    monkeypatch.setattr(content_audit, "_write_report", lambda *args, **kwargs: (_ for _ in ()).throw(OSError("disk")))
+
+    with pytest.raises(OSError, match="disk"):
+        flush()
+    assert FakeBank.get_memory_payload_for_read is original
+    flush()
 
 
 def test_confirmatory_arm_semantics() -> None:

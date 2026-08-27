@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 import json
+import sys
+import types
 from pathlib import Path
 
 import pytest
 import torch
 
+from utest.content_audit import transform_slot_rows
 from utest.prefix_contract import sha256_file
 from utest.subject_subspace import (
+    FROZEN_LAYER_GROUPS,
     SEMANTIC_GROUPS,
     aggregate_semantic_slot_scores,
     build_mask_manifest,
@@ -25,7 +29,383 @@ from utest.subject_subspace import (
     validate_source_capture,
     visual_counterfactual_scores,
 )
+from utest.subject_subspace_audit import (
+    install_subject_subspace,
+    main as audit_main,
+    validate_frozen_donor_artifact,
+    validate_subject_payload,
+    validate_subject_subspace_manifest,
+)
 from utest.subject_subspace_probe import freeze_subject_subspace, main as probe_main
+
+
+def _reader_contract() -> tuple[dict, dict, dict]:
+    event = {
+        "event_id": "event",
+        "character_name": "Ana",
+        "source_chunk_idx": 0,
+        "target_chunk_idx": 6,
+        "target_seed": 0,
+    }
+    layers = {
+        str(layer): torch.full((32, 3), float(layer), dtype=torch.float32)
+        for layer in range(16)
+    }
+    rankings = {}
+    for group, members in FROZEN_LAYER_GROUPS.items():
+        rankings[f"bank_0/group_{group}"] = {
+            "bank": 0,
+            "layer_group": group,
+            "member_layers": list(members),
+            "source_payload_sha256_by_layer": {
+                str(layer): capture_tensor_sha256(layers[str(layer)]) for layer in members
+            },
+            "semantic": list(range(32)),
+            "visual_cf": None,
+            "reference": None,
+        }
+    manifest = build_mask_manifest(
+        inputs={"source_capture_sha256": "a" * 64},
+        rankings=rankings,
+        event=event,
+        seed=0,
+    )
+    payload = {
+        "tokens": {"__layerwise__": True, "layers": layers},
+        "token_meta": {
+            "__layerwise__": True,
+            "layers": {
+                layer: [{"slot": index} for index in range(32)] for layer in layers
+            },
+        },
+    }
+    return event, manifest, payload
+
+
+def test_reader_contract_validates_manifest_and_source_payload_hashes() -> None:
+    event, manifest, payload = _reader_contract()
+    layers = validate_subject_subspace_manifest(manifest, event, seed=0)
+
+    assert set(layers[0]) == {str(layer) for layer in range(16)}
+    validate_subject_payload(payload, bank_idx=0, layers=layers[0])
+
+    payload["tokens"]["layers"]["0"][0, 0] = -1
+    with pytest.raises(ValueError, match="source payload SHA-256"):
+        validate_subject_payload(payload, bank_idx=0, layers=layers[0])
+
+
+def test_reader_manifest_rejects_target_evidence_even_with_a_valid_canonical_hash() -> None:
+    event, manifest, _ = _reader_contract()
+    manifest["inputs"]["target_loss_sha256"] = "f" * 64
+    manifest["mask_manifest_sha256"] = canonical_json_sha256(
+        {key: value for key, value in manifest.items() if key != "mask_manifest_sha256"}
+    )
+
+    with pytest.raises(ValueError, match="target evidence"):
+        validate_subject_subspace_manifest(manifest, event, seed=0)
+
+
+def test_reader_manifest_rejects_nested_target_ranking_and_unbound_source_capture() -> None:
+    event, manifest, _ = _reader_contract()
+    manifest["layers"][0]["rankings"]["target_loss"] = [0]
+    manifest["mask_manifest_sha256"] = canonical_json_sha256(
+        {key: value for key, value in manifest.items() if key != "mask_manifest_sha256"}
+    )
+    with pytest.raises(ValueError, match="target evidence"):
+        validate_subject_subspace_manifest(manifest, event, seed=0)
+
+    _, manifest, _ = _reader_contract()
+    manifest["inputs"]["source_capture_sha256"] = "not-a-sha"
+    manifest["mask_manifest_sha256"] = canonical_json_sha256(
+        {key: value for key, value in manifest.items() if key != "mask_manifest_sha256"}
+    )
+    with pytest.raises(ValueError, match="source capture SHA-256"):
+        validate_subject_subspace_manifest(manifest, event, seed=0)
+
+
+def test_reader_manifest_rejects_non_hex_payload_hash_and_missing_group() -> None:
+    event, manifest, _ = _reader_contract()
+    manifest["layers"][0]["source_payload_sha256_by_layer"]["0"] = "z" * 64
+    manifest["mask_manifest_sha256"] = canonical_json_sha256(
+        {key: value for key, value in manifest.items() if key != "mask_manifest_sha256"}
+    )
+    with pytest.raises(ValueError, match="source payload SHA-256"):
+        validate_subject_subspace_manifest(manifest, event, seed=0)
+
+    _, manifest, _ = _reader_contract()
+    manifest["layers"].pop()
+    manifest["mask_manifest_sha256"] = canonical_json_sha256(
+        {key: value for key, value in manifest.items() if key != "mask_manifest_sha256"}
+    )
+    with pytest.raises(ValueError, match="missing a frozen layer group"):
+        validate_subject_subspace_manifest(manifest, event, seed=0)
+
+
+def test_subject_only_is_applied_only_after_live_payload_validation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    event, manifest, payload = _reader_contract()
+
+    class FakeBank:
+        def get_memory_payload_for_read(self, char_id, bank_idx=0):
+            return payload
+
+    monkeypatch.setitem(
+        sys.modules,
+        "infer_slotmem",
+        types.SimpleNamespace(RoleWiseSlotMemoryBank=FakeBank),
+    )
+    report = tmp_path / "audit.json"
+    flush = install_subject_subspace(
+        arm="subject_only",
+        seed=0,
+        manifest=manifest,
+        event=event,
+        report_path=report,
+        event_file_sha256="e" * 64,
+        manifest_file_sha256="f" * 64,
+    )
+    bank = FakeBank()
+
+    bank.current_chunk_idx = 5
+    assert bank.get_memory_payload_for_read("Ana") is payload
+    bank.current_chunk_idx = 6
+    selected = bank.get_memory_payload_for_read("Ana")
+    assert selected["tokens"]["layers"]["0"].shape == (8, 3)
+    assert [row["slot"] for row in selected["token_meta"]["layers"]["0"]] == list(range(8))
+    assert bank.get_memory_payload_for_read("Bo") is payload
+    flush()
+
+    audit = json.loads(report.read_text(encoding="utf-8"))
+    target = next(row for row in audit["read_records"] if row["chunk_idx"] == 6 and row["character"] == "Ana")
+    assert audit["arm"] == "subject_only"
+    assert audit["subject_subspace_contract"] == {
+        "event_file_sha256": "e" * 64,
+        "event_id": "event",
+        "manifest_file_sha256": "f" * 64,
+        "mask_manifest_sha256": manifest["mask_manifest_sha256"],
+        "seed": 0,
+        "source_capture_sha256": "a" * 64,
+        "target_evidence_read": False,
+    }
+    assert target["selected_indices_by_layer"]["0"] == list(range(8))
+    assert target["source_manifest_sha256_by_layer"]["0"] == manifest["layers"][0]["source_payload_sha256_by_layer"]["0"]
+
+
+@pytest.mark.parametrize(
+    ("arm", "expected"),
+    [
+        ("full_correct", list(range(32))),
+        ("no_memory", []),
+        ("zero_path", list(range(32))),
+    ],
+)
+def test_baseline_arm_reports_have_explicit_layer_selection(
+    arm: str, expected: list[int], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    event, manifest, payload = _reader_contract()
+
+    class FakeBank:
+        def get_memory_payload_for_read(self, char_id, bank_idx=0):
+            return payload
+
+    monkeypatch.setitem(
+        sys.modules,
+        "infer_slotmem",
+        types.SimpleNamespace(RoleWiseSlotMemoryBank=FakeBank),
+    )
+    report = tmp_path / f"{arm}.json"
+    flush = install_subject_subspace(
+        arm=arm, seed=0, manifest=manifest, event=event, report_path=report
+    )
+    bank = FakeBank()
+    bank.current_chunk_idx = 6
+    bank.get_memory_payload_for_read("Ana")
+    flush()
+
+    target = json.loads(report.read_text(encoding="utf-8"))["read_records"][0]
+    assert target["selected_indices_by_layer"]["0"] == expected
+    assert "returned_sha256" in target
+
+
+def test_subject_subspace_audit_self_check(capsys: pytest.CaptureFixture[str]) -> None:
+    assert audit_main(["--self-check"]) == 0
+    assert "self-check OK" in capsys.readouterr().out
+
+
+def test_subject_subspace_report_is_immutable_before_reader_patch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    event, manifest, _ = _reader_contract()
+
+    class FakeBank:
+        def get_memory_payload_for_read(self, char_id, bank_idx=0):
+            return None
+
+    original = FakeBank.get_memory_payload_for_read
+    monkeypatch.setitem(
+        sys.modules,
+        "infer_slotmem",
+        types.SimpleNamespace(RoleWiseSlotMemoryBank=FakeBank),
+    )
+    report = tmp_path / "audit.json"
+    report.write_text("frozen", encoding="utf-8")
+
+    with pytest.raises(FileExistsError):
+        install_subject_subspace(
+            arm="full_correct",
+            seed=0,
+            manifest=manifest,
+            event=event,
+            report_path=report,
+        )
+    assert FakeBank.get_memory_payload_for_read is original
+    assert report.read_text(encoding="utf-8") == "frozen"
+
+
+def test_wrong_subject_requires_a_frozen_validated_donor_before_reader_patch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    event, manifest, _ = _reader_contract()
+
+    class FakeBank:
+        def get_memory_payload_for_read(self, char_id, bank_idx=0):
+            return None
+
+    original = FakeBank.get_memory_payload_for_read
+    monkeypatch.setitem(
+        sys.modules,
+        "infer_slotmem",
+        types.SimpleNamespace(RoleWiseSlotMemoryBank=FakeBank),
+    )
+
+    with pytest.raises(ValueError, match="frozen donor"):
+        install_subject_subspace(
+            arm="wrong_subject",
+            seed=0,
+            manifest=manifest,
+            event=event,
+            report_path=tmp_path / "wrong.json",
+        )
+    assert FakeBank.get_memory_payload_for_read is original
+
+
+def test_wrong_subject_reader_uses_donor_values_and_target_metadata(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    event, manifest, payload = _reader_contract()
+    donor_tokens = {
+        "__layerwise__": True,
+        "layers": {
+            layer: torch.full_like(tensor, 99.0)
+            for layer, tensor in payload["tokens"]["layers"].items()
+        },
+    }
+    artifact = {
+        "format": "slotmem_donor_payload_v2",
+        "event": {
+            "story_id": "donor-story",
+            "entity_uid": "donor::ana",
+            "character_name": "Other Ana",
+        },
+        "payloads": {"Other Ana|0": donor_tokens},
+    }
+    entry = {
+        "donor_story_id": "donor-story",
+        "donor_entity_uid": "donor::ana",
+        "payload_key": "Other Ana|0",
+        "slot_shape": {layer: [32, 3] for layer in donor_tokens["layers"]},
+    }
+
+    class FakeBank:
+        def get_memory_payload_for_read(self, char_id, bank_idx=0):
+            return payload
+
+    monkeypatch.setitem(sys.modules, "infer_slotmem", types.SimpleNamespace(RoleWiseSlotMemoryBank=FakeBank))
+    flush = install_subject_subspace(
+        arm="wrong_subject",
+        seed=0,
+        manifest=manifest,
+        event=event,
+        report_path=tmp_path / "wrong.json",
+        donor_entry=entry,
+        donor_artifact=artifact,
+    )
+    bank = FakeBank()
+    bank.current_chunk_idx = 6
+    output = bank.get_memory_payload_for_read("Ana")
+    flush()
+
+    assert torch.all(output["tokens"]["layers"]["0"] == 99)
+    assert output["token_meta"]["layers"]["0"] == payload["token_meta"]["layers"]["0"][:8]
+
+
+@pytest.mark.parametrize(
+    ("arm", "expected_rows"),
+    [
+        ("subject_only", [1, 3]),
+        ("drop_subject", [0, 2]),
+        ("random_only", [0, 2]),
+        ("drop_random", [1, 3]),
+    ],
+)
+def test_slot_mask_arms_select_exact_rows(arm: str, expected_rows: list[int]) -> None:
+    tokens = torch.arange(16, dtype=torch.float32).reshape(4, 4)
+    masks = {"semantic_top8": [1, 3], "random_top8": [0, 2]}
+
+    assert torch.equal(transform_slot_rows(tokens, arm, masks), tokens[expected_rows])
+
+
+def test_wrong_subject_applies_subject_rows_after_exact_shape_validation() -> None:
+    correct = torch.zeros(4, 3)
+    donor = torch.arange(12, dtype=torch.float32).reshape(4, 3)
+
+    assert torch.equal(
+        transform_slot_rows(correct, "wrong_subject", {"semantic_top8": [1, 3]}, donor),
+        donor[[1, 3]],
+    )
+    with pytest.raises(ValueError, match="exact shape"):
+        transform_slot_rows(correct, "wrong_subject", {"semantic_top8": [1, 3]}, donor[:3])
+
+
+@pytest.mark.parametrize("invalid", [[[1], 2], [3, 1], [1, 1]])
+def test_slot_masks_reject_nested_unsorted_and_duplicate_indices(invalid: list) -> None:
+    with pytest.raises(ValueError, match="unique ascending"):
+        transform_slot_rows(torch.zeros(4, 2), "subject_only", {"semantic_top8": invalid})
+
+
+def test_frozen_wrong_donor_bundle_binds_embedded_identity_key_and_shape() -> None:
+    event, manifest, _ = _reader_contract()
+    banks = validate_subject_subspace_manifest(manifest, event, seed=0)
+    donor = {
+        "__layerwise__": True,
+        "layers": {str(layer): torch.zeros(32, 3) for layer in range(16)},
+    }
+    artifact = {
+        "format": "slotmem_donor_payload_v2",
+        "event": {
+            "story_id": "donor-story",
+            "entity_uid": "donor::ana",
+            "character_name": "Other Ana",
+        },
+        "payloads": {"Other Ana|0": donor},
+    }
+    entry = {
+        "donor_story_id": "donor-story",
+        "donor_entity_uid": "donor::ana",
+        "payload_key": "Other Ana|0",
+        "slot_shape": {str(layer): [32, 3] for layer in range(16)},
+    }
+
+    assert validate_frozen_donor_artifact(artifact, entry, banks=banks) is donor
+    entry["slot_shape"]["0"] = [31, 3]
+    with pytest.raises(ValueError, match="slot_shape"):
+        validate_frozen_donor_artifact(artifact, entry, banks=banks)
+
+    entry["slot_shape"]["0"] = [32, 3]
+    donor["layers"]["0"][0, 0] = float("nan")
+    with pytest.raises(ValueError, match="finite"):
+        validate_frozen_donor_artifact(artifact, entry, banks=banks)
 
 
 def test_semantic_slot_score_penalizes_context() -> None:
