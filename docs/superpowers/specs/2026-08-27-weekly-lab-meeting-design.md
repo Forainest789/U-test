@@ -17,14 +17,16 @@ By the end of the lab meeting, the research group should understand that the can
 
 ## Narrative
 
+The deck follows a research-report sequence, with one claim per slide and the original experimental visuals carrying the result pages:
+
 1. **Weekly Lab Meeting — 8.27**: minimal title slide.
-2. **The memory path works, but identity utility is not yet established**: combine the existing mechanism candidate with the new Mara result and state the bounded conclusion.
-3. **Mechanism candidate: timestep 25, layers 11–15**: retain the local candidate as a hypothesis about where correct-memory information may enter the model.
-4. **Mara-Delta8 uses a seven-arm frozen-control design**: show the chunk-0 memory source, the eight-chunk gap, the chunk-8 target, and the correct/repeat/no-memory/zero/random/wrong/native comparisons.
-5. **Mara memory influences generation across all five timesteps**: show non-zero injection at 5/5 timesteps, increasing from 0.000404 to 0.017253, plus structured decoded-output differences.
-6. **Injection is measurable; content specificity is unstable**: contrast the non-zero influence with mean Q* = -0.000668, positive Q* at 1/5 timesteps, and correct beating both wrong and random at only 1/5 timesteps.
-7. **Validation must pass three separate gates**: influence, correct-content specificity, then identity utility; use the existing causal-validation work only as the experimental framework for these gates.
-8. **Next experiments are defined by decision criteria**: rerun Mara under fully frozen controls, add direct identity evaluation, then expand across characters, scenes, gaps, and seeds. Mention Evan only as an inconclusive replication because it produced no measurable treatment difference.
+2. **Hypothesis**: a valid character-memory mechanism must show measurable influence, correct-content specificity, and decoded identity benefit; timestep 25 / layers 11–15 is the current candidate locus.
+3. **Experiment**: Mara-Delta8 uses seven frozen arms after an eight-chunk, 38.31-second gap, with prompt, target, noise, schedule, and teacher-forced timesteps held fixed.
+4. **Result I — teacher-forced evidence**: show the five-timestep Q* and injection figure plus the editable numeric table. Memory influence is non-zero at 5/5 timesteps; correct-content specificity is positive at only 1/5.
+5. **Result II — decoded evidence**: show the seven-arm keyframes beside the original RGB/RMSE/SNR table supplied by the user. The arms diverge visibly and numerically, but these measures have no identity direction.
+6. **Conclusion**: historical memory enters and affects generation, while stable correct-character use and identity benefit remain unproven.
+7. **Discussion**: separate observation from interpretation; emphasize that output change is not identity correctness, a single character/seed limits inference, and Evan-Delta5 is inconclusive because its teacher-forced arms did not separate.
+8. **Next plan**: rerun Mara under frozen controls and predefined specificity criteria, add independent decoded identity evaluation, then expand characters, scenes, gaps, and seeds before testing dynamic memory.
 
 ## Evidence boundaries
 
@@ -54,8 +56,9 @@ By the end of the lab meeting, the research group should understand that the can
 - No unintended overlap, clipping, or title wrapping.
 - Final deck renders cleanly slide by slide and passes template-fidelity and overflow checks.
 
-## Review revision: evidence-first summary slide
+## Review revision: paper-like, evidence-first deck
 
-- Replace slide 2's four metric cards with one compact Mara timestep-results table and one decoded-arm keyframe comparison taken directly from the experiment report.
-- Keep only a short explanation below the evidence: injection is measurable, while stable correct-content and identity benefit remain unproven.
-- Preserve slides 1 and 3-8 unchanged.
+- Remove the card/module presentation pattern across the deck; use flat figure/table layouts and connected research statements.
+- Place the original experiment table and decoded-arm image directly on the result slide instead of translating them into summary cards.
+- Keep result-slide prose to one summary sentence, with detailed interpretation deferred to conclusion and discussion.
+- Use the sequence Hypothesis → Experiment → Results → Conclusion → Discussion → Next Plan.

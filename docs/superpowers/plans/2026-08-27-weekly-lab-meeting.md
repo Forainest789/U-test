@@ -16,6 +16,8 @@
 - Remove implementation metrics, engineering readiness, and engineering problems from visible content.
 - Separate three claims: measurable influence, correct-content specificity, and decoded identity utility.
 - Do not claim identity improvement from non-zero injection, Q*, RGB differences, or SNR alone.
+- Use a flat, evidence-first research sequence: Hypothesis → Experiment → Results → Conclusion → Discussion → Next Plan.
+- Remove card/module layouts from the audience-facing deck; result slides are dominated by original tables and figures with one summary sentence.
 
 ---
 
@@ -94,3 +96,19 @@
 - [ ] Delete the inherited metric-card content inside slide 2's evidence region and place the table and image in bounded source-layout zones.
 - [ ] Reduce the explanation to two evidence-bound sentences.
 - [ ] Re-export, restore the 0806 theme, render all eight slides, and rerun overflow, placeholder, source-note, and template-fidelity checks.
+
+### Task 6: Rebuild the complete deck as a scientific report
+
+**Files:**
+- Modify: `.codex/weekly-report-2026-08-27-mara/build-weekly-report-mara.mjs`
+- Modify: `Weekly Lab Meeting 0827 Mara.pptx`
+
+**Interfaces:**
+- Consumes: the approved narrative, Mara teacher-forced figure/table, seven-arm decoded image, and the user-supplied complete-video RGB/RMSE/SNR table.
+- Produces: an eight-slide evidence-first weekly report without disconnected card modules.
+
+- [ ] Reorganize slides as title, hypothesis, experiment, two result slides, conclusion, discussion, and next plan.
+- [ ] Use the user-supplied table image and the decoded-arm image together on Result II.
+- [ ] Use the Q*/injection figure and a concise numeric table on Result I.
+- [ ] Limit every result slide to one summary statement and keep conclusion strength proportional to the evidence.
+- [ ] Render and inspect all eight slides individually, then rerun structural, source-note, overflow, and template-fidelity checks.
