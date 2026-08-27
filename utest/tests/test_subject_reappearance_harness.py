@@ -17,6 +17,7 @@ from utest.subject_reappearance_harness import (
     _run_logged,
     _recover_partial_prefix,
     _resume_completed_arm,
+    _ensure_semantic_scores,
     _execute_stage,
     _command_artifact_payload,
     _validate_qstar_report,
@@ -218,14 +219,34 @@ def test_dry_run_writes_one_immutable_nine_block_manifest_without_gpu_or_qstar_c
     ]) == 0
 
     manifest = json.loads((output / "run_manifest.json").read_text(encoding="utf-8"))
+    assert manifest["schema_version"] == 2
+    assert manifest["python"] == "python"
     assert len(manifest["blocks"]) == 9
     assert all(block["full_arms"] == list(FULL_ARMS) for block in manifest["blocks"])
     assert all(block["qstar"] == {"status": "not_available", "reason": "independent_teacher_missing"} for block in manifest["blocks"])
     assert all("qstar_command" not in block["commands"] for block in manifest["blocks"])
     assert all(block["commands"]["preflight"]["status"] == "blocked_missing_donor" for block in manifest["blocks"])
     assert all(block["commands"]["full"]["arm_order"] == list(FULL_ARMS) for block in manifest["blocks"])
-    assert all(block["required_external_inputs"]["semantic_scores"].endswith("semantic_scores.json") for block in manifest["blocks"])
     for block in manifest["blocks"]:
+        semantic = block["commands"]["semantic_scores"]
+        assert semantic[:3] == [
+            str(Path(sys.executable).resolve()),
+            "-m",
+            "utest.source_semantic_scores",
+        ]
+        assert block["source_capture"] in semantic
+        assert block["semantic_scores"] in semantic
+        assert block["event_json"] in semantic
+        assert not any(
+            "target_latent" in arg or "target_frame" in arg for arg in semantic
+        )
+        assert "semantic_scores" not in block["required_external_inputs"]
+        assert block["logs"]["semantic_scores_stdout"].endswith(
+            "semantic_scores.stdout.log"
+        )
+        assert block["logs"]["semantic_scores_stderr"].endswith(
+            "semantic_scores.stderr.log"
+        )
         event = json.loads(Path(block["event_json"]).read_text(encoding="utf-8"))
         preview = block["commands"]["prefix_inference_args"]
         assert event["source_seed"] == event["target_seed"] == block["target_seed"]
@@ -252,6 +273,119 @@ def test_dry_run_rejects_shell_text_base_arguments_without_partial_outputs(tmp_p
             "--base-inference-args", str(base), "--platform-manifest", str(platform),
         ])
     assert not output.exists()
+
+
+def _dry_run_manifest(tmp_path: Path) -> tuple[Path, dict]:
+    inputs = _prepared_inputs(tmp_path)
+    base = tmp_path / "args.json"
+    base.write_text("[]", encoding="utf-8")
+    platform = tmp_path / "platform.json"
+    platform.write_text("{}", encoding="utf-8")
+    output = tmp_path / "run"
+    assert main([
+        "dry-run", "--inputs", str(inputs), "--output", str(output),
+        "--base-inference-args", str(base), "--platform-manifest", str(platform),
+        "--python", "python",
+    ]) == 0
+    path = output / "run_manifest.json"
+    return path, json.loads(path.read_text(encoding="utf-8"))
+
+
+def test_loader_rejects_v1_manifest_with_clear_semantic_migration_message(
+    tmp_path: Path,
+) -> None:
+    path, manifest = _dry_run_manifest(tmp_path)
+    manifest["schema_version"] = 1
+    path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    with pytest.raises(
+        ValueError,
+        match="predates generated semantic scores.*rerun dry-run",
+    ):
+        main(["probe", "--manifest", str(path)])
+
+
+@pytest.mark.parametrize(
+    "tamper",
+    ("module", "target_arg", "output", "external", "logs", "python"),
+)
+def test_loader_rejects_tampered_semantic_producer_contract(
+    tamper: str, tmp_path: Path
+) -> None:
+    path, manifest = _dry_run_manifest(tmp_path)
+    block = manifest["blocks"][0]
+    if tamper == "module":
+        block["commands"]["semantic_scores"][2] = "utest.untrusted_producer"
+    elif tamper == "target_arg":
+        block["commands"]["semantic_scores"].extend(["--target-frame", "future.pt"])
+    elif tamper == "output":
+        changed = str(Path(block["block_dir"]) / "elsewhere" / "semantic.json")
+        block["semantic_scores"] = changed
+        command = block["commands"]["semantic_scores"]
+        command[command.index("--output") + 1] = changed
+    elif tamper == "external":
+        block["required_external_inputs"]["semantic_scores"] = block["semantic_scores"]
+    elif tamper == "logs":
+        block["logs"]["semantic_scores_stdout"] = str(tmp_path / "redirected.log")
+    else:
+        block["commands"]["semantic_scores"][0] = str(
+            tmp_path / "wrapper" / Path(sys.executable).name
+        )
+    path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="semantic|Python interpreter"):
+        main(["probe", "--manifest", str(path)])
+
+
+def test_loader_rejects_self_consistent_block_relocation(tmp_path: Path) -> None:
+    path, manifest = _dry_run_manifest(tmp_path)
+    block = manifest["blocks"][0]
+    original = block["block_dir"]
+    relocated = str(path.parent / "relocated" / block["event_id"] / f"seed_{block['seed']}")
+    block["block_dir"] = relocated
+    for key in (
+        "event_json", "prefix_snapshot", "command_artifact", "source_qualification",
+        "subject_subspace_manifest", "source_capture", "semantic_scores",
+    ):
+        block[key] = block[key].replace(original, relocated)
+    for key, value in block["logs"].items():
+        block["logs"][key] = value.replace(original, relocated)
+    for command_name in ("prefix", "semantic_scores", "probe"):
+        block["commands"][command_name] = [
+            arg.replace(original, relocated)
+            for arg in block["commands"][command_name]
+        ]
+    path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="block directory contract"):
+        main(["probe", "--manifest", str(path)])
+
+
+@pytest.mark.parametrize(
+    "tamper",
+    ("event", "source", "semantic", "output", "extra", "python"),
+)
+def test_loader_rejects_tampered_probe_command_contract(
+    tamper: str, tmp_path: Path
+) -> None:
+    path, manifest = _dry_run_manifest(tmp_path)
+    command = manifest["blocks"][0]["commands"]["probe"]
+    if tamper == "python":
+        command[0] = str(tmp_path / "wrapper" / Path(sys.executable).name)
+    elif tamper == "extra":
+        command.extend(["--target-frame", "future.pt"])
+    else:
+        option = {
+            "event": "--event",
+            "source": "--source-capture",
+            "semantic": "--semantic-scores",
+            "output": "--output",
+        }[tamper]
+        command[command.index(option) + 1] = str(tmp_path / f"changed-{tamper}")
+    path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="probe command contract"):
+        main(["probe", "--manifest", str(path)])
 
 
 def _validated_block(tmp_path: Path) -> tuple[dict, Path]:
@@ -536,7 +670,7 @@ def test_decoded_preflight_mechanical_gate_fails_closed(
         validate_block(block, arms=PREFLIGHT_ARMS)
 
 
-def test_probe_stage_fails_closed_without_external_semantic_scores(
+def test_probe_stage_materializes_and_validates_semantic_scores_before_probe(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     inputs = _prepared_inputs(tmp_path)
@@ -555,13 +689,192 @@ def test_probe_stage_fails_closed_without_external_semantic_scores(
     capture = Path(block["block_dir"]) / "subspace" / "source_capture.pt"
     capture.parent.mkdir(parents=True, exist_ok=True)
     capture.write_bytes(b"capture")
-    monkeypatch.setattr("subprocess.run", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("GPU launched")))
+    calls = []
 
-    with pytest.raises(FileNotFoundError, match="semantic score"):
-        main([
-            "probe", "--manifest", str(output / "run_manifest.json"),
-            "--event-id", block["event_id"], "--seed", str(block["seed"]),
-        ])
+    def fake_run(command, **_kwargs):
+        module = command[2]
+        calls.append(f"run:{module}")
+        if module == "utest.source_semantic_scores":
+            Path(block["semantic_scores"]).write_text("{}", encoding="utf-8")
+
+    def fake_validate(**kwargs):
+        assert kwargs == {
+            "event_path": Path(block["event_json"]),
+            "source_capture_path": Path(block["source_capture"]),
+            "scores_path": Path(block["semantic_scores"]),
+            "repo_root": Path(__file__).parents[2].resolve(),
+        }
+        assert kwargs["scores_path"].is_file()
+        calls.append("validate")
+        return {}
+
+    monkeypatch.setattr("subprocess.run", fake_run)
+    monkeypatch.setattr(
+        "utest.subject_reappearance_harness.validate_source_semantic_scores_file",
+        fake_validate,
+    )
+
+    assert main([
+        "probe", "--manifest", str(output / "run_manifest.json"),
+        "--event-id", block["event_id"], "--seed", str(block["seed"]),
+    ]) == 0
+
+    assert calls == [
+        "run:utest.source_semantic_scores",
+        "validate",
+        "run:utest.subject_subspace_probe",
+    ]
+    assert Path(block["logs"]["semantic_scores_stdout"]).is_file()
+    assert Path(block["logs"]["semantic_scores_stderr"]).is_file()
+
+
+def _semantic_runtime_row(tmp_path: Path) -> dict:
+    root = tmp_path.resolve()
+    subspace = root / "subspace"
+    subspace.mkdir(parents=True, exist_ok=True)
+    event = root / "event.json"
+    capture = subspace / "source_capture.pt"
+    scores = subspace / "semantic_scores.json"
+    mask = subspace / "subject_subspace_manifest.json"
+    return {
+        "block_dir": str(root),
+        "seed": 0,
+        "event_json": str(event),
+        "source_capture": str(capture),
+        "semantic_scores": str(scores),
+        "subject_subspace_manifest": str(mask),
+        "required_external_inputs": {},
+        "commands": {
+            "semantic_scores": [
+                str(Path(sys.executable).resolve()),
+                "-m", "utest.source_semantic_scores",
+                "--event", str(event),
+                "--source-capture", str(capture),
+                "--output", str(scores),
+                "--repo-root", str(Path(__file__).parents[2].resolve()),
+            ],
+            "probe": [
+                str(Path(sys.executable).resolve()),
+                "-m", "utest.subject_subspace_probe",
+                "--event", str(event),
+                "--source-capture", str(capture),
+                "--semantic-scores", str(scores),
+                "--output", str(mask),
+                "--seed", "0",
+            ],
+        },
+        "logs": {
+            "semantic_scores_stdout": str(subspace / "semantic_scores.stdout.log"),
+            "semantic_scores_stderr": str(subspace / "semantic_scores.stderr.log"),
+            "probe_stdout": str(subspace / "stdout.log"),
+            "probe_stderr": str(subspace / "stderr.log"),
+        },
+    }
+
+
+def test_existing_semantic_scores_are_validated_without_being_reproduced(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    row = _semantic_runtime_row(tmp_path)
+    capture = Path(row["source_capture"])
+    scores = Path(row["semantic_scores"])
+    capture.write_bytes(b"capture")
+    scores.write_bytes(b"frozen scores")
+    calls = []
+
+    monkeypatch.setattr(
+        "utest.subject_reappearance_harness._run_logged",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("existing scores were reproduced")
+        ),
+    )
+    monkeypatch.setattr(
+        "utest.subject_reappearance_harness.validate_source_semantic_scores_file",
+        lambda **_kwargs: calls.append("validated"),
+    )
+
+    _ensure_semantic_scores(row)
+
+    assert calls == ["validated"]
+    assert scores.read_bytes() == b"frozen scores"
+
+
+def test_invalid_existing_semantic_scores_are_rejected_without_overwrite(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    row = _semantic_runtime_row(tmp_path)
+    capture = Path(row["source_capture"])
+    scores = Path(row["semantic_scores"])
+    capture.write_bytes(b"capture")
+    scores.write_bytes(b"tampered scores")
+
+    monkeypatch.setattr(
+        "utest.subject_reappearance_harness._run_logged",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("invalid scores were overwritten")
+        ),
+    )
+
+    def reject(**_kwargs):
+        raise ValueError("semantic score provenance mismatch")
+
+    monkeypatch.setattr(
+        "utest.subject_reappearance_harness.validate_source_semantic_scores_file",
+        reject,
+    )
+
+    with pytest.raises(ValueError, match="provenance mismatch"):
+        _ensure_semantic_scores(row)
+
+    assert scores.read_bytes() == b"tampered scores"
+    assert not Path(row["logs"]["semantic_scores_stdout"]).exists()
+    assert not Path(row["logs"]["semantic_scores_stderr"]).exists()
+
+
+def test_probe_resume_validates_scores_before_skipping_a_completed_mask(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    row = _semantic_runtime_row(tmp_path)
+    capture = Path(row["source_capture"])
+    scores = Path(row["semantic_scores"])
+    event = Path(row["event_json"])
+    qualification = tmp_path / "source_qualification.json"
+    mask = Path(row["subject_subspace_manifest"])
+    capture.write_bytes(b"capture")
+    scores.write_text("{}", encoding="utf-8")
+    event.write_text("{}", encoding="utf-8")
+    qualification.write_text('{"status": "passed"}', encoding="utf-8")
+    mask.write_text("{}", encoding="utf-8")
+    calls = []
+    row.update({
+        "event_id": "event",
+        "seed": 0,
+        "source_qualification": str(qualification),
+        "subject_subspace_manifest": str(mask),
+    })
+
+    monkeypatch.setattr(
+        "utest.subject_reappearance_harness.validate_source_semantic_scores_file",
+        lambda **_kwargs: calls.append("semantic"),
+    )
+    monkeypatch.setattr(
+        "utest.subject_reappearance_harness.validate_subject_subspace_manifest",
+        lambda *_args, **_kwargs: calls.append("mask"),
+    )
+    monkeypatch.setattr(
+        "utest.subject_reappearance_harness._load_source_slots",
+        lambda *_args, **_kwargs: calls.append("slots"),
+    )
+    monkeypatch.setattr(
+        "utest.subject_reappearance_harness._run_logged",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("completed probe was rerun")
+        ),
+    )
+
+    _execute_stage({"blocks": [row]}, "probe", resume=True)
+
+    assert calls == ["semantic", "mask", "slots"]
 
 
 def test_failed_preflight_validation_leaves_no_partial_block_events(tmp_path: Path) -> None:

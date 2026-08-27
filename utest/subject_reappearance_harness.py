@@ -24,6 +24,7 @@ from .prefix_contract import build_runtime_contract, sha256_file, validate_contr
 from .subject_subspace import canonical_json_sha256, capture_tensor_sha256
 from .subject_subspace_audit import SUBSPACE_ARMS
 from .subject_subspace_audit import validate_subject_subspace_manifest
+from .source_semantic_scores import validate_source_semantic_scores_file
 from .qstar import SEVEN_RUNS, classify_qstar, qstar_deltas
 
 
@@ -38,6 +39,8 @@ TASK_ID = _FROZEN_SELECTION["task_id"]
 DATASET_COMMIT = _FROZEN_SELECTION["dataset_commit"]
 EVALUATOR_COMMIT = _FROZEN_SELECTION["evaluator_commit"]
 FROZEN_EVENTS = {row["event_id"]: row for row in _FROZEN_SELECTION["events"]}
+REPO_ROOT = Path(__file__).parents[1].resolve()
+RUN_MANIFEST_SCHEMA_VERSION = 2
 
 
 @dataclass(frozen=True)
@@ -45,6 +48,126 @@ class Block:
     event_id: str
     seed: int
     event: Mapping
+
+
+def _validated_inference_python(value: object) -> str:
+    if not isinstance(value, str) or not value or "\x00" in value:
+        raise ValueError("run manifest Python interpreter is invalid")
+    return value
+
+
+def _semantic_scores_command(
+    *, event_path: Path, source_capture: Path, semantic_scores: Path
+) -> list[str]:
+    return [
+        str(Path(sys.executable).resolve()),
+        "-m",
+        "utest.source_semantic_scores",
+        "--event",
+        str(event_path),
+        "--source-capture",
+        str(source_capture),
+        "--output",
+        str(semantic_scores),
+        "--repo-root",
+        str(REPO_ROOT),
+    ]
+
+
+def _validate_semantic_scores_contract(
+    row: Mapping, *, block_dir: Path | None = None
+) -> list[str]:
+    block_dir = (
+        Path(str(row.get("block_dir", ""))).resolve()
+        if block_dir is None
+        else block_dir.resolve()
+    )
+    event_path = block_dir / "event.json"
+    source_capture = block_dir / "subspace" / "source_capture.pt"
+    semantic_scores = block_dir / "subspace" / "semantic_scores.json"
+    expected_command = _semantic_scores_command(
+        event_path=event_path,
+        source_capture=source_capture,
+        semantic_scores=semantic_scores,
+    )
+    commands = row.get("commands")
+    external = row.get("required_external_inputs")
+    logs = row.get("logs")
+    if (
+        str(row.get("event_json", "")) != str(event_path)
+        or str(row.get("source_capture", "")) != str(source_capture)
+        or str(row.get("semantic_scores", "")) != str(semantic_scores)
+    ):
+        raise ValueError("block semantic score artifact path contract is invalid")
+    if not isinstance(commands, Mapping) or commands.get("semantic_scores") != expected_command:
+        raise ValueError("block semantic score command contract is invalid")
+    if not isinstance(external, Mapping) or "semantic_scores" in external:
+        raise ValueError("semantic scores must be generated, not external input")
+    if (
+        not isinstance(logs, Mapping)
+        or logs.get("semantic_scores_stdout")
+        != str(block_dir / "subspace" / "semantic_scores.stdout.log")
+        or logs.get("semantic_scores_stderr")
+        != str(block_dir / "subspace" / "semantic_scores.stderr.log")
+    ):
+        raise ValueError("block semantic score log contract is invalid")
+    return expected_command
+
+
+def _probe_command(
+    *,
+    event_path: Path,
+    source_capture: Path,
+    semantic_scores: Path,
+    output: Path,
+    seed: int,
+) -> list[str]:
+    return [
+        str(Path(sys.executable).resolve()),
+        "-m",
+        "utest.subject_subspace_probe",
+        "--event",
+        str(event_path),
+        "--source-capture",
+        str(source_capture),
+        "--semantic-scores",
+        str(semantic_scores),
+        "--output",
+        str(output),
+        "--seed",
+        str(seed),
+    ]
+
+
+def _validate_probe_contract(
+    row: Mapping, *, block_dir: Path | None = None
+) -> list[str]:
+    block_dir = (
+        Path(str(row.get("block_dir", ""))).resolve()
+        if block_dir is None
+        else block_dir.resolve()
+    )
+    mask = block_dir / "subspace" / "subject_subspace_manifest.json"
+    expected = _probe_command(
+        event_path=block_dir / "event.json",
+        source_capture=block_dir / "subspace" / "source_capture.pt",
+        semantic_scores=block_dir / "subspace" / "semantic_scores.json",
+        output=mask,
+        seed=int(row.get("seed", -1)),
+    )
+    commands = row.get("commands")
+    logs = row.get("logs")
+    if str(row.get("subject_subspace_manifest", "")) != str(mask):
+        raise ValueError("block probe output path contract is invalid")
+    if not isinstance(commands, Mapping) or commands.get("probe") != expected:
+        raise ValueError("block probe command contract is invalid")
+    if (
+        not isinstance(logs, Mapping)
+        or logs.get("probe_stdout") != str(block_dir / "subspace" / "stdout.log")
+        or logs.get("probe_stderr") != str(block_dir / "subspace" / "stderr.log")
+    ):
+        raise ValueError("block probe log contract is invalid")
+    return expected
 
 
 def build_matrix(selection: Mapping, seeds: Sequence[int] = (0, 1, 2)) -> list[Block]:
@@ -302,6 +425,7 @@ def build_run_manifest(
     teacher_map: Path | None = None,
 ) -> dict:
     """Materialize a zero-GPU, immutable command plan for all nine blocks."""
+    python = _validated_inference_python(python)
     selection, inputs_sha = _read_bytes_json(inputs)
     matrix = build_matrix(selection)
     by_id = {row["event_id"]: row for row in _prepared_events(inputs, selection)}
@@ -370,21 +494,18 @@ def build_run_manifest(
                 ]
             )
         prefix_command.extend(["--", *frozen_base])
-        probe_command = [
-            python,
-            "-m",
-            "utest.subject_subspace_probe",
-            "--event",
-            str(event_path),
-            "--source-capture",
-            str(source_capture),
-            "--semantic-scores",
-            str(semantic_scores),
-            "--output",
-            str(mask),
-            "--seed",
-            str(block.seed),
-        ]
+        semantic_scores_command = _semantic_scores_command(
+            event_path=event_path,
+            source_capture=source_capture,
+            semantic_scores=semantic_scores,
+        )
+        probe_command = _probe_command(
+            event_path=event_path,
+            source_capture=source_capture,
+            semantic_scores=semantic_scores,
+            output=mask,
+            seed=block.seed,
+        )
         if donor:
             phase_commands = {
                 "preflight": {"status": "deferred_until_prefix", "arm_order": list(PREFLIGHT_ARMS)},
@@ -398,6 +519,7 @@ def build_run_manifest(
         commands = {
             "prefix": prefix_command,
             "prefix_inference_args": prefix_preview,
+            "semantic_scores": semantic_scores_command,
             "probe": probe_command,
             **phase_commands,
         }
@@ -424,8 +546,8 @@ def build_run_manifest(
                 "source_qualification": str(block_dir / "source_qualification.json"),
                 "subject_subspace_manifest": str(mask),
                 "source_capture": str(source_capture),
+                "semantic_scores": str(semantic_scores),
                 "required_external_inputs": {
-                    "semantic_scores": str(semantic_scores),
                     "wrong_subject_donor_map": None if donor else "missing",
                 },
                 "donor": donor,
@@ -438,14 +560,21 @@ def build_run_manifest(
                 "logs": {
                     "prefix_stdout": str(block_dir / "logs" / "prefix.stdout.log"),
                     "prefix_stderr": str(block_dir / "logs" / "prefix.stderr.log"),
+                    "semantic_scores_stdout": str(
+                        block_dir / "subspace" / "semantic_scores.stdout.log"
+                    ),
+                    "semantic_scores_stderr": str(
+                        block_dir / "subspace" / "semantic_scores.stderr.log"
+                    ),
                     "probe_stdout": str(block_dir / "subspace" / "stdout.log"),
                     "probe_stderr": str(block_dir / "subspace" / "stderr.log"),
                 },
             }
         )
     manifest = {
-        "schema_version": 1,
+        "schema_version": RUN_MANIFEST_SCHEMA_VERSION,
         "task_id": "vistorybench_subject_reappearance_v1",
+        "python": python,
         "inputs_manifest": str(inputs.resolve()),
         "inputs_manifest_sha256": inputs_sha,
         "base_inference_args": str(base_inference_args.resolve()),
@@ -711,8 +840,17 @@ def validate_block(
 
 def _load_run_manifest(path: Path) -> dict:
     manifest = _read_json(path)
-    if manifest.get("schema_version") != 1 or manifest.get("task_id") != TASK_ID:
+    run_root = path.parent.resolve()
+    if manifest.get("schema_version") == 1:
+        raise ValueError(
+            "run manifest predates generated semantic scores; rerun dry-run"
+        )
+    if (
+        manifest.get("schema_version") != RUN_MANIFEST_SCHEMA_VERSION
+        or manifest.get("task_id") != TASK_ID
+    ):
         raise ValueError("run manifest schema/task is not frozen")
+    python = _validated_inference_python(manifest.get("python"))
     for path_key, hash_key in (
         ("inputs_manifest", "inputs_manifest_sha256"),
         ("base_inference_args", "base_inference_args_sha256"),
@@ -730,12 +868,27 @@ def _load_run_manifest(path: Path) -> dict:
         len(blocks) != 9
         or len(addresses) != 9
         or len(event_ids) != 3
+        or event_ids != set(FROZEN_EVENTS)
         or any({seed for candidate, seed in addresses if candidate == event_id} != {0, 1, 2} for event_id in event_ids)
         or manifest.get("preflight_arms") != list(PREFLIGHT_ARMS)
         or manifest.get("full_arms") != list(FULL_ARMS)
     ):
         raise ValueError("run manifest must contain exactly nine unique frozen blocks")
     for row in blocks:
+        expected_block_dir = (
+            run_root / str(row.get("event_id", "")) / f"seed_{int(row.get('seed', -1))}"
+        ).resolve()
+        if str(row.get("block_dir", "")) != str(expected_block_dir):
+            raise ValueError("block directory contract is invalid")
+        _validate_semantic_scores_contract(row, block_dir=expected_block_dir)
+        _validate_probe_contract(row, block_dir=expected_block_dir)
+        commands = row.get("commands", {})
+        if (
+            not isinstance(commands.get("prefix"), list)
+            or not commands["prefix"]
+            or commands["prefix"][0] != python
+        ):
+            raise ValueError("block inference Python interpreter contract is invalid")
         if (
             row.get("preflight_arms") != list(PREFLIGHT_ARMS)
             or row.get("full_arms") != list(FULL_ARMS)
@@ -823,6 +976,29 @@ def _run_logged(command: Sequence[str], stdout_path: Path, stderr_path: Path) ->
         "x", encoding="utf-8"
     ) as stderr:
         subprocess.run(command, stdout=stdout, stderr=stderr, text=True, check=True)
+
+
+def _ensure_semantic_scores(row: Mapping) -> None:
+    """Produce once, validate always, and never overwrite an invalid artifact."""
+    command = _validate_semantic_scores_contract(row)
+    capture = Path(row["source_capture"])
+    if not capture.is_file():
+        raise FileNotFoundError("source capture artifact missing")
+    scores = Path(row["semantic_scores"])
+    if scores.exists() and not scores.is_file():
+        raise ValueError("semantic score artifact is not a file")
+    if not scores.exists():
+        _run_logged(
+            command,
+            Path(row["logs"]["semantic_scores_stdout"]),
+            Path(row["logs"]["semantic_scores_stderr"]),
+        )
+    validate_source_semantic_scores_file(
+        event_path=Path(row["event_json"]),
+        source_capture_path=capture,
+        scores_path=scores,
+        repo_root=REPO_ROOT,
+    )
 
 
 def _selected_blocks(manifest: Mapping, event_id: str | None, seed: int | None) -> list[dict]:
@@ -1191,6 +1367,11 @@ def _execute_stage(
             _freeze_or_load_command_artifact(row, contract)
             continue
         if stage == "probe":
+            qualification = _read_json(Path(row["source_qualification"]))
+            if qualification.get("status") != "passed":
+                raise ValueError("source qualification is not passed")
+            _ensure_semantic_scores(row)
+            probe_command = _validate_probe_contract(row)
             completed = Path(row["subject_subspace_manifest"])
             if resume and completed.is_file():
                 try:
@@ -1201,16 +1382,8 @@ def _execute_stage(
                     continue
                 except (FileNotFoundError, KeyError, TypeError, ValueError):
                     _archive_path(completed)
-            qualification = _read_json(Path(row["source_qualification"]))
-            if qualification.get("status") != "passed":
-                raise ValueError("source qualification is not passed")
-            semantic = Path(row["required_external_inputs"]["semantic_scores"])
-            if not semantic.is_file():
-                raise FileNotFoundError(f"required external semantic score artifact missing: {semantic}")
-            if not (block_dir / "subspace" / "source_capture.pt").is_file():
-                raise FileNotFoundError("source capture artifact missing")
             _run_logged(
-                row["commands"]["probe"],
+                probe_command,
                 Path(row["logs"]["probe_stdout"]),
                 Path(row["logs"]["probe_stderr"]),
             )
