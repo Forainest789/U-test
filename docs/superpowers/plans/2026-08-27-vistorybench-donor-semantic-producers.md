@@ -299,7 +299,7 @@ Call it at the start of the existing probe path, including before the completed-
 Run:
 
 ```bash
-pytest -q utest/tests/test_subject_reappearance_harness.py utest/tests/test_subject_subspace_probe.py
+pytest -q utest/tests/test_subject_reappearance_harness.py utest/tests/test_subject_subspace.py utest/tests/test_source_semantic_scores.py
 python -m utest.subject_reappearance_harness dry-run --help
 ```
 
