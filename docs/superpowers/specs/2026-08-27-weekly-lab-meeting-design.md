@@ -53,3 +53,9 @@ By the end of the lab meeting, the research group should understand that the can
 - No unsupported result claim or unresolved placeholder.
 - No unintended overlap, clipping, or title wrapping.
 - Final deck renders cleanly slide by slide and passes template-fidelity and overflow checks.
+
+## Review revision: evidence-first summary slide
+
+- Replace slide 2's four metric cards with one compact Mara timestep-results table and one decoded-arm keyframe comparison taken directly from the experiment report.
+- Keep only a short explanation below the evidence: injection is measurable, while stable correct-content and identity benefit remain unproven.
+- Preserve slides 1 and 3-8 unchanged.

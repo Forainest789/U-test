@@ -79,3 +79,18 @@
 - [ ] Confirm no engineering metrics or engineering problems remain in visible content.
 - [ ] Fix clipping, wrapping, overlap, unsupported claims, or source-note gaps.
 - [ ] Re-render and repeat checks until all gates pass.
+
+### Task 5: Apply the evidence-first slide 2 review revision
+
+**Files:**
+- Modify: `.codex/weekly-report-2026-08-27-mara/build-weekly-report-mara.mjs`
+- Modify: `Weekly Lab Meeting 0827 Mara.pptx`
+
+**Interfaces:**
+- Consumes: Mara Table 3 and Figure 4 from the experiment report, plus the existing slide 2 title and explanation frames.
+- Produces: a slide 2 led by the original experimental table and decoded-arm image rather than metric cards.
+
+- [ ] Crop the Mara rows from Table 3 and the seven-arm decoded keyframe figure without redrawing either source.
+- [ ] Delete the inherited metric-card content inside slide 2's evidence region and place the table and image in bounded source-layout zones.
+- [ ] Reduce the explanation to two evidence-bound sentences.
+- [ ] Re-export, restore the 0806 theme, render all eight slides, and rerun overflow, placeholder, source-note, and template-fidelity checks.
