@@ -1456,6 +1456,10 @@ def _execute_stage(
             except (FileNotFoundError, KeyError, TypeError, ValueError):
                 if stage != "prefix":
                     raise
+    if stage in {"preflight", "full", "qstar"}:
+        for row in rows:
+            if row["commands"][stage]["status"] == "deferred_until_prefix":
+                _validate_donor_target_compatibility(row)
     for row in rows:
         block_dir = Path(row["block_dir"])
         if stage == "prefix":
@@ -1533,9 +1537,7 @@ def _execute_stage(
         if qualification.get("status") != "passed":
             raise ValueError("source qualification is not passed")
         contract = _validated_prefix_contract(row)
-        if stage == "preflight":
-            _validate_donor_target_compatibility(row)
-        elif stage == "full":
+        if stage == "full":
             preflight_validation = block_dir / "preflight" / "validation.json"
             if not preflight_validation.is_file():
                 raise ValueError("full arms require a passed preflight")

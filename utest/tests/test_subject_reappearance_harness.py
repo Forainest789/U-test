@@ -1503,9 +1503,7 @@ def test_full_revalidates_preflight_with_the_validated_prefix_contract(
     )
     monkeypatch.setattr(
         "utest.subject_reappearance_harness._validate_donor_target_compatibility",
-        lambda _row: (_ for _ in ()).throw(
-            AssertionError("full must rely on its passed preflight")
-        ),
+        lambda _row: None,
     )
 
     def checked(block: dict, **kwargs):
@@ -1579,6 +1577,100 @@ def _rewrite_execution_donor(
         layer: list(tensor.shape) for layer, tensor in layers.items()
     }
     donor_manifest_path.write_text(json.dumps(donor_manifest), encoding="utf-8")
+
+
+def _gpu_stage_execution_row(tmp_path: Path, stage: str) -> dict:
+    row, block_dir = _preflight_execution_row(tmp_path)
+    row["commands"] = {
+        stage: {
+            "status": "deferred_until_prefix",
+            **({"arm_order": ["full_correct"]} if stage != "qstar" else {}),
+        }
+    }
+    if stage == "full":
+        validation = block_dir / "preflight" / "validation.json"
+        validation.parent.mkdir(parents=True)
+        validation.write_text("{}", encoding="utf-8")
+    return row
+
+
+@pytest.mark.parametrize("stage", ("preflight", "full", "qstar"))
+@pytest.mark.parametrize(("second_slot_count", "expected_calls"), ((32, 0), (64, 2)))
+def test_gpu_stage_batch_preflights_every_donor_before_gpu(
+    stage: str,
+    second_slot_count: int,
+    expected_calls: int,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    rows = [
+        _gpu_stage_execution_row(tmp_path / "first", stage),
+        _gpu_stage_execution_row(tmp_path / "second", stage),
+    ]
+    if second_slot_count == 32:
+        _rewrite_execution_donor(rows[1], slot_count=32)
+    calls = []
+    monkeypatch.setattr(
+        "utest.subject_reappearance_harness._validated_prefix_contract",
+        lambda row: {"snapshot": {"path": str(Path(row["block_dir"]) / "snapshot.pt")}},
+    )
+    monkeypatch.setattr(
+        "utest.subject_reappearance_harness._freeze_or_load_command_artifact",
+        lambda _row, _contract: {
+            "preflight": {"full_correct": ["gpu"]},
+            "full": {"full_correct": ["gpu"]},
+            "qstar": ["gpu"],
+        },
+    )
+    monkeypatch.setattr(
+        "utest.subject_reappearance_harness.validate_contract", lambda *_args: []
+    )
+    monkeypatch.setattr(
+        "utest.subject_reappearance_harness.validate_block", lambda *_args, **_kwargs: {}
+    )
+    monkeypatch.setattr(
+        "utest.subject_reappearance_harness._validate_qstar_report", lambda *_args: None
+    )
+    monkeypatch.setattr(
+        "utest.subject_reappearance_harness._run_logged",
+        lambda *_args: calls.append("gpu"),
+    )
+
+    if second_slot_count == 32:
+        with pytest.raises(ValueError, match="donor-target tensor shape mismatch"):
+            _execute_stage({"blocks": rows}, stage)
+    else:
+        _execute_stage({"blocks": rows}, stage)
+
+    assert len(calls) == expected_calls
+
+
+def test_qstar_preflights_single_legacy_32_slot_donor_before_gpu(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    row = _gpu_stage_execution_row(tmp_path, "qstar")
+    _rewrite_execution_donor(row, slot_count=32)
+    calls = []
+    monkeypatch.setattr(
+        "utest.subject_reappearance_harness._validated_prefix_contract",
+        lambda _row: {"snapshot": {"path": str(tmp_path / "snapshot.pt")}},
+    )
+    monkeypatch.setattr(
+        "utest.subject_reappearance_harness._freeze_or_load_command_artifact",
+        lambda _row, _contract: {"qstar": ["gpu"]},
+    )
+    monkeypatch.setattr(
+        "utest.subject_reappearance_harness._validate_qstar_report", lambda *_args: None
+    )
+    monkeypatch.setattr(
+        "utest.subject_reappearance_harness._run_logged",
+        lambda *_args: calls.append("gpu"),
+    )
+
+    with pytest.raises(ValueError, match="donor-target tensor shape mismatch"):
+        _execute_stage({"blocks": [row]}, "qstar")
+
+    assert calls == []
 
 
 def test_preflight_rejects_self_consistent_donor_with_incompatible_target_shape_before_gpu(
