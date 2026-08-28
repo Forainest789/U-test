@@ -432,6 +432,82 @@ def test_extracted_recurrences_preserve_donor_survey_bytes(tmp_path: Path) -> No
     )
 
 
+def test_recurrence_inventory_rejects_characters_appearing_as_a_string(
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "official"
+    story = _story({"Donor": "realistic_human"}, {3: ["Donor"], 9: ["Donor"]})
+    story["Shots"][2]["Characters Appearing"]["en"] = "Donor"
+    _write_official_story(data_root, "20", story, reference_names=("Donor",))
+
+    with pytest.raises(ValueError, match=r"story 20 shot.*en must be a list"):
+        enumerate_official_recurrences(data_root)
+
+
+def test_recurrence_inventory_rejects_duplicate_shot_indices(tmp_path: Path) -> None:
+    data_root = tmp_path / "official"
+    story = _story({"Donor": "realistic_human"}, {3: ["Donor"], 9: ["Donor"]})
+    story["Shots"].append(dict(story["Shots"][0]))
+    _write_official_story(data_root, "20", story, reference_names=("Donor",))
+
+    with pytest.raises(ValueError, match=r"story 20 duplicate shot index: 1"):
+        enumerate_official_recurrences(data_root)
+
+
+@pytest.mark.parametrize("invalid_index", ["1", 1.0, True])
+def test_recurrence_inventory_requires_exact_integer_shot_indices(
+    tmp_path: Path, invalid_index: object
+) -> None:
+    data_root = tmp_path / "official"
+    story = _story({"Donor": "realistic_human"}, {3: ["Donor"], 9: ["Donor"]})
+    story["Shots"][0]["index"] = invalid_index
+    _write_official_story(data_root, "20", story, reference_names=("Donor",))
+
+    with pytest.raises(ValueError, match=r"story 20 shot index must be an integer"):
+        enumerate_official_recurrences(data_root)
+
+
+@pytest.mark.parametrize("appearing", [[""], [" "], ["Unknown"], [1]])
+def test_recurrence_inventory_requires_exact_known_character_names(
+    tmp_path: Path, appearing: list[object]
+) -> None:
+    data_root = tmp_path / "official"
+    story = _story({"Donor": "realistic_human"}, {3: ["Donor"], 9: ["Donor"]})
+    story["Shots"][0]["Characters Appearing"]["en"] = appearing
+    _write_official_story(data_root, "20", story, reference_names=("Donor",))
+
+    with pytest.raises(ValueError, match=r"story 20 shot 1 character identity"):
+        enumerate_official_recurrences(data_root)
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    [
+        ("shots_not_list", r"story 20 Shots must be a list"),
+        ("shot_not_object", r"story 20 shot 0 must be an object"),
+        ("missing_appearing", r"story 20 shot 1 Characters Appearing must be an object"),
+        ("missing_prompt", r"story 20 shot 1 Setting Description.en must be a string"),
+    ],
+)
+def test_recurrence_inventory_reports_missing_required_shot_fields(
+    tmp_path: Path, mutation: str, message: str
+) -> None:
+    data_root = tmp_path / "official"
+    story = _story({"Donor": "realistic_human"}, {3: ["Donor"], 9: ["Donor"]})
+    if mutation == "shots_not_list":
+        story["Shots"] = {}
+    elif mutation == "shot_not_object":
+        story["Shots"][0] = "bad"
+    elif mutation == "missing_appearing":
+        del story["Shots"][0]["Characters Appearing"]
+    else:
+        del story["Shots"][0]["Setting Description"]
+    _write_official_story(data_root, "20", story, reference_names=("Donor",))
+
+    with pytest.raises(ValueError, match=message):
+        enumerate_official_recurrences(data_root)
+
+
 def test_survey_rejects_ambiguous_duplicate_character_presence(tmp_path: Path) -> None:
     data_root = tmp_path / "official"
     _write_official_story(

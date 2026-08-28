@@ -362,6 +362,66 @@ def _candidate_id(candidate: Mapping[str, object]) -> str:
     )
 
 
+def _validated_official_shots(
+    official: Mapping[str, object], story_id: str
+) -> tuple[Mapping[str, object], dict[int, Mapping[str, object]]]:
+    characters = official.get("Characters")
+    if not isinstance(characters, Mapping):
+        raise ValueError(f"official story {story_id} Characters must be an object")
+    for character, row in characters.items():
+        if not isinstance(character, str) or not character.strip():
+            raise ValueError(
+                f"official story {story_id} character identity must be a non-empty string"
+            )
+        if not isinstance(row, Mapping) or "tag" not in row:
+            raise ValueError(
+                f"official story {story_id} character {character!r} must define tag"
+            )
+
+    shots = official.get("Shots")
+    if not isinstance(shots, list):
+        raise ValueError(f"official story {story_id} Shots must be a list")
+    by_index: dict[int, Mapping[str, object]] = {}
+    for position, shot in enumerate(shots):
+        if not isinstance(shot, Mapping):
+            raise ValueError(
+                f"official story {story_id} shot {position} must be an object"
+            )
+        index = shot.get("index")
+        if type(index) is not int:
+            raise ValueError(f"official story {story_id} shot index must be an integer")
+        if index in by_index:
+            raise ValueError(f"official story {story_id} duplicate shot index: {index}")
+        appearing = shot.get("Characters Appearing")
+        if not isinstance(appearing, Mapping):
+            raise ValueError(
+                f"official story {story_id} shot {index} Characters Appearing must be an object"
+            )
+        names = appearing.get("en")
+        if not isinstance(names, list):
+            raise ValueError(
+                f"official story {story_id} shot {index} Characters Appearing.en must be a list"
+            )
+        for name in names:
+            if not isinstance(name, str) or not name.strip() or name not in characters:
+                raise ValueError(
+                    f"official story {story_id} shot {index} character identity "
+                    f"must be a non-empty exact Characters key: {name!r}"
+                )
+        for field in (
+            "Setting Description",
+            "Shot Perspective Design",
+            "Static Shot Description",
+        ):
+            prompt = shot.get(field)
+            if not isinstance(prompt, Mapping) or not isinstance(prompt.get("en"), str):
+                raise ValueError(
+                    f"official story {story_id} shot {index} {field}.en must be a string"
+                )
+        by_index[index] = shot
+    return characters, by_index
+
+
 def enumerate_official_recurrences(data_root: Path) -> list[dict]:
     """Enumerate consecutive official character appearances with audit metadata."""
     data_root = Path(data_root).resolve()
@@ -374,14 +434,14 @@ def enumerate_official_recurrences(data_root: Path) -> list[dict]:
             raise ValueError(f"official story path escapes data root: {discovered_path}")
         story_id = story_path.parent.name
         official = _read_json(story_path, f"official story {story_id}")
-        by_index = {int(shot["index"]): shot for shot in official["Shots"]}
-        normalized_names = [str(name).strip().casefold() for name in official["Characters"]]
+        characters, by_index = _validated_official_shots(official, story_id)
+        normalized_names = [str(name).strip().casefold() for name in characters]
         ambiguous_names = {
             name
-            for name in official["Characters"]
+            for name in characters
             if normalized_names.count(str(name).strip().casefold()) > 1
         }
-        for character, character_row in sorted(official["Characters"].items()):
+        for character, character_row in sorted(characters.items()):
             appearances = [
                 index
                 for index, shot in sorted(by_index.items())
