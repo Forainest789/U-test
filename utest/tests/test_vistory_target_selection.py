@@ -450,6 +450,26 @@ def test_survey_omits_an_adjacent_non_absence_interval(tmp_path: Path) -> None:
     assert "Adjacent" not in {row["character_name"] for row in survey["candidates"]}
 
 
+def test_pinned_survey_rejects_empty_shots_in_a_non_retained_story(
+    tmp_path: Path,
+) -> None:
+    data_root, selection_path = _frozen_fixture(tmp_path)
+    story_path = data_root / "22" / "story.json"
+    story = json.loads(story_path.read_text(encoding="utf-8"))
+    story["Shots"] = []
+    story_path.write_text(json.dumps(story), encoding="utf-8")
+    output_path = tmp_path / "empty-shots-survey.json"
+
+    with pytest.raises(ValueError, match=r"story 22 Shots must not be empty"):
+        build_replacement_target_survey(
+            data_root=data_root,
+            selection_path=selection_path,
+            output_path=output_path,
+        )
+
+    assert not output_path.exists()
+
+
 def test_survey_event_id_preserves_the_official_story_id(tmp_path: Path) -> None:
     data_root, selection_path = _frozen_fixture(tmp_path)
     _replace_recurrence(data_root, "01", "Low ID", 11)

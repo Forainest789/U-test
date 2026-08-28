@@ -368,6 +368,8 @@ def _validated_official_shots(
     characters = official.get("Characters")
     if not isinstance(characters, Mapping):
         raise ValueError(f"official story {story_id} Characters must be an object")
+    if not characters:
+        raise ValueError(f"official story {story_id} Characters must not be empty")
     for character, row in characters.items():
         if not isinstance(character, str) or not character.strip():
             raise ValueError(
@@ -391,6 +393,8 @@ def _validated_official_shots(
     shots = official.get("Shots")
     if not isinstance(shots, list):
         raise ValueError(f"official story {story_id} Shots must be a list")
+    if not shots:
+        raise ValueError(f"official story {story_id} Shots must not be empty")
     by_index: dict[int, Mapping[str, object]] = {}
     for position, shot in enumerate(shots):
         if not isinstance(shot, Mapping):

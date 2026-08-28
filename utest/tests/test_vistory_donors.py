@@ -444,6 +444,26 @@ def test_recurrence_inventory_rejects_characters_appearing_as_a_string(
         enumerate_official_recurrences(data_root)
 
 
+def test_recurrence_inventory_rejects_empty_characters(tmp_path: Path) -> None:
+    data_root = tmp_path / "official"
+    story = _story({"Donor": "realistic_human"}, {3: ["Donor"], 9: ["Donor"]})
+    story["Characters"] = {}
+    _write_official_story(data_root, "20", story, reference_names=())
+
+    with pytest.raises(ValueError, match=r"story 20 Characters must not be empty"):
+        enumerate_official_recurrences(data_root)
+
+
+def test_recurrence_inventory_rejects_empty_shots(tmp_path: Path) -> None:
+    data_root = tmp_path / "official"
+    story = _story({"Donor": "realistic_human"}, {3: ["Donor"], 9: ["Donor"]})
+    story["Shots"] = []
+    _write_official_story(data_root, "20", story, reference_names=("Donor",))
+
+    with pytest.raises(ValueError, match=r"story 20 Shots must not be empty"):
+        enumerate_official_recurrences(data_root)
+
+
 @pytest.mark.parametrize(
     "invalid_prompt", [["portrait of Donor"], {"en": "portrait of Donor"}, None]
 )
