@@ -276,7 +276,7 @@ def _parse_args(text: str) -> list[str]:
 
 def _validate_memory_geometry_args(argv: object, label: str) -> list[str]:
     if not isinstance(argv, list) or not all(type(item) is str for item in argv):
-        raise MemoryGeometryError(f"{label} must be a JSON argv list")
+        raise ValueError(f"{label} must be a JSON argv list")
     validate_slotmem_memory_encoder_geometry(normalized_frozen_args(argv))
     return argv
 

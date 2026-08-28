@@ -669,6 +669,45 @@ def test_missing_prefix_runtime_structure_is_archived_and_rerun_on_resume(
     assert (prefix.with_name("prefix.failed_1") / "prefix_contract.json").is_file()
 
 
+@pytest.mark.parametrize("malformation", ("missing", "mapping", "non_string"))
+def test_malformed_prefix_base_args_are_archived_and_rerun_on_resume(
+    malformation: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path, manifest = _dry_run_manifest(tmp_path)
+    row = manifest["blocks"][0]
+    prefix = Path(row["prefix_snapshot"]).parent
+    contract_path = _materialize_existing_prefix_contract(row)
+    contract = json.loads(contract_path.read_text(encoding="utf-8"))
+    if malformation == "missing":
+        del contract["base_inference_args"]
+    elif malformation == "mapping":
+        contract["base_inference_args"] = {"argv": VALID_BASE_ARGV}
+    else:
+        contract["base_inference_args"].append(64)
+    contract_path.write_text(json.dumps(contract), encoding="utf-8")
+    calls = []
+
+    def rerun_boundary(*args, **kwargs) -> None:
+        calls.append((args, kwargs))
+        raise RuntimeError("prefix rerun reached")
+
+    monkeypatch.setattr(
+        "utest.subject_reappearance_harness._run_logged", rerun_boundary
+    )
+
+    with pytest.raises(RuntimeError, match="prefix rerun reached"):
+        main([
+            "resume",
+            "--manifest", str(path),
+            "--event-id", row["event_id"],
+            "--seed", str(row["seed"]),
+        ])
+
+    assert len(calls) == 1
+    assert not prefix.exists()
+    assert (prefix.with_name("prefix.failed_1") / "prefix_contract.json").is_file()
+
+
 @pytest.mark.parametrize(
     "tamper",
     ("module", "target_arg", "output", "external", "logs", "python"),
