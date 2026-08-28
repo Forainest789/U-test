@@ -578,6 +578,27 @@ def test_existing_32_slot_prefix_contract_is_never_run_or_archived(
     assert not contract_path.parent.with_name("prefix.failed_1").exists()
 
 
+@pytest.mark.parametrize("stage", ("prefix", "resume"))
+def test_second_block_32_slot_prefix_contract_stops_the_whole_batch_before_gpu(
+    stage: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path, manifest = _dry_run_manifest(tmp_path)
+    bad_row = manifest["blocks"][1]
+    contract_path = _materialize_existing_prefix_contract(bad_row, slot_count=32)
+    calls = []
+    monkeypatch.setattr(
+        "utest.subject_reappearance_harness._run_logged",
+        lambda *args, **kwargs: calls.append((args, kwargs)),
+    )
+
+    with pytest.raises(MemoryGeometryError, match="actual='32'.*frozen expected='64'"):
+        main([stage, "--manifest", str(path)])
+
+    assert calls == []
+    assert contract_path.is_file()
+    assert not contract_path.parent.with_name("prefix.failed_1").exists()
+
+
 def test_non_geometry_partial_prefix_resume_still_recovers_before_rerun(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -587,6 +608,43 @@ def test_non_geometry_partial_prefix_resume_still_recovers_before_rerun(
     contract_path = _materialize_existing_prefix_contract(row)
     contract = json.loads(contract_path.read_text(encoding="utf-8"))
     contract["event"]["character_name"] = "corrupt non-geometry identity"
+    contract_path.write_text(json.dumps(contract), encoding="utf-8")
+    calls = []
+
+    def rerun_boundary(*args, **kwargs) -> None:
+        calls.append((args, kwargs))
+        raise RuntimeError("prefix rerun reached")
+
+    monkeypatch.setattr(
+        "utest.subject_reappearance_harness._run_logged", rerun_boundary
+    )
+
+    with pytest.raises(RuntimeError, match="prefix rerun reached"):
+        main([
+            "resume",
+            "--manifest", str(path),
+            "--event-id", row["event_id"],
+            "--seed", str(row["seed"]),
+        ])
+
+    assert len(calls) == 1
+    assert not prefix.exists()
+    assert (prefix.with_name("prefix.failed_1") / "prefix_contract.json").is_file()
+
+
+@pytest.mark.parametrize("missing", ("runtime_contract", "frozen_args"))
+def test_missing_prefix_runtime_structure_is_archived_and_rerun_on_resume(
+    missing: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path, manifest = _dry_run_manifest(tmp_path)
+    row = manifest["blocks"][0]
+    prefix = Path(row["prefix_snapshot"]).parent
+    contract_path = _materialize_existing_prefix_contract(row)
+    contract = json.loads(contract_path.read_text(encoding="utf-8"))
+    if missing == "runtime_contract":
+        del contract["runtime_contract"]
+    else:
+        del contract["runtime_contract"]["frozen_args"]
     contract_path.write_text(json.dumps(contract), encoding="utf-8")
     calls = []
 

@@ -1117,7 +1117,7 @@ def _validated_prefix_contract(row: Mapping) -> dict:
         else None
     )
     if not isinstance(frozen_args, Mapping):
-        raise MemoryGeometryError("prefix contract runtime frozen args are invalid")
+        raise ValueError("prefix contract runtime frozen args are invalid")
     validate_slotmem_memory_encoder_geometry(frozen_args)
     _validate_memory_geometry_args(
         contract.get("base_inference_args"),
@@ -1443,7 +1443,19 @@ def _execute_stage(
     seed: int | None = None,
     resume: bool = False,
 ) -> None:
-    for row in _selected_blocks(manifest, event_id, seed):
+    rows = _selected_blocks(manifest, event_id, seed)
+    if stage == "prefix":
+        for row in rows:
+            completed = Path(row["block_dir"]) / "prefix" / "prefix_contract.json"
+            if not completed.is_file():
+                continue
+            try:
+                _validated_prefix_contract(row)
+            except MemoryGeometryError:
+                raise
+            except (FileNotFoundError, KeyError, TypeError, ValueError):
+                pass
+    for row in rows:
         block_dir = Path(row["block_dir"])
         if stage == "prefix":
             completed = block_dir / "prefix" / "prefix_contract.json"
