@@ -29,6 +29,10 @@ FROZEN_SUBJECT_SUBSPACE_BUDGET: int = 8
 FROZEN_SUBJECT_SUBSPACE_FRACTION: float = 0.125
 
 
+class MemoryGeometryError(ValueError):
+    """The effective SlotMem memory geometry violates the frozen protocol."""
+
+
 def sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
@@ -73,7 +77,13 @@ def _arguments(argv: Sequence[str]) -> dict[str, str]:
         if not token.startswith("--"):
             index += 1
             continue
-        name = token[2:].replace("-", "_")
+        option = token[2:]
+        if "=" in option:
+            name, value = option.split("=", 1)
+            parsed[name.replace("-", "_")] = value
+            index += 1
+            continue
+        name = option.replace("-", "_")
         if index + 1 < len(argv) and not str(argv[index + 1]).startswith("--"):
             parsed[name] = str(argv[index + 1])
             index += 2
@@ -111,7 +121,7 @@ def validate_slotmem_memory_encoder_geometry(
                 break
             layers.extend(range(first, last + 1))
     if tuple(layers) != FROZEN_MEMORY_ENCODER_LAYERS or len(layers) != len(set(layers)):
-        raise ValueError(
+        raise MemoryGeometryError(
             "SlotMem donor protocol mismatch: --slotmem_memory_encoder_layers "
             f"actual={raw_layers!r}, frozen expected='0-15'; use a 64-slot-compatible "
             "checkpoint/config rather than changing an unproven checkpoint geometry"
@@ -123,7 +133,7 @@ def validate_slotmem_memory_encoder_geometry(
     except ValueError:
         slots = -1
     if slots != FROZEN_MEMORY_ENCODER_SLOTS:
-        raise ValueError(
+        raise MemoryGeometryError(
             "SlotMem donor protocol mismatch: --slotmem_memory_encoder_slots "
             f"actual={raw_slots!r}, frozen expected='64'; use a 64-slot-compatible "
             "checkpoint/config rather than changing an unproven checkpoint geometry"

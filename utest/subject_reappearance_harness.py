@@ -22,6 +22,7 @@ from .event_harness import (
 )
 from .prefix_contract import (
     FROZEN_MEMORY_ENCODER_SLOTS,
+    MemoryGeometryError,
     build_runtime_contract,
     normalized_frozen_args,
     sha256_file,
@@ -275,7 +276,7 @@ def _parse_args(text: str) -> list[str]:
 
 def _validate_memory_geometry_args(argv: object, label: str) -> list[str]:
     if not isinstance(argv, list) or not all(type(item) is str for item in argv):
-        raise ValueError(f"{label} must be a JSON argv list")
+        raise MemoryGeometryError(f"{label} must be a JSON argv list")
     validate_slotmem_memory_encoder_geometry(normalized_frozen_args(argv))
     return argv
 
@@ -966,7 +967,9 @@ def _load_run_manifest(path: Path) -> dict:
         )
         prefix_command = commands["prefix"]
         if "--" not in prefix_command:
-            raise ValueError("block prefix command is missing the inference argv separator")
+            raise MemoryGeometryError(
+                "block prefix command is missing the inference argv separator"
+            )
         _validate_memory_geometry_args(
             prefix_command[prefix_command.index("--") + 1 :],
             "block prefix command inference args",
@@ -1114,7 +1117,7 @@ def _validated_prefix_contract(row: Mapping) -> dict:
         else None
     )
     if not isinstance(frozen_args, Mapping):
-        raise ValueError("prefix contract runtime frozen args are invalid")
+        raise MemoryGeometryError("prefix contract runtime frozen args are invalid")
     validate_slotmem_memory_encoder_geometry(frozen_args)
     _validate_memory_geometry_args(
         contract.get("base_inference_args"),
@@ -1444,13 +1447,17 @@ def _execute_stage(
         block_dir = Path(row["block_dir"])
         if stage == "prefix":
             completed = block_dir / "prefix" / "prefix_contract.json"
-            if resume and completed.is_file():
+            if completed.is_file():
                 try:
                     contract = _validated_prefix_contract(row)
-                    _freeze_or_load_command_artifact(row, contract)
-                    continue
+                    if resume:
+                        _freeze_or_load_command_artifact(row, contract)
+                        continue
+                except MemoryGeometryError:
+                    raise
                 except (FileNotFoundError, KeyError, TypeError, ValueError):
-                    _recover_partial_prefix(row)
+                    if resume:
+                        _recover_partial_prefix(row)
             elif resume and (block_dir / "prefix").exists():
                 _recover_partial_prefix(row)
             _run_logged(

@@ -28,7 +28,12 @@ from utest.subject_reappearance_harness import (
 from utest.subject_subspace import FROZEN_LAYER_GROUPS, build_mask_manifest
 from utest.subject_subspace import capture_tensor_sha256
 from utest.content_audit import LAYERS_KEY, _payload_sha256, transform_slot_rows
-from utest.prefix_contract import build_runtime_contract, normalized_frozen_args, sha256_file
+from utest.prefix_contract import (
+    MemoryGeometryError,
+    build_runtime_contract,
+    normalized_frozen_args,
+    sha256_file,
+)
 
 
 VALID_BASE_ARGV = [
@@ -405,6 +410,29 @@ def _dry_run_manifest(tmp_path: Path) -> tuple[Path, dict]:
     return path, json.loads(path.read_text(encoding="utf-8"))
 
 
+def _materialize_existing_prefix_contract(row: dict, *, slot_count: int = 64) -> Path:
+    snapshot = Path(row["prefix_snapshot"])
+    snapshot.parent.mkdir(parents=True)
+    snapshot.write_bytes(f"existing {slot_count}-slot prefix".encode())
+    event = json.loads(Path(row["event_json"]).read_text(encoding="utf-8"))
+    inference_args = [
+        *row["commands"]["prefix_inference_args"],
+        f"--slotmem_memory_encoder_slots={slot_count}",
+    ]
+    contract = {
+        "event": event,
+        "snapshot": {
+            "path": str(snapshot.resolve()),
+            "sha256": sha256_file(snapshot),
+        },
+        "runtime_contract": build_runtime_contract(event, inference_args),
+        "base_inference_args": inference_args,
+    }
+    contract_path = snapshot.parent / "prefix_contract.json"
+    contract_path.write_text(json.dumps(contract), encoding="utf-8")
+    return contract_path
+
+
 def test_loader_rejects_v1_manifest_with_clear_semantic_migration_message(
     tmp_path: Path,
 ) -> None:
@@ -522,6 +550,65 @@ def test_existing_manifest_rejects_block_geometry_duplicates_64_then_32(
         main(["prefix", "--manifest", str(path), "--seed", "0"])
 
     assert calls == []
+
+
+@pytest.mark.parametrize("stage", ("prefix", "resume"))
+def test_existing_32_slot_prefix_contract_is_never_run_or_archived(
+    stage: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path, manifest = _dry_run_manifest(tmp_path)
+    row = manifest["blocks"][0]
+    contract_path = _materialize_existing_prefix_contract(row, slot_count=32)
+    calls = []
+    monkeypatch.setattr(
+        "utest.subject_reappearance_harness._run_logged",
+        lambda *args, **kwargs: calls.append((args, kwargs)),
+    )
+
+    with pytest.raises(MemoryGeometryError, match="actual='32'.*frozen expected='64'"):
+        main([
+            stage,
+            "--manifest", str(path),
+            "--event-id", row["event_id"],
+            "--seed", str(row["seed"]),
+        ])
+
+    assert calls == []
+    assert contract_path.is_file()
+    assert not contract_path.parent.with_name("prefix.failed_1").exists()
+
+
+def test_non_geometry_partial_prefix_resume_still_recovers_before_rerun(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path, manifest = _dry_run_manifest(tmp_path)
+    row = manifest["blocks"][0]
+    prefix = Path(row["prefix_snapshot"]).parent
+    contract_path = _materialize_existing_prefix_contract(row)
+    contract = json.loads(contract_path.read_text(encoding="utf-8"))
+    contract["event"]["character_name"] = "corrupt non-geometry identity"
+    contract_path.write_text(json.dumps(contract), encoding="utf-8")
+    calls = []
+
+    def rerun_boundary(*args, **kwargs) -> None:
+        calls.append((args, kwargs))
+        raise RuntimeError("prefix rerun reached")
+
+    monkeypatch.setattr(
+        "utest.subject_reappearance_harness._run_logged", rerun_boundary
+    )
+
+    with pytest.raises(RuntimeError, match="prefix rerun reached"):
+        main([
+            "resume",
+            "--manifest", str(path),
+            "--event-id", row["event_id"],
+            "--seed", str(row["seed"]),
+        ])
+
+    assert len(calls) == 1
+    assert not prefix.exists()
+    assert (prefix.with_name("prefix.failed_1") / "prefix_contract.json").is_file()
 
 
 @pytest.mark.parametrize(
@@ -1184,22 +1271,7 @@ def test_resume_accepts_an_existing_64_slot_prefix_contract(
     _path, manifest = _dry_run_manifest(tmp_path)
     row = manifest["blocks"][0]
     snapshot = Path(row["prefix_snapshot"])
-    snapshot.parent.mkdir(parents=True)
-    snapshot.write_bytes(b"valid 64-slot prefix")
-    event = json.loads(Path(row["event_json"]).read_text(encoding="utf-8"))
-    inference_args = row["commands"]["prefix_inference_args"]
-    contract = {
-        "event": event,
-        "snapshot": {
-            "path": str(snapshot.resolve()),
-            "sha256": sha256_file(snapshot),
-        },
-        "runtime_contract": build_runtime_contract(event, inference_args),
-        "base_inference_args": inference_args,
-    }
-    (snapshot.parent / "prefix_contract.json").write_text(
-        json.dumps(contract), encoding="utf-8"
-    )
+    _materialize_existing_prefix_contract(row)
     calls = []
     monkeypatch.setattr(
         "utest.subject_reappearance_harness._run_logged",

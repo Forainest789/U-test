@@ -11,6 +11,7 @@ from utest.prefix_contract import (
     FROZEN_SUBJECT_SUBSPACE_FRACTION,
     build_contract,
     build_runtime_contract,
+    normalized_frozen_args,
     sha256_file,
     validate_contract,
     validate_slotmem_memory_encoder_geometry,
@@ -60,6 +61,40 @@ def test_frozen_geometry_matches_existing_64_slot_checkpoint() -> None:
     assert slots == FROZEN_MEMORY_ENCODER_SLOTS == 64
     assert FROZEN_SUBJECT_SUBSPACE_BUDGET == 8
     assert FROZEN_SUBJECT_SUBSPACE_FRACTION == 0.125
+
+
+def test_inline_geometry_matches_existing_64_slot_checkpoint() -> None:
+    layers, slots = validate_slotmem_memory_encoder_geometry(
+        normalized_frozen_args([
+            "--slotmem_memory_encoder_layers=0-15",
+            "--slotmem_memory_encoder_slots=64",
+        ])
+    )
+
+    assert layers == tuple(range(16))
+    assert slots == 64
+
+
+def test_paired_64_then_inline_32_uses_the_last_geometry_value() -> None:
+    with pytest.raises(ValueError, match="actual='32'.*frozen expected='64'"):
+        validate_slotmem_memory_encoder_geometry(normalized_frozen_args([
+            "--slotmem_memory_encoder_layers", "0-15",
+            "--slotmem_memory_encoder_slots", "64",
+            "--slotmem_memory_encoder_slots=32",
+        ]))
+
+
+def test_inline_32_then_paired_64_uses_the_last_geometry_value() -> None:
+    layers, slots = validate_slotmem_memory_encoder_geometry(
+        normalized_frozen_args([
+            "--slotmem_memory_encoder_layers=0-15",
+            "--slotmem_memory_encoder_slots=32",
+            "--slotmem_memory_encoder_slots", "64",
+        ])
+    )
+
+    assert layers == tuple(range(16))
+    assert slots == 64
 
 
 def test_legacy_32_slot_geometry_is_rejected() -> None:
