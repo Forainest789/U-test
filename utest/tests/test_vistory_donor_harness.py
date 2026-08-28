@@ -156,7 +156,7 @@ def _inputs(tmp_path: Path) -> tuple[Path, Path]:
                 "--slotmem_memory_encoder_layers",
                 "0-15",
                 "--slotmem_memory_encoder_slots",
-                "32",
+                "64",
             ]
         },
     )
@@ -316,17 +316,17 @@ def test_dry_run_builds_exactly_three_seed_zero_event_harness_jobs(tmp_path: Pat
         )
     } == {
         "slotmem_memory_encoder_layers": "0-15",
-        "slotmem_memory_encoder_slots": "32",
+        "slotmem_memory_encoder_slots": "64",
     }
 
 
-def test_dry_run_rejects_64_slot_base_config_before_gpu(
+def test_dry_run_rejects_legacy_32_slot_base_config_before_gpu(
     tmp_path: Path, monkeypatch,
 ) -> None:
     selection = _selection(tmp_path)
     base, platform = _inputs(tmp_path)
     value = json.loads(base.read_text(encoding="utf-8"))
-    value["argv"].extend(["--slotmem_memory_encoder_slots", "64"])
+    value["argv"].extend(["--slotmem_memory_encoder_slots", "32"])
     _write_json(base, value)
     calls = []
     monkeypatch.setattr(
@@ -336,7 +336,7 @@ def test_dry_run_rejects_64_slot_base_config_before_gpu(
 
     with pytest.raises(
         ValueError,
-        match=r"actual='64'.*frozen expected='32'.*32-slot-compatible checkpoint/config",
+        match=r"actual='32'.*frozen expected='64'.*64-slot-compatible checkpoint/config",
     ):
         main(
             [
@@ -360,7 +360,7 @@ def test_dry_run_uses_last_duplicate_memory_geometry_option(tmp_path: Path) -> N
     selection = _selection(tmp_path)
     base, platform = _inputs(tmp_path)
     value = json.loads(base.read_text(encoding="utf-8"))
-    value["argv"][-2:-2] = ["--slotmem_memory_encoder_slots", "64"]
+    value["argv"][-2:-2] = ["--slotmem_memory_encoder_slots", "63"]
     _write_json(base, value)
 
     run = build_donor_run_manifest(
@@ -375,7 +375,7 @@ def test_dry_run_uses_last_duplicate_memory_geometry_option(tmp_path: Path) -> N
     frozen = prefix_contract.normalized_frozen_args(
         run["jobs"][0]["prefix_inference_args"]
     )
-    assert frozen["slotmem_memory_encoder_slots"] == "32"
+    assert frozen["slotmem_memory_encoder_slots"] == "64"
 
 
 def test_dry_run_pins_dump_target_seed_override_to_zero(tmp_path: Path) -> None:

@@ -1095,6 +1095,35 @@ def test_preflight_rejects_self_consistent_donor_with_incompatible_target_shape_
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     row, block_dir = _preflight_execution_row(tmp_path)
+    _rewrite_execution_donor(row, hidden_dimension=4)
+    calls = []
+    contract = {"snapshot": {"path": str(block_dir / "snapshot.pt")}}
+    monkeypatch.setattr(
+        "utest.subject_reappearance_harness._validated_prefix_contract",
+        lambda _row: contract,
+    )
+    monkeypatch.setattr(
+        "utest.subject_reappearance_harness._freeze_or_load_command_artifact",
+        lambda _row, _contract: {"preflight": {"full_correct": ["gpu"]}},
+    )
+    monkeypatch.setattr(
+        "utest.subject_reappearance_harness.validate_contract", lambda *_args: []
+    )
+    monkeypatch.setattr(
+        "utest.subject_reappearance_harness._run_logged",
+        lambda *_args: calls.append("gpu"),
+    )
+
+    with pytest.raises(ValueError, match="donor.*target.*shape"):
+        _execute_stage({"blocks": [row]}, "preflight")
+
+    assert calls == []
+
+
+def test_preflight_rejects_self_consistent_legacy_32_slot_donor_before_gpu(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    row, block_dir = _preflight_execution_row(tmp_path)
     _rewrite_execution_donor(row, slot_count=32)
     calls = []
     contract = {"snapshot": {"path": str(block_dir / "snapshot.pt")}}
