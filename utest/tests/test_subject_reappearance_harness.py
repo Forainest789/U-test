@@ -419,6 +419,111 @@ def test_loader_rejects_v1_manifest_with_clear_semantic_migration_message(
         main(["probe", "--manifest", str(path)])
 
 
+def test_existing_manifest_rejects_rehashed_legacy_32_base_before_gpu(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path, manifest = _dry_run_manifest(tmp_path)
+    base_path = Path(manifest["base_inference_args"])
+    base_path.write_text(json.dumps({"argv": [
+        "--slotmem_memory_encoder_layers", "0-15",
+        "--slotmem_memory_encoder_slots", "32",
+    ]}), encoding="utf-8")
+    manifest["base_inference_args_sha256"] = sha256_file(base_path)
+    path.write_text(json.dumps(manifest), encoding="utf-8")
+    calls = []
+    monkeypatch.setattr(
+        "utest.subject_reappearance_harness._run_logged",
+        lambda *args, **kwargs: calls.append((args, kwargs)),
+    )
+
+    with pytest.raises(ValueError, match="actual='32'.*frozen expected='64'"):
+        main(["prefix", "--manifest", str(path)])
+
+    assert calls == []
+
+
+@pytest.mark.parametrize(
+    "tamper",
+    ("preview_missing_geometry", "prefix_missing_separator", "tail_missing_geometry", "synchronized_32"),
+)
+def test_existing_manifest_rejects_invalid_block_geometry_before_gpu(
+    tamper: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path, manifest = _dry_run_manifest(tmp_path)
+    commands = manifest["blocks"][0]["commands"]
+    preview, prefix = commands["prefix_inference_args"], commands["prefix"]
+    if tamper == "prefix_missing_separator":
+        prefix.remove("--")
+    elif tamper == "synchronized_32":
+        preview.extend(["--slotmem_memory_encoder_slots", "32"])
+        prefix.extend(["--slotmem_memory_encoder_slots", "32"])
+    else:
+        target = preview if tamper == "preview_missing_geometry" else prefix
+        index = target.index("--slotmem_memory_encoder_slots")
+        del target[index : index + 2]
+    path.write_text(json.dumps(manifest), encoding="utf-8")
+    calls = []
+    monkeypatch.setattr(
+        "utest.subject_reappearance_harness._run_logged",
+        lambda *args, **kwargs: calls.append((args, kwargs)),
+    )
+
+    with pytest.raises(ValueError, match="SlotMem donor protocol mismatch|separator"):
+        main(["prefix", "--manifest", str(path)])
+
+    assert calls == []
+
+
+def test_existing_manifest_accepts_block_geometry_duplicates_32_then_64(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path, manifest = _dry_run_manifest(tmp_path)
+    commands = manifest["blocks"][0]["commands"]
+    for argv in (commands["prefix_inference_args"], commands["prefix"]):
+        argv.extend([
+            "--slotmem_memory_encoder_slots", "32",
+            "--slotmem_memory_encoder_slots", "64",
+        ])
+    path.write_text(json.dumps(manifest), encoding="utf-8")
+    calls = []
+
+    def gpu_boundary(*args, **kwargs) -> None:
+        calls.append((args, kwargs))
+        raise RuntimeError("gpu boundary reached")
+
+    monkeypatch.setattr(
+        "utest.subject_reappearance_harness._run_logged", gpu_boundary
+    )
+
+    with pytest.raises(RuntimeError, match="gpu boundary reached"):
+        main(["prefix", "--manifest", str(path), "--seed", "0"])
+
+    assert len(calls) == 1
+
+
+def test_existing_manifest_rejects_block_geometry_duplicates_64_then_32(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path, manifest = _dry_run_manifest(tmp_path)
+    commands = manifest["blocks"][0]["commands"]
+    for argv in (commands["prefix_inference_args"], commands["prefix"]):
+        argv.extend([
+            "--slotmem_memory_encoder_slots", "64",
+            "--slotmem_memory_encoder_slots", "32",
+        ])
+    path.write_text(json.dumps(manifest), encoding="utf-8")
+    calls = []
+    monkeypatch.setattr(
+        "utest.subject_reappearance_harness._run_logged",
+        lambda *args, **kwargs: calls.append((args, kwargs)),
+    )
+
+    with pytest.raises(ValueError, match="actual='32'.*frozen expected='64'"):
+        main(["prefix", "--manifest", str(path), "--seed", "0"])
+
+    assert calls == []
+
+
 @pytest.mark.parametrize(
     "tamper",
     ("module", "target_arg", "output", "external", "logs", "python"),
@@ -1071,6 +1176,51 @@ def test_partial_prefix_is_preserved_and_cleared_for_resume(tmp_path: Path) -> N
     assert not prefix.exists() and not capture.exists()
     assert (block / "prefix.failed_1" / "partial.bin").read_bytes() == b"partial"
     assert (block / "subspace" / "source_capture.pt.failed_1").read_bytes() == b"partial capture"
+
+
+def test_resume_accepts_an_existing_64_slot_prefix_contract(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _path, manifest = _dry_run_manifest(tmp_path)
+    row = manifest["blocks"][0]
+    snapshot = Path(row["prefix_snapshot"])
+    snapshot.parent.mkdir(parents=True)
+    snapshot.write_bytes(b"valid 64-slot prefix")
+    event = json.loads(Path(row["event_json"]).read_text(encoding="utf-8"))
+    inference_args = row["commands"]["prefix_inference_args"]
+    contract = {
+        "event": event,
+        "snapshot": {
+            "path": str(snapshot.resolve()),
+            "sha256": sha256_file(snapshot),
+        },
+        "runtime_contract": build_runtime_contract(event, inference_args),
+        "base_inference_args": inference_args,
+    }
+    (snapshot.parent / "prefix_contract.json").write_text(
+        json.dumps(contract), encoding="utf-8"
+    )
+    calls = []
+    monkeypatch.setattr(
+        "utest.subject_reappearance_harness._run_logged",
+        lambda *args, **kwargs: calls.append("gpu"),
+    )
+    monkeypatch.setattr(
+        "utest.subject_reappearance_harness._freeze_or_load_command_artifact",
+        lambda actual_row, actual_contract: calls.append(
+            (actual_row["event_id"], actual_contract["snapshot"]["sha256"])
+        ),
+    )
+
+    _execute_stage(
+        manifest,
+        "prefix",
+        event_id=row["event_id"],
+        seed=int(row["seed"]),
+        resume=True,
+    )
+
+    assert calls == [(row["event_id"], sha256_file(snapshot))]
 
 
 def test_partial_arm_resume_skips_valid_and_archives_invalid_outputs(tmp_path: Path) -> None:

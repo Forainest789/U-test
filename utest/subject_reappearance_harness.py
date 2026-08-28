@@ -273,6 +273,13 @@ def _parse_args(text: str) -> list[str]:
     return list(value[1:] if value and not value[0].startswith("--") else value)
 
 
+def _validate_memory_geometry_args(argv: object, label: str) -> list[str]:
+    if not isinstance(argv, list) or not all(type(item) is str for item in argv):
+        raise ValueError(f"{label} must be a JSON argv list")
+    validate_slotmem_memory_encoder_geometry(normalized_frozen_args(argv))
+    return argv
+
+
 def _write_json_exclusive(path: Path, payload: Mapping) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     data = _json_bytes(payload)
@@ -438,7 +445,7 @@ def build_run_manifest(
     by_id = {row["event_id"]: row for row in _prepared_events(inputs, selection)}
     base_bytes = base_inference_args.read_bytes()
     base = _parse_args(base_bytes.decode("utf-8-sig"))
-    validate_slotmem_memory_encoder_geometry(normalized_frozen_args(base))
+    _validate_memory_geometry_args(base, "base inference args")
     platform_bytes = platform_manifest.read_bytes()
     donors, donor_map_sha = _read_bytes_json(donor_map) if donor_map else (None, None)
     teachers, teacher_map_sha = _read_bytes_json(teacher_map) if teacher_map else (None, None)
@@ -918,6 +925,13 @@ def _load_run_manifest(path: Path) -> dict:
         value = manifest.get(path_key)
         if value and sha256_file(Path(value)) != manifest.get(hash_key):
             raise ValueError(f"{path_key} SHA-256 mismatch")
+    base_path = manifest.get("base_inference_args")
+    if type(base_path) is not str or not base_path:
+        raise ValueError("base inference args path is invalid")
+    _validate_memory_geometry_args(
+        _parse_args(Path(base_path).read_text(encoding="utf-8-sig")),
+        "base inference args",
+    )
     blocks = manifest.get("blocks", ())
     addresses = {(row.get("event_id"), row.get("seed")) for row in blocks}
     event_ids = {event_id for event_id, _ in addresses}
@@ -946,6 +960,17 @@ def _load_run_manifest(path: Path) -> dict:
             or commands["prefix"][0] != python
         ):
             raise ValueError("block inference Python interpreter contract is invalid")
+        _validate_memory_geometry_args(
+            commands.get("prefix_inference_args"),
+            "block prefix inference args",
+        )
+        prefix_command = commands["prefix"]
+        if "--" not in prefix_command:
+            raise ValueError("block prefix command is missing the inference argv separator")
+        _validate_memory_geometry_args(
+            prefix_command[prefix_command.index("--") + 1 :],
+            "block prefix command inference args",
+        )
         if (
             row.get("preflight_arms") != list(PREFLIGHT_ARMS)
             or row.get("full_arms") != list(FULL_ARMS)
@@ -1082,6 +1107,19 @@ def _archive_path(path: Path) -> Path:
 
 def _validated_prefix_contract(row: Mapping) -> dict:
     contract = _read_json(Path(row["block_dir"]) / "prefix" / "prefix_contract.json")
+    runtime_contract = contract.get("runtime_contract")
+    frozen_args = (
+        runtime_contract.get("frozen_args")
+        if isinstance(runtime_contract, Mapping)
+        else None
+    )
+    if not isinstance(frozen_args, Mapping):
+        raise ValueError("prefix contract runtime frozen args are invalid")
+    validate_slotmem_memory_encoder_geometry(frozen_args)
+    _validate_memory_geometry_args(
+        contract.get("base_inference_args"),
+        "prefix contract base inference args",
+    )
     snapshot = Path(contract["snapshot"]["path"])
     errors = validate_contract(contract, snapshot)
     event = _read_json(Path(row["event_json"]))
