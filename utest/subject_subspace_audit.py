@@ -15,7 +15,12 @@ import torch
 
 from .content_audit import LAYERS_KEY, _is_layerwise, _slot_row_indices, install, transform_slot_rows
 from .input_contract import payload_slot_shapes, select_donor_entry, validate_donor_entry
-from .prefix_contract import build_runtime_contract
+from .prefix_contract import (
+    FROZEN_MEMORY_ENCODER_SLOTS,
+    FROZEN_SUBJECT_SUBSPACE_BUDGET,
+    FROZEN_SUBJECT_SUBSPACE_FRACTION,
+    build_runtime_contract,
+)
 from .subject_subspace import FROZEN_LAYER_GROUPS, canonical_json_sha256, capture_tensor_sha256
 
 
@@ -71,7 +76,7 @@ def validate_subject_subspace_manifest(manifest: Mapping, event: Mapping, *, see
         or event.get("source_chunk_idx") != 0
         or manifest.get("target_evidence_read") is not False
         or manifest.get("primary_mask") != "semantic_top8"
-        or manifest.get("budget_fraction") != 0.25
+        or manifest.get("budget_fraction") != FROZEN_SUBJECT_SUBSPACE_FRACTION
     ):
         raise ValueError("subject subspace manifest provenance is invalid")
     if _contains_target_evidence(manifest, allow_marker=True):
@@ -104,10 +109,20 @@ def validate_subject_subspace_manifest(manifest: Mapping, event: Mapping, *, see
             raise ValueError("subject subspace payload hashes must be an object")
         if row.get("member_layers") != members or set(hashes) != {str(layer) for layer in members}:
             raise ValueError("subject subspace member layers are incomplete")
-        if row.get("slot_count") != 32 or row.get("budget") != 8:
+        if (
+            row.get("slot_count") != FROZEN_MEMORY_ENCODER_SLOTS
+            or row.get("budget") != FROZEN_SUBJECT_SUBSPACE_BUDGET
+        ):
             raise ValueError("subject subspace slot count or budget is invalid")
         masks = {name: row.get(name) for name in ("semantic_top8", "random_top8")}
-        if any(not _valid_mask(value, slots=32, budget=8) for value in masks.values()):
+        if any(
+            not _valid_mask(
+                value,
+                slots=FROZEN_MEMORY_ENCODER_SLOTS,
+                budget=FROZEN_SUBJECT_SUBSPACE_BUDGET,
+            )
+            for value in masks.values()
+        ):
             raise ValueError("subject subspace mask indices are invalid")
         expected_mask_hashes = {name: canonical_json_sha256(value) for name, value in masks.items()}
         actual_mask_hashes = row.get("mask_sha256", {})
@@ -123,7 +138,7 @@ def validate_subject_subspace_manifest(manifest: Mapping, event: Mapping, *, see
             banks[bank][layer_key] = {
                 **masks,
                 "layer_group": group,
-                "slot_count": 32,
+                "slot_count": FROZEN_MEMORY_ENCODER_SLOTS,
                 "source_payload_sha256": digest,
             }
     if not banks or any({group for candidate_bank, group in seen_groups if candidate_bank == bank} != set(FROZEN_LAYER_GROUPS) for bank in banks):
@@ -188,7 +203,10 @@ def validate_frozen_donor_artifact(artifact: Mapping, entry: Mapping, *, banks: 
             or tensor.shape[0] != contract["slot_count"]
             or not torch.isfinite(tensor).all()
         ):
-            raise ValueError(f"donor layer {layer} must be a finite 2D 32-slot tensor")
+            raise ValueError(
+                f"donor layer {layer} must be a finite 2D "
+                f"{FROZEN_MEMORY_ENCODER_SLOTS}-slot tensor"
+            )
     return selected
 
 
@@ -335,4 +353,4 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    main()

@@ -49,7 +49,7 @@ def _reader_contract() -> tuple[dict, dict, dict]:
         "target_seed": 0,
     }
     layers = {
-        str(layer): torch.full((32, 3), float(layer), dtype=torch.float32)
+        str(layer): torch.full((64, 3), float(layer), dtype=torch.float32)
         for layer in range(16)
     }
     rankings = {}
@@ -61,7 +61,7 @@ def _reader_contract() -> tuple[dict, dict, dict]:
             "source_payload_sha256_by_layer": {
                 str(layer): capture_tensor_sha256(layers[str(layer)]) for layer in members
             },
-            "semantic": list(range(32)),
+            "semantic": list(range(64)),
             "visual_cf": None,
             "reference": None,
         }
@@ -76,7 +76,7 @@ def _reader_contract() -> tuple[dict, dict, dict]:
         "token_meta": {
             "__layerwise__": True,
             "layers": {
-                layer: [{"slot": index} for index in range(32)] for layer in layers
+                layer: [{"slot": index} for index in range(64)] for layer in layers
             },
         },
     }
@@ -93,6 +93,18 @@ def test_reader_contract_validates_manifest_and_source_payload_hashes() -> None:
     payload["tokens"]["layers"]["0"][0, 0] = -1
     with pytest.raises(ValueError, match="source payload SHA-256"):
         validate_subject_payload(payload, bank_idx=0, layers=layers[0])
+
+
+def test_reader_contract_rejects_legacy_32_slot_manifest() -> None:
+    event, manifest, _ = _reader_contract()
+    for row in manifest["layers"]:
+        row["slot_count"] = 32
+    manifest["mask_manifest_sha256"] = canonical_json_sha256(
+        {key: value for key, value in manifest.items() if key != "mask_manifest_sha256"}
+    )
+
+    with pytest.raises(ValueError, match="slot count or budget"):
+        validate_subject_subspace_manifest(manifest, event, seed=0)
 
 
 def test_reader_manifest_rejects_target_evidence_even_with_a_valid_canonical_hash() -> None:
@@ -196,9 +208,9 @@ def test_subject_only_is_applied_only_after_live_payload_validation(
 @pytest.mark.parametrize(
     ("arm", "expected"),
     [
-        ("full_correct", list(range(32))),
+        ("full_correct", list(range(64))),
         ("no_memory", []),
-        ("zero_path", list(range(32))),
+        ("zero_path", list(range(64))),
     ],
 )
 def test_baseline_arm_reports_have_explicit_layer_selection(
@@ -315,7 +327,7 @@ def test_wrong_subject_reader_uses_donor_values_and_target_metadata(
         "donor_story_id": "donor-story",
         "donor_entity_uid": "donor::ana",
         "payload_key": "Other Ana|0",
-        "slot_shape": {layer: [32, 3] for layer in donor_tokens["layers"]},
+        "slot_shape": {layer: [64, 3] for layer in donor_tokens["layers"]},
     }
 
     class FakeBank:
@@ -380,7 +392,7 @@ def test_frozen_wrong_donor_bundle_binds_embedded_identity_key_and_shape() -> No
     banks = validate_subject_subspace_manifest(manifest, event, seed=0)
     donor = {
         "__layerwise__": True,
-        "layers": {str(layer): torch.zeros(32, 3) for layer in range(16)},
+        "layers": {str(layer): torch.zeros(64, 3) for layer in range(16)},
     }
     artifact = {
         "format": "slotmem_donor_payload_v2",
@@ -395,7 +407,7 @@ def test_frozen_wrong_donor_bundle_binds_embedded_identity_key_and_shape() -> No
         "donor_story_id": "donor-story",
         "donor_entity_uid": "donor::ana",
         "payload_key": "Other Ana|0",
-        "slot_shape": {str(layer): [32, 3] for layer in range(16)},
+        "slot_shape": {str(layer): [64, 3] for layer in range(16)},
     }
 
     assert validate_frozen_donor_artifact(artifact, entry, banks=banks) is donor
@@ -403,7 +415,7 @@ def test_frozen_wrong_donor_bundle_binds_embedded_identity_key_and_shape() -> No
     with pytest.raises(ValueError, match="slot_shape"):
         validate_frozen_donor_artifact(artifact, entry, banks=banks)
 
-    entry["slot_shape"]["0"] = [32, 3]
+    entry["slot_shape"]["0"] = [64, 3]
     donor["layers"]["0"][0, 0] = float("nan")
     with pytest.raises(ValueError, match="finite"):
         validate_frozen_donor_artifact(artifact, entry, banks=banks)
@@ -445,6 +457,7 @@ def test_consensus_does_not_impute_missing_methods() -> None:
 @pytest.mark.parametrize("inputs", [
     {"nested": {"target_loss_sha256": "abc"}},
     {"nested": [{"qstar_score": 1.0}]},
+    {"qstar": {"score": 1.0}},
     {"cids": "abc"},
     {"decoded_video": "abc"},
 ])
@@ -457,13 +470,18 @@ def test_manifest_freezes_primary_consensus_and_random_masks() -> None:
     frozen = {"0-4": list(range(5)), "5-10": list(range(5, 11)), "11-15": list(range(11, 16))}
     manifest = build_mask_manifest(
         inputs={"source_capture_sha256": "a" * 64},
-        rankings={f"bank_0/group_{group}": {"bank": 0, "layer_group": group, "member_layers": members, "source_payload_sha256_by_layer": {str(layer): "b" * 64 for layer in members}, "semantic": list(range(31, -1, -1)), "visual_cf": None, "reference": list(range(32))} for group, members in frozen.items()},
+        rankings={f"bank_0/group_{group}": {"bank": 0, "layer_group": group, "member_layers": members, "source_payload_sha256_by_layer": {str(layer): "b" * 64 for layer in members}, "semantic": list(range(63, -1, -1)), "visual_cf": None, "reference": list(range(64))} for group, members in frozen.items()},
         event={"event_id": "event", "character_name": "Ana", "source_chunk_idx": 0},
         seed=1,
     )
     layer = manifest["layers"][0]
     assert manifest["primary_mask"] == "semantic_top8"
-    assert layer["semantic_top8"] == list(range(24, 32))
+    assert manifest["budget_fraction"] == 0.125
+    assert layer["slot_count"] == 64
+    assert layer["budget"] == 8
+    assert sorted(layer["rankings"]["semantic"]) == list(range(64))
+    assert sorted(layer["rankings"]["reference"]) == list(range(64))
+    assert layer["semantic_top8"] == list(range(56, 64))
     assert layer["visual_cf_top8"]["status"] == "not_available"
     assert layer["reference_top8"] == list(range(8))
     assert len(layer["consensus_top8"]) == len(layer["random_top8"]) == 8
@@ -490,15 +508,15 @@ def _artifacts(tmp_path: Path) -> tuple[dict, dict, Path, dict]:
     reference.write_bytes(b"reference")
     model.write_bytes(b"model")
     event = {"event_id": "event", "character_name": "Ana", "source_chunk_idx": 0, "target_chunk_idx": 1, "source_json_path": str(story.resolve()), "reference_path": str(reference.resolve()), "reference_sha256": sha256_file(reference)}
-    raw, slots = torch.arange(12, dtype=torch.float32).reshape(4, 3), torch.arange(96, dtype=torch.float32).reshape(32, 3)
+    raw, slots = torch.arange(12, dtype=torch.float32).reshape(4, 3), torch.arange(192, dtype=torch.float32).reshape(64, 3)
     meta, attention = [
         {"char_id": "Ana", "inside_box": index < 2, "tau_local": float(index)}
         for index in range(4)
-    ], {"Ana": torch.full((32, 4), 0.25)}
+    ], {"Ana": torch.full((64, 4), 0.25)}
     rows = []
     for layer in range(16):
         row = {"character": "Ana", "bank": 0, "layer": layer, "raw_tokens": raw, "raw_token_meta": meta, "encoded_slots": slots, "attention": attention}
-        row["tensor_shapes"] = {"raw_tokens": [4, 3], "encoded_slots": [32, 3], "attention": {"Ana": [32, 4]}}
+        row["tensor_shapes"] = {"raw_tokens": [4, 3], "encoded_slots": [64, 3], "attention": {"Ana": [64, 4]}}
         row["sha256"] = {"raw_tokens": capture_tensor_sha256(raw), "raw_token_meta": canonical_json_sha256(meta), "encoded_slots": capture_tensor_sha256(slots), "attention": capture_tensor_sha256(attention)}
         rows.append(row)
     provenance = {"source_json_path": str(story.resolve()), "source_json_sha256": sha256_file(story), "reference_file_sha256": sha256_file(reference), "fixed_reference_scope": "source_only", "source_seed": 0, "code_identity": {"infer_slotmem_sha256": sha256_file(repo / "infer_slotmem.py"), "mem_encoder_utils_sha256": sha256_file(repo / "mem_encoder_utils.py")}, "runtime_identity": {"python_version": "3.11", "torch_version": str(torch.__version__), "inference_args_sha256": "1" * 64}, "model_identity": {"high_noise": [{"path": str(model.resolve()), "sha256": sha256_file(model)}], "low_noise": []}}

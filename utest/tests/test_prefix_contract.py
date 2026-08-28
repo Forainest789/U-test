@@ -6,10 +6,14 @@ from pathlib import Path
 import pytest
 
 from utest.prefix_contract import (
+    FROZEN_MEMORY_ENCODER_SLOTS,
+    FROZEN_SUBJECT_SUBSPACE_BUDGET,
+    FROZEN_SUBJECT_SUBSPACE_FRACTION,
     build_contract,
     build_runtime_contract,
     sha256_file,
     validate_contract,
+    validate_slotmem_memory_encoder_geometry,
     write_bytes_no_clobber,
     write_json_no_clobber,
 )
@@ -42,6 +46,30 @@ def _fixture(tmp_path: Path):
         "--start_chunk_idx", "1", "--max_chunks", "1",
     ]
     return snapshot, manifest, event, args
+
+
+def test_frozen_geometry_matches_existing_64_slot_checkpoint() -> None:
+    layers, slots = validate_slotmem_memory_encoder_geometry(
+        {
+            "slotmem_memory_encoder_layers": "0-15",
+            "slotmem_memory_encoder_slots": "64",
+        }
+    )
+
+    assert layers == tuple(range(16))
+    assert slots == FROZEN_MEMORY_ENCODER_SLOTS == 64
+    assert FROZEN_SUBJECT_SUBSPACE_BUDGET == 8
+    assert FROZEN_SUBJECT_SUBSPACE_FRACTION == 0.125
+
+
+def test_legacy_32_slot_geometry_is_rejected() -> None:
+    with pytest.raises(ValueError, match="actual='32'.*frozen expected='64'"):
+        validate_slotmem_memory_encoder_geometry(
+            {
+                "slotmem_memory_encoder_layers": "0-15",
+                "slotmem_memory_encoder_slots": "32",
+            }
+        )
 
 
 def test_json_publication_is_deterministic_and_no_clobber(tmp_path: Path) -> None:

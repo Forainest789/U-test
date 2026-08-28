@@ -12,7 +12,12 @@ from pathlib import Path
 
 import torch
 
-from .prefix_contract import sha256_file
+from .prefix_contract import (
+    FROZEN_MEMORY_ENCODER_SLOTS,
+    FROZEN_SUBJECT_SUBSPACE_BUDGET,
+    FROZEN_SUBJECT_SUBSPACE_FRACTION,
+    sha256_file,
+)
 
 SEMANTIC_GROUPS = ("identity_name", "stable_attributes", "other_characters", "action_scene")
 SOURCE_SEMANTIC_FORMULA = {"name": "source_role_box_centre", "version": 1}
@@ -361,17 +366,18 @@ def build_mask_manifest(*, inputs: Mapping, rankings: Mapping[str, Mapping], eve
         if list(row.get("member_layers", [])) != members or set(row.get("source_payload_sha256_by_layer", {})) != {str(layer) for layer in members}:
             raise ValueError("frozen layer group membership or payload hashes are invalid")
         semantic = row["semantic"]
-        if len(semantic) != 32 or set(semantic) != set(range(32)):
-            raise ValueError("semantic ranking must be a full 32-slot permutation")
+        slot_universe = set(range(FROZEN_MEMORY_ENCODER_SLOTS))
+        if len(semantic) != FROZEN_MEMORY_ENCODER_SLOTS or set(semantic) != slot_universe:
+            raise ValueError("semantic ranking must be a full frozen slot permutation")
         methods = {name: row.get(name) for name in ("semantic", "visual_cf", "reference")}
         masks = {
-            "semantic_top8": sorted(semantic[:8]),
-            "visual_cf_top8": ({"status": "not_available", "reason": "validated_source_counterfactual_payload_missing"} if methods["visual_cf"] is None else sorted(methods["visual_cf"][:8])),
-            "reference_top8": ({"status": "not_available", "reason": "validated_reference_only_payload_missing"} if methods["reference"] is None else sorted(methods["reference"][:8])),
-            "consensus_top8": consensus_rank_indices(methods, 8),
-            "random_top8": deterministic_random_indices(event["event_id"], seed, canonical_address, 32, 8),
+            "semantic_top8": sorted(semantic[:FROZEN_SUBJECT_SUBSPACE_BUDGET]),
+            "visual_cf_top8": ({"status": "not_available", "reason": "validated_source_counterfactual_payload_missing"} if methods["visual_cf"] is None else sorted(methods["visual_cf"][:FROZEN_SUBJECT_SUBSPACE_BUDGET])),
+            "reference_top8": ({"status": "not_available", "reason": "validated_reference_only_payload_missing"} if methods["reference"] is None else sorted(methods["reference"][:FROZEN_SUBJECT_SUBSPACE_BUDGET])),
+            "consensus_top8": consensus_rank_indices(methods, FROZEN_SUBJECT_SUBSPACE_BUDGET),
+            "random_top8": deterministic_random_indices(event["event_id"], seed, canonical_address, FROZEN_MEMORY_ENCODER_SLOTS, FROZEN_SUBJECT_SUBSPACE_BUDGET),
         }
-        layers.append({"bank": bank, "layer_group": group, "member_layers": members, "source_payload_sha256_by_layer": dict(row["source_payload_sha256_by_layer"]), "address": canonical_address, "slot_count": 32, "budget": 8, "rankings": methods, **masks, "mask_sha256": {name: canonical_json_sha256(value) for name, value in masks.items() if isinstance(value, list)}})
+        layers.append({"bank": bank, "layer_group": group, "member_layers": members, "source_payload_sha256_by_layer": dict(row["source_payload_sha256_by_layer"]), "address": canonical_address, "slot_count": FROZEN_MEMORY_ENCODER_SLOTS, "budget": FROZEN_SUBJECT_SUBSPACE_BUDGET, "rankings": methods, **masks, "mask_sha256": {name: canonical_json_sha256(value) for name, value in masks.items() if isinstance(value, list)}})
     if not layers or event.get("source_chunk_idx") != 0:
         raise ValueError("subject subspace requires source chunk 0 layer rankings")
     banks = {row["bank"] for row in layers}
@@ -379,6 +385,6 @@ def build_mask_manifest(*, inputs: Mapping, rankings: Mapping[str, Mapping], eve
         raise ValueError("each bank requires all frozen layer groups")
     group_order = {name: index for index, name in enumerate(FROZEN_LAYER_GROUPS)}
     layers.sort(key=lambda row: (row["bank"], group_order[row["layer_group"]]))
-    manifest = {"schema_version": 1, "event_id": event["event_id"], "character_name": event["character_name"], "seed": int(seed), "source_chunk_idx": 0, "target_evidence_read": False, "primary_mask": "semantic_top8", "budget_fraction": 0.25, "inputs": dict(inputs), "layers": layers}
+    manifest = {"schema_version": 1, "event_id": event["event_id"], "character_name": event["character_name"], "seed": int(seed), "source_chunk_idx": 0, "target_evidence_read": False, "primary_mask": "semantic_top8", "budget_fraction": FROZEN_SUBJECT_SUBSPACE_FRACTION, "inputs": dict(inputs), "layers": layers}
     manifest["mask_manifest_sha256"] = canonical_json_sha256(manifest)
     return manifest

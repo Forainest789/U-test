@@ -23,8 +23,10 @@ RUNTIME_ONLY_ARGS = {
     "merged_output_name",
     "subject_subspace_capture_path",
 }
-FROZEN_MEMORY_ENCODER_LAYERS = tuple(range(16))
-FROZEN_MEMORY_ENCODER_SLOTS = 32
+FROZEN_MEMORY_ENCODER_LAYERS: tuple[int, ...] = tuple(range(16))
+FROZEN_MEMORY_ENCODER_SLOTS: int = 64
+FROZEN_SUBJECT_SUBSPACE_BUDGET: int = 8
+FROZEN_SUBJECT_SUBSPACE_FRACTION: float = 0.125
 
 
 def sha256_file(path: Path) -> str:
@@ -94,7 +96,7 @@ def normalized_frozen_args(argv: Sequence[str]) -> dict[str, str]:
 def validate_slotmem_memory_encoder_geometry(
     frozen_args: Mapping[str, object],
 ) -> tuple[tuple[int, ...], int]:
-    """Require the frozen 16-layer, 32-slot protocol without rewriting config."""
+    """Require the frozen 16-layer, 64-slot protocol without rewriting config."""
     raw_layers = frozen_args.get("slotmem_memory_encoder_layers")
     layers: list[int] = []
     if type(raw_layers) is str and raw_layers.strip():
@@ -111,7 +113,7 @@ def validate_slotmem_memory_encoder_geometry(
     if tuple(layers) != FROZEN_MEMORY_ENCODER_LAYERS or len(layers) != len(set(layers)):
         raise ValueError(
             "SlotMem donor protocol mismatch: --slotmem_memory_encoder_layers "
-            f"actual={raw_layers!r}, frozen expected='0-15'; use a 32-slot-compatible "
+            f"actual={raw_layers!r}, frozen expected='0-15'; use a 64-slot-compatible "
             "checkpoint/config rather than changing an unproven checkpoint geometry"
         )
 
@@ -123,7 +125,7 @@ def validate_slotmem_memory_encoder_geometry(
     if slots != FROZEN_MEMORY_ENCODER_SLOTS:
         raise ValueError(
             "SlotMem donor protocol mismatch: --slotmem_memory_encoder_slots "
-            f"actual={raw_slots!r}, frozen expected='32'; use a 32-slot-compatible "
+            f"actual={raw_slots!r}, frozen expected='64'; use a 64-slot-compatible "
             "checkpoint/config rather than changing an unproven checkpoint geometry"
         )
     return FROZEN_MEMORY_ENCODER_LAYERS, FROZEN_MEMORY_ENCODER_SLOTS
