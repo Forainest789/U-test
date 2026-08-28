@@ -444,6 +444,34 @@ def test_recurrence_inventory_rejects_characters_appearing_as_a_string(
         enumerate_official_recurrences(data_root)
 
 
+@pytest.mark.parametrize(
+    "invalid_prompt", [["portrait of Donor"], {"en": "portrait of Donor"}, None]
+)
+def test_recurrence_inventory_requires_character_prompt_as_a_string(
+    tmp_path: Path, invalid_prompt: object
+) -> None:
+    data_root = tmp_path / "official"
+    story = _story({"Donor": "realistic_human"}, {3: ["Donor"], 9: ["Donor"]})
+    story["Characters"]["Donor"]["prompt_en"] = invalid_prompt
+    _write_official_story(data_root, "20", story, reference_names=("Donor",))
+
+    with pytest.raises(
+        ValueError, match=r"story 20 character 'Donor' prompt_en must be a string"
+    ):
+        enumerate_official_recurrences(data_root)
+
+
+def test_recurrence_inventory_preserves_empty_character_prompt(tmp_path: Path) -> None:
+    data_root = tmp_path / "official"
+    story = _story({"Donor": "realistic_human"}, {3: ["Donor"], 9: ["Donor"]})
+    story["Characters"]["Donor"]["prompt_en"] = ""
+    _write_official_story(data_root, "20", story, reference_names=("Donor",))
+
+    [recurrence] = enumerate_official_recurrences(data_root)
+
+    assert recurrence["official_character_description"] == ""
+
+
 def test_recurrence_inventory_rejects_duplicate_shot_indices(tmp_path: Path) -> None:
     data_root = tmp_path / "official"
     story = _story({"Donor": "realistic_human"}, {3: ["Donor"], 9: ["Donor"]})

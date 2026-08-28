@@ -377,6 +377,11 @@ def _validated_official_shots(
             raise ValueError(
                 f"official story {story_id} character {character!r} must define tag"
             )
+        if not isinstance(row.get("prompt_en"), str):
+            raise ValueError(
+                f"official story {story_id} character {character!r} "
+                "prompt_en must be a string"
+            )
 
     shots = official.get("Shots")
     if not isinstance(shots, list):
@@ -495,9 +500,7 @@ def enumerate_official_recurrences(data_root: Path) -> list[dict]:
                         "official_tag": tag,
                         "style_class": style,
                         "source_character_count": len(source_characters),
-                        "official_character_description": str(
-                            character_row.get("prompt_en", "")
-                        ),
+                        "official_character_description": character_row["prompt_en"],
                         "official_story": {
                             "path": story_path.relative_to(data_root).as_posix(),
                             "sha256": sha256_file(story_path),
