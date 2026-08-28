@@ -1645,6 +1645,58 @@ def test_gpu_stage_batch_preflights_every_donor_before_gpu(
     assert len(calls) == expected_calls
 
 
+@pytest.mark.parametrize(
+    ("stage", "blocked_status"),
+    (
+        ("preflight", "blocked_missing_donor"),
+        ("full", "blocked_missing_donor"),
+        ("qstar", "not_available"),
+    ),
+)
+def test_gpu_stage_batch_rejects_any_non_deferred_status_before_gpu(
+    stage: str,
+    blocked_status: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    rows = [
+        _gpu_stage_execution_row(tmp_path / "first", stage),
+        _gpu_stage_execution_row(tmp_path / "second", stage),
+    ]
+    rows[1]["commands"][stage]["status"] = blocked_status
+    calls = []
+    monkeypatch.setattr(
+        "utest.subject_reappearance_harness._validated_prefix_contract",
+        lambda row: {"snapshot": {"path": str(Path(row["block_dir"]) / "snapshot.pt")}},
+    )
+    monkeypatch.setattr(
+        "utest.subject_reappearance_harness._freeze_or_load_command_artifact",
+        lambda _row, _contract: {
+            "preflight": {"full_correct": ["gpu"]},
+            "full": {"full_correct": ["gpu"]},
+            "qstar": ["gpu"],
+        },
+    )
+    monkeypatch.setattr(
+        "utest.subject_reappearance_harness.validate_contract", lambda *_args: []
+    )
+    monkeypatch.setattr(
+        "utest.subject_reappearance_harness.validate_block", lambda *_args, **_kwargs: {}
+    )
+    monkeypatch.setattr(
+        "utest.subject_reappearance_harness._validate_qstar_report", lambda *_args: None
+    )
+    monkeypatch.setattr(
+        "utest.subject_reappearance_harness._run_logged",
+        lambda *_args: calls.append("gpu"),
+    )
+
+    with pytest.raises(ValueError, match=rf"{stage} is {blocked_status}"):
+        _execute_stage({"blocks": rows}, stage)
+
+    assert calls == []
+
+
 def test_qstar_preflights_single_legacy_32_slot_donor_before_gpu(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

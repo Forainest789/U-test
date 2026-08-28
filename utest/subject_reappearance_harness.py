@@ -1444,6 +1444,11 @@ def _execute_stage(
     resume: bool = False,
 ) -> None:
     rows = _selected_blocks(manifest, event_id, seed)
+    if stage in {"preflight", "full", "qstar"}:
+        for row in rows:
+            status = row["commands"][stage]["status"]
+            if status != "deferred_until_prefix":
+                raise ValueError(f"{stage} is {status}")
     if stage in {"prefix", "qstar", "preflight", "full"}:
         for row in rows:
             completed = Path(row["block_dir"]) / "prefix" / "prefix_contract.json"
@@ -1458,8 +1463,7 @@ def _execute_stage(
                     raise
     if stage in {"preflight", "full", "qstar"}:
         for row in rows:
-            if row["commands"][stage]["status"] == "deferred_until_prefix":
-                _validate_donor_target_compatibility(row)
+            _validate_donor_target_compatibility(row)
     for row in rows:
         block_dir = Path(row["block_dir"])
         if stage == "prefix":
