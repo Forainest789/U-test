@@ -568,7 +568,7 @@ def build_donor_candidate_survey(
 
 def _read_json(path: Path, label: str) -> dict:
     try:
-        value = json.loads(path.read_text(encoding="utf-8"))
+        value = json.loads(path.read_text(encoding="utf-8-sig"))
     except (OSError, json.JSONDecodeError) as error:
         raise ValueError(f"invalid {label}: {path}: {error}") from error
     if not isinstance(value, dict):

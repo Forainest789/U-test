@@ -149,6 +149,17 @@ def test_official_survey_accepts_and_publishes_a_complete_frozen_tree(
     assert any(row["donor_story_id"] == "20" for row in survey["candidates"])
 
 
+def test_frozen_tree_validation_accepts_an_official_story_with_utf8_bom(
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "official"
+    _write_frozen_official_tree(data_root)
+    story_path = data_root / "01" / "story.json"
+    story_path.write_text(story_path.read_text(encoding="utf-8"), encoding="utf-8-sig")
+
+    validate_frozen_vistory_tree(data_root)
+
+
 def test_official_survey_rejects_a_missing_non_target_story(tmp_path: Path) -> None:
     data_root = tmp_path / "official"
     _write_frozen_official_tree(data_root)
