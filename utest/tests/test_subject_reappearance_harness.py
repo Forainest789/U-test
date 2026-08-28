@@ -19,6 +19,7 @@ from utest.subject_reappearance_harness import (
     _resume_completed_arm,
     _ensure_semantic_scores,
     _execute_stage,
+    _expected_rows,
     _command_artifact_payload,
     _validate_qstar_report,
     main,
@@ -47,6 +48,13 @@ def test_matrix_is_exactly_three_events_by_three_seeds() -> None:
     assert {(row.event_id, row.seed) for row in matrix} == {
         (event, seed) for event in ("e79", "e15", "e16") for seed in (0, 1, 2)
     }
+
+
+def test_expected_rows_use_the_frozen_64_slot_universe() -> None:
+    masks = {"semantic": list(range(8)), "random": list(range(8, 16))}
+
+    assert _expected_rows("full_correct", masks) == list(range(64))
+    assert _expected_rows("drop_subject", masks) == list(range(8, 64))
 
 
 def test_teacher_absence_serializes_qstar_not_available() -> None:
@@ -395,7 +403,7 @@ def _validated_block(tmp_path: Path) -> tuple[dict, Path]:
     Path(block["event_json"]).write_text(json.dumps(block["event"]), encoding="utf-8")
     event_file_sha = sha256_file(Path(block["event_json"]))
     source_layers = {
-        str(layer): torch.arange(96, dtype=torch.float32).reshape(32, 3) + layer
+        str(layer): torch.arange(192, dtype=torch.float32).reshape(64, 3) + layer
         for layer in range(16)
     }
     capture_path = root / "subspace" / "source_capture.pt"
@@ -413,7 +421,7 @@ def _validated_block(tmp_path: Path) -> tuple[dict, Path]:
             "source_payload_sha256_by_layer": {
                 str(layer): capture_tensor_sha256(source_layers[str(layer)]) for layer in members
             },
-            "semantic": list(range(32)),
+            "semantic": list(range(64)),
             "visual_cf": None,
             "reference": None,
         }
@@ -449,7 +457,7 @@ def _validated_block(tmp_path: Path) -> tuple[dict, Path]:
         "payload_path": str(donor_path.resolve()), "payload_sha256": sha256_file(donor_path),
         "payload_key": "Other|0", "coarse_class": "person", "colour": "unknown",
         "character_count": 1, "source_visible": True, "gap_bucket": "long",
-        "slot_shape": {layer: [32, 3] for layer in donor_layers}, "selection_seed": 0,
+        "slot_shape": {layer: [64, 3] for layer in donor_layers}, "selection_seed": 0,
     }]}), encoding="utf-8")
     block["donor"] = {
         "payload_path": str(donor_path.resolve()),
@@ -464,7 +472,7 @@ def _validated_block(tmp_path: Path) -> tuple[dict, Path]:
             layer: (
                 [] if arm == "no_memory"
                 else row["semantic_top8"] if arm == "wrong_subject"
-                else list(range(32))
+                else list(range(64))
             )
             for layer, row in layer_masks.items()
         }
@@ -1045,6 +1053,7 @@ def _rewrite_execution_donor(
     row: dict,
     *,
     hidden_dimension: int | None = None,
+    slot_count: int | None = None,
     missing_layer: str | None = None,
     donor_bank: int | None = None,
 ) -> None:
@@ -1052,9 +1061,15 @@ def _rewrite_execution_donor(
     artifact = torch.load(donor_path, map_location="cpu", weights_only=True)
     payload_key = next(iter(artifact["payloads"]))
     layers = artifact["payloads"][payload_key][LAYERS_KEY]
-    if hidden_dimension is not None:
+    if hidden_dimension is not None or slot_count is not None:
         layers = {
-            layer: torch.zeros((32, hidden_dimension), dtype=tensor.dtype)
+            layer: torch.zeros(
+                (
+                    slot_count if slot_count is not None else tensor.shape[0],
+                    hidden_dimension if hidden_dimension is not None else tensor.shape[1],
+                ),
+                dtype=tensor.dtype,
+            )
             for layer, tensor in layers.items()
         }
         artifact["payloads"][payload_key][LAYERS_KEY] = layers
@@ -1080,7 +1095,7 @@ def test_preflight_rejects_self_consistent_donor_with_incompatible_target_shape_
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     row, block_dir = _preflight_execution_row(tmp_path)
-    _rewrite_execution_donor(row, hidden_dimension=4)
+    _rewrite_execution_donor(row, slot_count=32)
     calls = []
     contract = {"snapshot": {"path": str(block_dir / "snapshot.pt")}}
     monkeypatch.setattr(
@@ -1224,7 +1239,7 @@ def test_valid_teacher_freezes_a_qstar_stage_command_and_requires_donor(
     selection = json.loads(inputs.read_text(encoding="utf-8"))
     event_id = selection["events"][0]["event_id"]
     event = json.loads((inputs.parent / event_id / "event.json").read_text(encoding="utf-8"))
-    donor_layers = {str(layer): torch.zeros(32, 3) for layer in range(16)}
+    donor_layers = {str(layer): torch.zeros(64, 3) for layer in range(16)}
     donor_path = tmp_path / "donor.pt"
     torch.save({
         "format": "slotmem_donor_payload_v2",
@@ -1238,7 +1253,7 @@ def test_valid_teacher_freezes_a_qstar_stage_command_and_requires_donor(
         "payload_path": str(donor_path.resolve()), "payload_sha256": sha256_file(donor_path),
         "payload_key": "Other|0", "coarse_class": "person", "colour": "unknown",
         "character_count": 1, "source_visible": True, "gap_bucket": "long",
-        "slot_shape": {layer: [32, 3] for layer in donor_layers}, "selection_seed": 0,
+        "slot_shape": {layer: [64, 3] for layer in donor_layers}, "selection_seed": 0,
     }]}), encoding="utf-8")
     donor_map = tmp_path / "donor_map.json"
     donor_map.write_text(json.dumps({"events": {event_id: {

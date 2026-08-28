@@ -56,7 +56,7 @@ def _completed_fixture(
     loose_candidate_story_type: bool = False,
     loose_donor_story_type: bool = False,
     encoder_layers: str | None = "0-15",
-    encoder_slots: str | None = "32",
+    encoder_slots: str | None = "64",
 ) -> tuple[Path, Path, Path, dict[str, dict]]:
     targets = _prepared_inputs(tmp_path / "targets")
     target_events = _target_events(targets)
@@ -134,7 +134,7 @@ def _completed_fixture(
         payload.parent.mkdir(parents=True, exist_ok=True)
         payload_key = f'{job["event"]["character_name"]}|0'
         layers = {
-            str(layer): torch.zeros((32, 3), dtype=torch.float16)
+            str(layer): torch.zeros((64, 3), dtype=torch.float16)
             for layer in range(16)
         }
         torch.save(
@@ -155,7 +155,7 @@ def _completed_fixture(
                 "payload_sha256": sha256_file(payload),
                 "payload_keys": [payload_key],
                 "payload_slot_shapes": {
-                    payload_key: {str(layer): [32, 3] for layer in range(16)}
+                    payload_key: {str(layer): [64, 3] for layer in range(16)}
                 },
                 "event": job["event"],
             },
@@ -207,14 +207,14 @@ def test_freeze_emits_exactly_three_valid_event_level_donor_pairs(tmp_path: Path
         frozen = pair["pairs"][0]
         artifact = torch.load(entry["payload"], map_location="cpu", weights_only=True)
         mask_banks = {
-            0: {str(layer): {"slot_count": 32} for layer in range(16)}
+            0: {str(layer): {"slot_count": 64} for layer in range(16)}
         }
         for _seed in (0, 1, 2):
             validate_frozen_donor_artifact(artifact, frozen, banks=mask_banks)
         assert frozen["donor_seed"] == 0
-        assert frozen["slot_count"] == {str(layer): 32 for layer in range(16)}
+        assert frozen["slot_count"] == {str(layer): 64 for layer in range(16)}
         assert frozen["slot_shape"] == {
-            str(layer): [32, 3] for layer in range(16)
+            str(layer): [64, 3] for layer in range(16)
         }
         assert frozen["payload_dtype"] == {
             str(layer): "float16" for layer in range(16)
@@ -346,11 +346,11 @@ def test_flat_tensor_payload_is_rejected_before_freeze(tmp_path: Path) -> None:
     payload_path = Path(job["donor_payload"])
     artifact = torch.load(payload_path, map_location="cpu", weights_only=True)
     payload_key = next(iter(artifact["payloads"]))
-    artifact["payloads"][payload_key] = torch.zeros((32, 3), dtype=torch.float16)
+    artifact["payloads"][payload_key] = torch.zeros((64, 3), dtype=torch.float16)
     torch.save(artifact, payload_path)
     info_path = Path(job["donor_payload_info"])
     info = _read(info_path)
-    info["payload_slot_shapes"][payload_key] = {"0": [32, 3]}
+    info["payload_slot_shapes"][payload_key] = {"0": [64, 3]}
     _write_json(info_path, info)
     _refresh_payload_bindings(run)
 
@@ -411,7 +411,7 @@ def test_layerwise_payload_requires_complete_floating_tensor_layers(
     payload_key = next(iter(artifact["payloads"]))
     layers = artifact["payloads"][payload_key]["layers"]
     if malformation == "integer":
-        layers["0"] = torch.zeros((32, 3), dtype=torch.int64)
+        layers["0"] = torch.zeros((64, 3), dtype=torch.int64)
     elif malformation == "missing_tensor":
         layers["missing"] = "not-a-tensor"
     elif malformation == "marker_int":
@@ -421,11 +421,11 @@ def test_layerwise_payload_requires_complete_floating_tensor_layers(
     elif malformation == "missing_layer":
         layers.pop("15")
     elif malformation == "extra_layer":
-        layers["16"] = torch.zeros((32, 3), dtype=torch.float16)
+        layers["16"] = torch.zeros((64, 3), dtype=torch.float16)
     elif malformation == "wrong_slots":
-        layers["0"] = torch.zeros((31, 3), dtype=torch.float16)
+        layers["0"] = torch.zeros((63, 3), dtype=torch.float16)
     else:
-        layers["15"] = torch.zeros((32, 4), dtype=torch.float16)
+        layers["15"] = torch.zeros((64, 4), dtype=torch.float16)
     torch.save(artifact, payload_path)
     if malformation in {"missing_layer", "extra_layer", "wrong_slots", "hidden_dim"}:
         info_path = Path(job["donor_payload_info"])
@@ -438,7 +438,7 @@ def test_layerwise_payload_requires_complete_floating_tensor_layers(
         _write_json(info_path, info)
     _refresh_payload_bindings(run)
 
-    with pytest.raises(ValueError, match="layerwise|layers 0-15|32-slot|hidden dimension"):
+    with pytest.raises(ValueError, match="layerwise|layers 0-15|64-slot|hidden dimension"):
         freeze_vistory_donor_map(
             target_inputs_path=targets,
             selection_path=selection,
@@ -490,14 +490,14 @@ def test_legacy_multi_bank_dump_runtime_is_rejected(tmp_path: Path) -> None:
         )
 
 
-def test_encoder_slot_count_must_be_explicitly_frozen_to_32(tmp_path: Path) -> None:
-    with pytest.raises(ValueError, match="actual=None.*frozen expected='32'"):
+def test_encoder_slot_count_is_frozen_to_64(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="actual=None.*frozen expected='64'"):
         _completed_fixture(tmp_path, encoder_slots=None)
 
 
 @pytest.mark.parametrize(
     ("encoder_layers", "encoder_slots"),
-    [("0-14", "32"), ("0-16", "32"), ("0-4,6-15", "32"), ("0-15", "64")],
+    [("0-14", "64"), ("0-16", "64"), ("0-4,6-15", "64"), ("0-15", "32")],
 )
 def test_frozen_encoder_geometry_must_match_the_formal_mask_universe(
     tmp_path: Path, encoder_layers: str, encoder_slots: str
@@ -514,7 +514,7 @@ def test_encoder_layer_range_must_be_explicitly_frozen_to_0_through_15(
     tmp_path: Path,
 ) -> None:
     with pytest.raises(ValueError, match="actual=None.*frozen expected='0-15'"):
-        _completed_fixture(tmp_path, encoder_layers=None, encoder_slots="32")
+        _completed_fixture(tmp_path, encoder_layers=None, encoder_slots="64")
 
 
 def test_all_three_payloads_must_share_one_platform_hidden_dimension(tmp_path: Path) -> None:
@@ -525,14 +525,14 @@ def test_all_three_payloads_must_share_one_platform_hidden_dimension(tmp_path: P
     artifact = torch.load(payload_path, map_location="cpu", weights_only=True)
     payload_key = next(iter(artifact["payloads"]))
     artifact["payloads"][payload_key]["layers"] = {
-        str(layer): torch.zeros((32, 4), dtype=torch.float16)
+        str(layer): torch.zeros((64, 4), dtype=torch.float16)
         for layer in range(16)
     }
     torch.save(artifact, payload_path)
     info_path = Path(job["donor_payload_info"])
     info = _read(info_path)
     info["payload_slot_shapes"][payload_key] = {
-        str(layer): [32, 4] for layer in range(16)
+        str(layer): [64, 4] for layer in range(16)
     }
     _write_json(info_path, info)
     _refresh_payload_bindings(run)

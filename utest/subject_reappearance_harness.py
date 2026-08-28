@@ -20,7 +20,12 @@ from .event_harness import (
     _set_option,
     build_prefix_inference_args,
 )
-from .prefix_contract import build_runtime_contract, sha256_file, validate_contract
+from .prefix_contract import (
+    FROZEN_MEMORY_ENCODER_SLOTS,
+    build_runtime_contract,
+    sha256_file,
+    validate_contract,
+)
 from .subject_subspace import canonical_json_sha256, capture_tensor_sha256
 from .subject_subspace_audit import SUBSPACE_ARMS
 from .subject_subspace_audit import validate_subject_subspace_manifest
@@ -626,12 +631,20 @@ def _expected_rows(arm: str, masks: Mapping[str, list[int]]) -> list[int]:
     if arm in {"subject_only", "wrong_subject"}:
         return list(masks["semantic"])
     if arm == "drop_subject":
-        return [index for index in range(32) if index not in masks["semantic"]]
+        return [
+            index
+            for index in range(FROZEN_MEMORY_ENCODER_SLOTS)
+            if index not in masks["semantic"]
+        ]
     if arm == "random_only":
         return list(masks["random"])
     if arm == "drop_random":
-        return [index for index in range(32) if index not in masks["random"]]
-    return list(range(32))
+        return [
+            index
+            for index in range(FROZEN_MEMORY_ENCODER_SLOTS)
+            if index not in masks["random"]
+        ]
+    return list(range(FROZEN_MEMORY_ENCODER_SLOTS))
 
 
 def _is_sha256(value: object) -> bool:
@@ -704,7 +717,7 @@ def _validate_donor_target_compatibility(row: Mapping) -> None:
             donor = donor_layers[layer]
             expected_slots = layer_contract["slot_count"]
             if (
-                expected_slots != 32
+                expected_slots != FROZEN_MEMORY_ENCODER_SLOTS
                 or not isinstance(source, torch.Tensor)
                 or not isinstance(donor, torch.Tensor)
                 or source.ndim != 2

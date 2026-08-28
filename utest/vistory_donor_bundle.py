@@ -14,6 +14,7 @@ import torch
 from .content_audit import LAYERS_KEY, _is_layerwise
 from .input_contract import payload_slot_shapes, validate_donor_bundle
 from .prefix_contract import (
+    FROZEN_MEMORY_ENCODER_SLOTS,
     sha256_file,
     validate_slotmem_memory_encoder_geometry,
     write_json_no_clobber,
@@ -189,7 +190,7 @@ def _payload_metadata(job: Mapping) -> tuple[str, dict, dict, dict]:
     ):
         raise ValueError(
             "selected donor payload must contain exactly layers 0-15 as finite floating "
-            "32-slot 2D tensors with one hidden dimension"
+            f"{FROZEN_MEMORY_ENCODER_SLOTS}-slot 2D tensors with one hidden dimension"
         )
     dtypes = {
         layer: str(tensor.dtype).removeprefix("torch.") for layer, tensor in tensors.items()

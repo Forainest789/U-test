@@ -12,7 +12,11 @@ from typing import Sequence
 
 import torch
 
-from .prefix_contract import sha256_file, write_bytes_no_clobber
+from .prefix_contract import (
+    FROZEN_MEMORY_ENCODER_SLOTS,
+    sha256_file,
+    write_bytes_no_clobber,
+)
 from .source_semantic_scores import produce_source_semantic_scores
 from .subject_subspace import (
     FROZEN_LAYER_GROUPS,
@@ -126,15 +130,22 @@ def _self_check_fixture(root: Path, repo: Path) -> tuple[Path, Path, Path, Path]
     event = {"event_id": "self_check", "character_name": "Ana", "source_chunk_idx": 0, "target_chunk_idx": 1, "source_json_path": str(story.resolve()), "reference_path": str(reference.resolve()), "reference_sha256": sha256_file(reference)}
     event_path = root / "event.json"
     event_path.write_text(json.dumps(event), encoding="utf-8")
-    raw, slots = torch.arange(12, dtype=torch.float32).reshape(4, 3), torch.arange(96, dtype=torch.float32).reshape(32, 3)
+    raw = torch.arange(12, dtype=torch.float32).reshape(4, 3)
+    slots = torch.arange(
+        FROZEN_MEMORY_ENCODER_SLOTS * 3, dtype=torch.float32
+    ).reshape(FROZEN_MEMORY_ENCODER_SLOTS, 3)
     meta, attention = [
         {"char_id": "Ana", "inside_box": index < 2, "tau_local": float(index)}
         for index in range(4)
-    ], {"Ana": torch.full((32, 4), 0.25)}
+    ], {"Ana": torch.full((FROZEN_MEMORY_ENCODER_SLOTS, 4), 0.25)}
     rows = []
     for layer in range(16):
         row = {"character": "Ana", "bank": 0, "layer": layer, "raw_tokens": raw, "raw_token_meta": meta, "encoded_slots": slots, "attention": attention}
-        row["tensor_shapes"] = {"raw_tokens": [4, 3], "encoded_slots": [32, 3], "attention": {"Ana": [32, 4]}}
+        row["tensor_shapes"] = {
+            "raw_tokens": [4, 3],
+            "encoded_slots": [FROZEN_MEMORY_ENCODER_SLOTS, 3],
+            "attention": {"Ana": [FROZEN_MEMORY_ENCODER_SLOTS, 4]},
+        }
         row["sha256"] = {"raw_tokens": capture_tensor_sha256(raw), "raw_token_meta": canonical_json_sha256(meta), "encoded_slots": capture_tensor_sha256(slots), "attention": capture_tensor_sha256(attention)}
         rows.append(row)
     provenance = {"source_json_path": str(story.resolve()), "source_json_sha256": sha256_file(story), "reference_file_sha256": sha256_file(reference), "fixed_reference_scope": "source_only", "source_seed": 0, "code_identity": {"infer_slotmem_sha256": sha256_file(repo / "infer_slotmem.py"), "mem_encoder_utils_sha256": sha256_file(repo / "mem_encoder_utils.py")}, "runtime_identity": {"python_version": "self-check", "torch_version": str(torch.__version__), "inference_args_sha256": "1" * 64}, "model_identity": {"high_noise": [{"path": str(model.resolve()), "sha256": sha256_file(model)}], "low_noise": []}}
