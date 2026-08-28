@@ -362,6 +362,139 @@ def _candidate_id(candidate: Mapping[str, object]) -> str:
     )
 
 
+def enumerate_official_recurrences(data_root: Path) -> list[dict]:
+    """Enumerate consecutive official character appearances with audit metadata."""
+    data_root = Path(data_root).resolve()
+    recurrences: list[dict] = []
+    for discovered_path in sorted(
+        data_root.glob("*/story.json"), key=lambda path: path.parent.name
+    ):
+        story_path = discovered_path.resolve()
+        if not story_path.is_relative_to(data_root):
+            raise ValueError(f"official story path escapes data root: {discovered_path}")
+        story_id = story_path.parent.name
+        official = _read_json(story_path, f"official story {story_id}")
+        by_index = {int(shot["index"]): shot for shot in official["Shots"]}
+        normalized_names = [str(name).strip().casefold() for name in official["Characters"]]
+        ambiguous_names = {
+            name
+            for name in official["Characters"]
+            if normalized_names.count(str(name).strip().casefold()) > 1
+        }
+        for character, character_row in sorted(official["Characters"].items()):
+            appearances = [
+                index
+                for index, shot in sorted(by_index.items())
+                if character in shot["Characters Appearing"]["en"]
+            ]
+            for source_shot, read_shot in zip(appearances, appearances[1:]):
+                horizon = read_shot - source_shot
+                try:
+                    bucket = horizon_bucket(horizon)
+                except ValueError:
+                    bucket = None
+                tag = str(character_row["tag"])
+                try:
+                    style = _style_class(tag)
+                except ValueError:
+                    style = None
+                source_characters = by_index[source_shot]["Characters Appearing"]["en"]
+                reference = _resolve_within(
+                    data_root,
+                    Path(story_id) / "image" / character / "00.jpg",
+                    "donor reference path",
+                )
+                recurrence_key = {
+                    "story_id": story_id,
+                    "character_name": character,
+                    "source_shot": source_shot,
+                    "read_shot": read_shot,
+                }
+                try:
+                    convert_event(
+                        official,
+                        {
+                            **recurrence_key,
+                            "event_id": f"recurrence_{_canonical_sha256(recurrence_key)[:16]}",
+                            "target_shot": read_shot,
+                        },
+                    )
+                    interval_valid = True
+                except (KeyError, TypeError, ValueError):
+                    interval_valid = False
+                recurrences.append(
+                    {
+                        "recurrence_id": _canonical_sha256(recurrence_key),
+                        "story_id": story_id,
+                        "character_name": character,
+                        "entity_uid": f"{story_id}::{character}",
+                        "source_shot": source_shot,
+                        "read_shot": read_shot,
+                        "horizon": horizon,
+                        "gap_bucket": bucket,
+                        "official_tag": tag,
+                        "style_class": style,
+                        "source_character_count": len(source_characters),
+                        "official_character_description": str(
+                            character_row.get("prompt_en", "")
+                        ),
+                        "official_story": {
+                            "path": story_path.relative_to(data_root).as_posix(),
+                            "sha256": sha256_file(story_path),
+                        },
+                        "reference": {
+                            "path": reference.relative_to(data_root).as_posix(),
+                            "sha256": sha256_file(reference) if reference.is_file() else None,
+                        },
+                        "source_prompt": _shot_prompt(by_index[source_shot]),
+                        "read_prompt": _shot_prompt(by_index[read_shot]),
+                        "ambiguous_name": character in ambiguous_names,
+                        "ambiguous_presence": any(
+                            shot["Characters Appearing"]["en"].count(character) != 1
+                            for index, shot in by_index.items()
+                            if source_shot <= index <= read_shot
+                            and character in shot["Characters Appearing"]["en"]
+                        ),
+                        "interval_valid": interval_valid,
+                    }
+                )
+    return recurrences
+
+
+def donor_rejection_reasons(
+    target: Mapping[str, object], donor: Mapping[str, object]
+) -> list[str]:
+    """Return the unchanged ordered structural donor-matcher rejections."""
+    reasons: list[str] = []
+    target_story_id = str(target.get("story_id", target.get("target_story_id")))
+    target_entity_uid = str(target.get("entity_uid", target.get("target_entity_uid")))
+    if donor["story_id"] == target_story_id:
+        reasons.append("same_story")
+    if donor["entity_uid"] == target_entity_uid:
+        reasons.append("same_identity")
+    if donor["ambiguous_name"]:
+        reasons.append("ambiguous_duplicate_identity")
+    if donor["ambiguous_presence"]:
+        reasons.append("ambiguous_duplicate_identity")
+    if donor["gap_bucket"] is None:
+        reasons.append("unsupported_horizon")
+    if donor["style_class"] is None:
+        reasons.append("unsupported_official_tag")
+    if donor["official_tag"] != target["official_tag"]:
+        reasons.append("official_tag_mismatch")
+    if donor["style_class"] != target["style_class"]:
+        reasons.append("style_class_mismatch")
+    if donor["source_character_count"] != target["source_character_count"]:
+        reasons.append("source_character_count_mismatch")
+    if donor["gap_bucket"] != target["gap_bucket"]:
+        reasons.append("gap_bucket_mismatch")
+    if donor["reference"]["sha256"] is None:
+        reasons.append("missing_reference")
+    if not donor["interval_valid"]:
+        reasons.append("invalid_absence_interval")
+    return reasons
+
+
 def validate_frozen_vistory_tree(data_root: Path) -> None:
     """Fail closed unless the frozen official 80-story source tree is complete."""
     data_root = Path(data_root).resolve()
@@ -435,118 +568,41 @@ def _build_survey(data_root: Path, target_inputs_path: Path) -> dict[str, object
         validate_frozen_vistory_tree(data_root)
     candidates: list[dict] = []
     rejections: list[dict] = []
-    for discovered_path in sorted(
-        data_root.glob("*/story.json"), key=lambda path: path.parent.name
-    ):
-        story_path = discovered_path.resolve()
-        if not story_path.is_relative_to(data_root):
-            raise ValueError(f"official story path escapes data root: {discovered_path}")
-        story_id = story_path.parent.name
-        official = json.loads(story_path.read_text(encoding="utf-8-sig"))
-        by_index = {int(shot["index"]): shot for shot in official["Shots"]}
-        normalized_names = [str(name).strip().casefold() for name in official["Characters"]]
-        ambiguous_names = {
-            name
-            for name in official["Characters"]
-            if normalized_names.count(str(name).strip().casefold()) > 1
-        }
+    for recurrence in enumerate_official_recurrences(data_root):
         for target in targets:
-            for character, character_row in sorted(official["Characters"].items()):
-                appearances = [
-                    index
-                    for index, shot in sorted(by_index.items())
-                    if character in shot["Characters Appearing"]["en"]
-                ]
-                for source_shot, read_shot in zip(appearances, appearances[1:]):
-                    core = {
-                        "target_event_id": target["event_id"],
-                        "target_story_id": target["story_id"],
-                        "target_entity_uid": target["entity_uid"],
-                        "donor_story_id": story_id,
-                        "donor_char_id": character,
-                        "donor_entity_uid": f"{story_id}::{character}",
-                        "source_shot": source_shot,
-                        "read_shot": read_shot,
-                    }
-                    reasons: list[str] = []
-                    if story_id == target["story_id"]:
-                        reasons.append("same_story")
-                    if core["donor_entity_uid"] == target["entity_uid"]:
-                        reasons.append("same_identity")
-                    if character in ambiguous_names:
-                        reasons.append("ambiguous_duplicate_identity")
-                    if any(
-                        shot["Characters Appearing"]["en"].count(character) != 1
-                        for index, shot in by_index.items()
-                        if source_shot <= index <= read_shot
-                        and character in shot["Characters Appearing"]["en"]
-                    ):
-                        reasons.append("ambiguous_duplicate_identity")
-                    horizon = read_shot - source_shot
-                    try:
-                        bucket = horizon_bucket(horizon)
-                    except ValueError:
-                        reasons.append("unsupported_horizon")
-                        bucket = None
-                    tag = str(character_row["tag"])
-                    try:
-                        style = _style_class(tag)
-                    except ValueError:
-                        reasons.append("unsupported_official_tag")
-                        style = None
-                    source_characters = by_index[source_shot]["Characters Appearing"]["en"]
-                    if tag != target["official_tag"]:
-                        reasons.append("official_tag_mismatch")
-                    if style != target["style_class"]:
-                        reasons.append("style_class_mismatch")
-                    if len(source_characters) != target["source_character_count"]:
-                        reasons.append("source_character_count_mismatch")
-                    if bucket != target["gap_bucket"]:
-                        reasons.append("gap_bucket_mismatch")
-                    reference = _resolve_within(
-                        data_root,
-                        Path(story_id) / "image" / character / "00.jpg",
-                        "donor reference path",
+            core = {
+                "target_event_id": target["event_id"],
+                "target_story_id": target["story_id"],
+                "target_entity_uid": target["entity_uid"],
+                "donor_story_id": recurrence["story_id"],
+                "donor_char_id": recurrence["character_name"],
+                "donor_entity_uid": recurrence["entity_uid"],
+                "source_shot": recurrence["source_shot"],
+                "read_shot": recurrence["read_shot"],
+            }
+            record = {
+                "candidate_id": _candidate_id(core),
+                **core,
+                **{
+                    field: recurrence[field]
+                    for field in (
+                        "horizon",
+                        "gap_bucket",
+                        "official_tag",
+                        "style_class",
+                        "source_character_count",
+                        "official_story",
+                        "reference",
+                        "source_prompt",
+                        "read_prompt",
                     )
-                    if not reference.is_file():
-                        reasons.append("missing_reference")
-                    try:
-                        convert_event(
-                            official,
-                            {
-                                "story_id": story_id,
-                                "event_id": f"survey_{_candidate_id(core)[:16]}",
-                                "character_name": character,
-                                "source_shot": source_shot,
-                                "target_shot": read_shot,
-                            },
-                        )
-                    except (KeyError, TypeError, ValueError):
-                        reasons.append("invalid_absence_interval")
-                    candidate_id = _candidate_id(core)
-                    record = {
-                        "candidate_id": candidate_id,
-                        **core,
-                        "horizon": horizon,
-                        "gap_bucket": bucket,
-                        "official_tag": tag,
-                        "style_class": style,
-                        "source_character_count": len(source_characters),
-                        "official_story": {
-                            "path": story_path.relative_to(data_root).as_posix(),
-                            "sha256": sha256_file(story_path),
-                        },
-                        "reference": {
-                            "path": reference.relative_to(data_root).as_posix(),
-                            "sha256": sha256_file(reference) if reference.is_file() else None,
-                        },
-                        "source_prompt": _shot_prompt(by_index[source_shot]),
-                        "read_prompt": _shot_prompt(by_index[read_shot]),
-                    }
-                    if reasons:
-                        rejections.append({**record, "reasons": reasons})
-                        continue
-                    candidates.append(record)
+                },
+            }
+            reasons = donor_rejection_reasons(target, recurrence)
+            if reasons:
+                rejections.append({**record, "reasons": reasons})
+            else:
+                candidates.append(record)
     return {
         "schema_version": 1,
         "dataset_commit": top["dataset_commit"],

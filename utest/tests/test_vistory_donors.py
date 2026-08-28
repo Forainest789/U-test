@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import errno
+import hashlib
 import subprocess
 import sys
 from pathlib import Path
@@ -12,6 +13,8 @@ import utest.vistory_donors as donor_module
 from utest.prefix_contract import sha256_file
 from utest.vistory_donors import (
     build_donor_candidate_survey,
+    donor_rejection_reasons,
+    enumerate_official_recurrences,
     freeze_donor_selection,
     horizon_bucket,
     validate_frozen_vistory_tree,
@@ -383,6 +386,50 @@ def test_survey_enumerates_a_matching_official_recurrence(tmp_path: Path) -> Non
             "read_prompt": "setting 9 perspective 9. static 9",
         }
     ]
+
+
+def test_extracted_recurrences_preserve_donor_survey_bytes(tmp_path: Path) -> None:
+    data_root = tmp_path / "official"
+    _write_official_story(
+        data_root,
+        "10",
+        _story({"Target": "realistic_human"}, {2: ["Target"], 8: ["Target"]}),
+        reference_names=("Target",),
+    )
+    _write_official_story(
+        data_root,
+        "20",
+        _story({"Donor": "realistic_human"}, {3: ["Donor"], 9: ["Donor"]}),
+        reference_names=("Donor",),
+    )
+    targets = _write_target_inputs(
+        tmp_path / "targets",
+        data_root,
+        story_id="10",
+        character="Target",
+        source_shot=2,
+        target_shot=8,
+    )
+
+    recurrences = enumerate_official_recurrences(data_root)
+    target = next(row for row in recurrences if row["entity_uid"] == "10::Target")
+    donor = next(row for row in recurrences if row["entity_uid"] == "20::Donor")
+    assert donor_rejection_reasons(target, donor) == []
+
+    survey = build_donor_candidate_survey(
+        data_root=data_root,
+        target_inputs_path=targets,
+        output_path=tmp_path / "survey.json",
+    )
+    frozen_bytes = json.dumps(
+        {"candidates": survey["candidates"], "rejections": survey["rejections"]},
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    assert hashlib.sha256(frozen_bytes).hexdigest() == (
+        "3be60100a9362957bcf1dcbd7cd5e76ffae24cf968b9f63fe948c2dd1a4bf5bb"
+    )
 
 
 def test_survey_rejects_ambiguous_duplicate_character_presence(tmp_path: Path) -> None:
