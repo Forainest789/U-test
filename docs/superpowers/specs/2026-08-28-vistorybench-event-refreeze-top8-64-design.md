@@ -30,7 +30,7 @@ The replacement must be a realistic-human female character with a real source–
 
 Scan all 80 stories from dataset revision `92f845531b67e97a67ae04b256ec5d8c020e8341`. For every official character tagged `realistic_human`, enumerate consecutive appearances `(source_shot, target_shot)`. A pair is a valid reappearance interval only when the character appears exactly once where present in the inclusive interval, is present in both endpoints, and is absent from every intermediate shot.
 
-Exclude the two retained target events and the original Gu Zhenzhen event from replacement eligibility. Existing reference-image, path-containment, story-completeness, identity-ambiguity, and raw-story SHA-256 checks remain fail-closed.
+Exclude every recurrence belonging to the three original target identities (Song Yuchen, Gu Zhenzhen, and Chen Sihan's Father) from replacement eligibility. This guarantees that the replacement is a third person rather than another interval for a retained or removed identity. Existing reference-image, path-containment, story-completeness, identity-ambiguity, and raw-story SHA-256 checks remain fail-closed.
 
 ### Donor support
 
