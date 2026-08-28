@@ -599,6 +599,71 @@ def test_second_block_32_slot_prefix_contract_stops_the_whole_batch_before_gpu(
     assert not contract_path.parent.with_name("prefix.failed_1").exists()
 
 
+@pytest.mark.parametrize("stage", ("preflight", "full", "qstar"))
+@pytest.mark.parametrize(("second_slot_count", "expected_calls"), ((32, 0), (64, 2)))
+def test_gpu_stage_batch_preflights_every_prefix_contract_before_gpu(
+    stage: str,
+    second_slot_count: int,
+    expected_calls: int,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _path, manifest = _dry_run_manifest(tmp_path)
+    rows = manifest["blocks"][:2]
+    for index, row in enumerate(rows):
+        contract_path = _materialize_existing_prefix_contract(
+            row, slot_count=second_slot_count if index == 1 else 64
+        )
+        row["commands"][stage] = {
+            "status": "deferred_until_prefix",
+            **({"arm_order": ["full_correct"]} if stage != "qstar" else {}),
+        }
+        qualification = Path(row["source_qualification"])
+        qualification.parent.mkdir(parents=True, exist_ok=True)
+        qualification.write_text(json.dumps({"status": "passed"}), encoding="utf-8")
+        if stage == "full":
+            preflight = Path(row["block_dir"]) / "preflight" / "validation.json"
+            preflight.parent.mkdir(parents=True, exist_ok=True)
+            preflight.write_text("{}", encoding="utf-8")
+    second_contract = contract_path
+    calls = []
+    monkeypatch.setattr(
+        "utest.subject_reappearance_harness._validate_donor_target_compatibility",
+        lambda _row: None,
+    )
+    monkeypatch.setattr(
+        "utest.subject_reappearance_harness._freeze_or_load_command_artifact",
+        lambda _row, _contract: {
+            "preflight": {"full_correct": ["gpu"]},
+            "full": {"full_correct": ["gpu"]},
+            "qstar": ["gpu"],
+        },
+    )
+    monkeypatch.setattr(
+        "utest.subject_reappearance_harness.validate_contract", lambda *_args: []
+    )
+    monkeypatch.setattr(
+        "utest.subject_reappearance_harness.validate_block", lambda *_args, **_kwargs: {}
+    )
+    monkeypatch.setattr(
+        "utest.subject_reappearance_harness._validate_qstar_report",
+        lambda *_args: None,
+    )
+    monkeypatch.setattr(
+        "utest.subject_reappearance_harness._run_logged",
+        lambda *args, **kwargs: calls.append((args, kwargs)),
+    )
+
+    if second_slot_count == 32:
+        with pytest.raises(MemoryGeometryError, match="actual='32'.*frozen expected='64'"):
+            _execute_stage({"blocks": rows}, stage)
+    else:
+        _execute_stage({"blocks": rows}, stage)
+
+    assert len(calls) == expected_calls
+    assert second_contract.is_file()
+
+
 def test_non_geometry_partial_prefix_resume_still_recovers_before_rerun(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

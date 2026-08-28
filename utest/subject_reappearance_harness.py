@@ -1444,17 +1444,18 @@ def _execute_stage(
     resume: bool = False,
 ) -> None:
     rows = _selected_blocks(manifest, event_id, seed)
-    if stage == "prefix":
+    if stage in {"prefix", "qstar", "preflight", "full"}:
         for row in rows:
             completed = Path(row["block_dir"]) / "prefix" / "prefix_contract.json"
-            if not completed.is_file():
+            if stage == "prefix" and not completed.is_file():
                 continue
             try:
                 _validated_prefix_contract(row)
             except MemoryGeometryError:
                 raise
             except (FileNotFoundError, KeyError, TypeError, ValueError):
-                pass
+                if stage != "prefix":
+                    raise
     for row in rows:
         block_dir = Path(row["block_dir"])
         if stage == "prefix":
