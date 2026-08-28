@@ -377,6 +377,11 @@ def _validated_official_shots(
             raise ValueError(
                 f"official story {story_id} character {character!r} must define tag"
             )
+        if not isinstance(row["tag"], str):
+            raise ValueError(
+                f"official story {story_id} character {character!r} "
+                "tag must be a string"
+            )
         if not isinstance(row.get("prompt_en"), str):
             raise ValueError(
                 f"official story {story_id} character {character!r} "
@@ -458,7 +463,7 @@ def enumerate_official_recurrences(data_root: Path) -> list[dict]:
                     bucket = horizon_bucket(horizon)
                 except ValueError:
                     bucket = None
-                tag = str(character_row["tag"])
+                tag = character_row["tag"]
                 try:
                     style = _style_class(tag)
                 except ValueError:

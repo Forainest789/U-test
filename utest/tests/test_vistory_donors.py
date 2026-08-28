@@ -472,6 +472,38 @@ def test_recurrence_inventory_preserves_empty_character_prompt(tmp_path: Path) -
     assert recurrence["official_character_description"] == ""
 
 
+@pytest.mark.parametrize(
+    "invalid_tag", [["realistic_human"], {"value": "realistic_human"}, None, True]
+)
+def test_recurrence_inventory_requires_character_tag_as_a_string(
+    tmp_path: Path, invalid_tag: object
+) -> None:
+    data_root = tmp_path / "official"
+    story = _story({"Donor": "realistic_human"}, {3: ["Donor"], 9: ["Donor"]})
+    story["Characters"]["Donor"]["tag"] = invalid_tag
+    _write_official_story(data_root, "20", story, reference_names=("Donor",))
+
+    with pytest.raises(
+        ValueError, match=r"story 20 character 'Donor' tag must be a string"
+    ):
+        enumerate_official_recurrences(data_root)
+
+
+def test_recurrence_inventory_preserves_empty_tag_as_unsupported(tmp_path: Path) -> None:
+    data_root = tmp_path / "official"
+    story = _story({"Donor": "realistic_human"}, {3: ["Donor"], 9: ["Donor"]})
+    story["Characters"]["Donor"]["tag"] = ""
+    _write_official_story(data_root, "20", story, reference_names=("Donor",))
+
+    [recurrence] = enumerate_official_recurrences(data_root)
+
+    assert recurrence["official_tag"] == ""
+    assert recurrence["style_class"] is None
+    assert "unsupported_official_tag" in donor_rejection_reasons(
+        recurrence, recurrence
+    )
+
+
 def test_recurrence_inventory_rejects_duplicate_shot_indices(tmp_path: Path) -> None:
     data_root = tmp_path / "official"
     story = _story({"Donor": "realistic_human"}, {3: ["Donor"], 9: ["Donor"]})
