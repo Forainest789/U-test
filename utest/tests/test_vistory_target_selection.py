@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+import utest.vistory_target_selection as target_selection_module
 from utest.prefix_contract import sha256_file
 from utest.vistory_target_selection import (
     build_replacement_target_survey,
@@ -50,7 +51,7 @@ def _write_story(
     story_path.write_text(json.dumps(story), encoding="utf-8")
     for name in reference_names:
         reference = data_root / story_id / "image" / name / "00.jpg"
-        reference.parent.mkdir(parents=True)
+        reference.parent.mkdir(parents=True, exist_ok=True)
         reference.write_bytes(f"reference:{story_id}:{name}".encode())
     return story_path
 
@@ -461,6 +462,39 @@ def test_survey_event_id_preserves_the_official_story_id(tmp_path: Path) -> None
     assert low_id["event_id"] == "vistory01_low_id_s1_s12"
 
 
+def test_survey_rejects_a_replacement_event_id_colliding_with_a_retained_event(
+    tmp_path: Path,
+) -> None:
+    data_root, selection_path = _frozen_fixture(tmp_path)
+    _write_story(
+        data_root,
+        "79",
+        _story(
+            {
+                "Song Yuchen": "realistic_human",
+                "Song-Yuchen": "realistic_human",
+            },
+            {
+                2: ["Song Yuchen", "Song-Yuchen"],
+                8: ["Song Yuchen", "Song-Yuchen"],
+            },
+        ),
+        reference_names=("Song Yuchen", "Song-Yuchen"),
+    )
+    selection = json.loads(selection_path.read_text(encoding="utf-8"))
+    selection["events"][0]["story_sha256"] = sha256_file(
+        data_root / "79" / "story.json"
+    ).upper()
+    selection_path.write_text(json.dumps(selection), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="colliding stable replacement event_id"):
+        build_replacement_target_survey(
+            data_root=data_root,
+            selection_path=selection_path,
+            output_path=tmp_path / "retained-collision.json",
+        )
+
+
 def test_freeze_rejects_a_forged_gu_zhenzhen_candidate(tmp_path: Path) -> None:
     data_root, selection_path, survey_path, survey, review_path = _review_fixture(tmp_path)
     forged = dict(survey["candidates"][0])
@@ -505,6 +539,36 @@ def test_freeze_requires_at_least_one_reviewed_female_candidate(tmp_path: Path) 
             review_path=review_path,
             output_path=tmp_path / "no-female.json",
         )
+
+
+def test_freeze_rejects_duplicate_final_event_ids_at_the_output_boundary(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    data_root, selection_path, survey_path, survey, review_path = _review_fixture(tmp_path)
+    candidate = next(
+        row for row in survey["candidates"] if row["character_name"] == "Alice Example"
+    )
+    candidate["event_id"] = "vistory79_song_yuchen_s2_s8"
+    survey_path.write_text(json.dumps(survey), encoding="utf-8")
+    review = json.loads(review_path.read_text(encoding="utf-8"))
+    review["survey_sha256"] = sha256_file(survey_path)
+    review_path.write_text(json.dumps(review), encoding="utf-8")
+    monkeypatch.setattr(
+        target_selection_module,
+        "_build_replacement_target_survey",
+        lambda **_: survey,
+    )
+    output_path = tmp_path / "duplicate-final-event.json"
+
+    with pytest.raises(ValueError, match="duplicate frozen event_id"):
+        freeze_replacement_selection(
+            data_root=data_root,
+            selection_path=selection_path,
+            survey_path=survey_path,
+            review_path=review_path,
+            output_path=output_path,
+        )
+    assert not output_path.exists()
 
 
 def test_target_refreeze_outputs_never_clobber_existing_files(tmp_path: Path) -> None:

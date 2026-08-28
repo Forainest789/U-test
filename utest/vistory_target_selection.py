@@ -184,7 +184,10 @@ def _build_replacement_target_survey(
     selection = _load_original_selection(data_root, selection_path)
     recurrences = enumerate_official_recurrences(data_root)
     excluded = {f"{story_id}::{name}" for _, story_id, name, _, _ in ORIGINAL_EVENTS}
-    event_ids: set[str] = set()
+    event_ids = {
+        str(selection["events"][0]["event_id"]),
+        str(selection["events"][2]["event_id"]),
+    }
     candidates: list[dict] = []
     for recurrence in recurrences:
         if recurrence["entity_uid"] in excluded:
@@ -436,5 +439,8 @@ def freeze_replacement_selection(
             "dataset_commit": VISTORY_DATASET_COMMIT,
         },
     }
+    frozen_event_ids = [str(event["event_id"]) for event in frozen["events"]]
+    if len(frozen_event_ids) != len(set(frozen_event_ids)):
+        raise ValueError(f"duplicate frozen event_id: {frozen_event_ids}")
     write_json_no_clobber(Path(output_path).resolve(), frozen)
     return frozen
