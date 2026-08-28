@@ -23,8 +23,10 @@ from .event_harness import (
 from .prefix_contract import (
     FROZEN_MEMORY_ENCODER_SLOTS,
     build_runtime_contract,
+    normalized_frozen_args,
     sha256_file,
     validate_contract,
+    validate_slotmem_memory_encoder_geometry,
 )
 from .subject_subspace import canonical_json_sha256, capture_tensor_sha256
 from .subject_subspace_audit import SUBSPACE_ARMS
@@ -436,6 +438,7 @@ def build_run_manifest(
     by_id = {row["event_id"]: row for row in _prepared_events(inputs, selection)}
     base_bytes = base_inference_args.read_bytes()
     base = _parse_args(base_bytes.decode("utf-8-sig"))
+    validate_slotmem_memory_encoder_geometry(normalized_frozen_args(base))
     platform_bytes = platform_manifest.read_bytes()
     donors, donor_map_sha = _read_bytes_json(donor_map) if donor_map else (None, None)
     teachers, teacher_map_sha = _read_bytes_json(teacher_map) if teacher_map else (None, None)

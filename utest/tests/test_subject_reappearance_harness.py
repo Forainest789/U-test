@@ -31,6 +31,14 @@ from utest.content_audit import LAYERS_KEY, _payload_sha256, transform_slot_rows
 from utest.prefix_contract import build_runtime_contract, normalized_frozen_args, sha256_file
 
 
+VALID_BASE_ARGV = [
+    "--slotmem_memory_encoder_layers",
+    "0-15",
+    "--slotmem_memory_encoder_slots",
+    "64",
+]
+
+
 def test_matrix_is_exactly_three_events_by_three_seeds() -> None:
     selection = {
         "schema_version": 1,
@@ -214,7 +222,10 @@ def test_dry_run_writes_one_immutable_nine_block_manifest_without_gpu_or_qstar_c
 ) -> None:
     inputs = _prepared_inputs(tmp_path)
     base = tmp_path / "args.json"
-    base.write_text(json.dumps({"argv": ["--seed_base", "42"]}), encoding="utf-8")
+    base.write_text(
+        json.dumps({"argv": [*VALID_BASE_ARGV, "--seed_base", "42"]}),
+        encoding="utf-8",
+    )
     platform = tmp_path / "platform.json"
     platform.write_text("{}", encoding="utf-8")
     output = tmp_path / "run"
@@ -267,6 +278,101 @@ def test_dry_run_writes_one_immutable_nine_block_manifest_without_gpu_or_qstar_c
         ])
 
 
+def test_dry_run_rejects_missing_memory_geometry_without_gpu_or_manifest(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    inputs = _prepared_inputs(tmp_path)
+    base = tmp_path / "args.json"
+    base.write_text("[]", encoding="utf-8")
+    platform = tmp_path / "platform.json"
+    platform.write_text("{}", encoding="utf-8")
+    output = tmp_path / "run"
+    calls = []
+    monkeypatch.setattr(
+        "subprocess.run",
+        lambda *args, **kwargs: calls.append((args, kwargs)),
+    )
+
+    with pytest.raises(ValueError, match="actual=None.*frozen expected='0-15'"):
+        main([
+            "dry-run", "--inputs", str(inputs), "--output", str(output),
+            "--base-inference-args", str(base), "--platform-manifest", str(platform),
+        ])
+
+    assert calls == []
+    assert not (output / "run_manifest.json").exists()
+
+
+def test_dry_run_rejects_legacy_32_slot_geometry_without_gpu_or_manifest(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    inputs = _prepared_inputs(tmp_path)
+    base = tmp_path / "args.json"
+    base.write_text(json.dumps({"argv": [
+        "--slotmem_memory_encoder_layers", "0-15",
+        "--slotmem_memory_encoder_slots", "32",
+    ]}), encoding="utf-8")
+    platform = tmp_path / "platform.json"
+    platform.write_text("{}", encoding="utf-8")
+    output = tmp_path / "run"
+    calls = []
+    monkeypatch.setattr(
+        "subprocess.run", lambda *args, **kwargs: calls.append((args, kwargs))
+    )
+
+    with pytest.raises(ValueError, match="actual='32'.*frozen expected='64'"):
+        main([
+            "dry-run", "--inputs", str(inputs), "--output", str(output),
+            "--base-inference-args", str(base), "--platform-manifest", str(platform),
+        ])
+
+    assert calls == []
+    assert not (output / "run_manifest.json").exists()
+
+
+def test_dry_run_accepts_32_then_64_duplicate_geometry_by_last_value(
+    tmp_path: Path,
+) -> None:
+    inputs = _prepared_inputs(tmp_path)
+    base = tmp_path / "args.json"
+    base.write_text(json.dumps({"argv": [
+        "--slotmem_memory_encoder_layers", "0-15",
+        "--slotmem_memory_encoder_slots", "32",
+        "--slotmem_memory_encoder_slots", "64",
+    ]}), encoding="utf-8")
+    platform = tmp_path / "platform.json"
+    platform.write_text("{}", encoding="utf-8")
+    output = tmp_path / "run"
+
+    assert main([
+        "dry-run", "--inputs", str(inputs), "--output", str(output),
+        "--base-inference-args", str(base), "--platform-manifest", str(platform),
+    ]) == 0
+    assert (output / "run_manifest.json").is_file()
+
+
+def test_dry_run_rejects_64_then_32_duplicate_geometry_by_last_value(
+    tmp_path: Path,
+) -> None:
+    inputs = _prepared_inputs(tmp_path)
+    base = tmp_path / "args.json"
+    base.write_text(json.dumps({"argv": [
+        "--slotmem_memory_encoder_layers", "0-15",
+        "--slotmem_memory_encoder_slots", "64",
+        "--slotmem_memory_encoder_slots", "32",
+    ]}), encoding="utf-8")
+    platform = tmp_path / "platform.json"
+    platform.write_text("{}", encoding="utf-8")
+    output = tmp_path / "run"
+
+    with pytest.raises(ValueError, match="actual='32'.*frozen expected='64'"):
+        main([
+            "dry-run", "--inputs", str(inputs), "--output", str(output),
+            "--base-inference-args", str(base), "--platform-manifest", str(platform),
+        ])
+    assert not (output / "run_manifest.json").exists()
+
+
 def test_dry_run_rejects_shell_text_base_arguments_without_partial_outputs(tmp_path: Path) -> None:
     inputs = _prepared_inputs(tmp_path)
     base = tmp_path / "args.txt"
@@ -286,7 +392,7 @@ def test_dry_run_rejects_shell_text_base_arguments_without_partial_outputs(tmp_p
 def _dry_run_manifest(tmp_path: Path) -> tuple[Path, dict]:
     inputs = _prepared_inputs(tmp_path)
     base = tmp_path / "args.json"
-    base.write_text("[]", encoding="utf-8")
+    base.write_text(json.dumps({"argv": VALID_BASE_ARGV}), encoding="utf-8")
     platform = tmp_path / "platform.json"
     platform.write_text("{}", encoding="utf-8")
     output = tmp_path / "run"
@@ -683,7 +789,7 @@ def test_probe_stage_materializes_and_validates_semantic_scores_before_probe(
 ) -> None:
     inputs = _prepared_inputs(tmp_path)
     base = tmp_path / "args.json"
-    base.write_text(json.dumps({"argv": []}), encoding="utf-8")
+    base.write_text(json.dumps({"argv": VALID_BASE_ARGV}), encoding="utf-8")
     platform = tmp_path / "platform.json"
     platform.write_text("{}", encoding="utf-8")
     output = tmp_path / "run"
@@ -891,7 +997,7 @@ def test_failed_preflight_validation_leaves_no_partial_block_events(tmp_path: Pa
     selection["events"][-1]["manifest_sha256"] = "0" * 64
     inputs.write_text(json.dumps(selection), encoding="utf-8")
     base = tmp_path / "args.json"
-    base.write_text("[]", encoding="utf-8")
+    base.write_text(json.dumps({"argv": VALID_BASE_ARGV}), encoding="utf-8")
     platform = tmp_path / "platform.json"
     platform.write_text("{}", encoding="utf-8")
     output = tmp_path / "run"
@@ -915,7 +1021,7 @@ def test_prepared_manifest_cannot_replace_the_frozen_official_story_hash(tmp_pat
     item["manifest_sha256"] = sha256_file(event_manifest_path)
     inputs.write_text(json.dumps(selection), encoding="utf-8")
     base, platform = tmp_path / "args.json", tmp_path / "platform.json"
-    base.write_text("[]", encoding="utf-8")
+    base.write_text(json.dumps({"argv": VALID_BASE_ARGV}), encoding="utf-8")
     platform.write_text("{}", encoding="utf-8")
 
     with pytest.raises(ValueError, match="official story"):
@@ -1245,7 +1351,7 @@ def test_run_revalidates_prepared_descendants_before_gpu(
 ) -> None:
     inputs = _prepared_inputs(tmp_path)
     base = tmp_path / "args.json"
-    base.write_text("[]", encoding="utf-8")
+    base.write_text(json.dumps({"argv": VALID_BASE_ARGV}), encoding="utf-8")
     platform = tmp_path / "platform.json"
     platform.write_text("{}", encoding="utf-8")
     output = tmp_path / "run"
@@ -1302,7 +1408,7 @@ def test_valid_teacher_freezes_a_qstar_stage_command_and_requires_donor(
         "video": str(teacher_video), "manifest": str(teacher_manifest),
     }}}), encoding="utf-8")
     base = tmp_path / "args.json"
-    base.write_text("[]", encoding="utf-8")
+    base.write_text(json.dumps({"argv": VALID_BASE_ARGV}), encoding="utf-8")
     platform = tmp_path / "platform.json"
     platform.write_text("{}", encoding="utf-8")
     output = tmp_path / "run"
