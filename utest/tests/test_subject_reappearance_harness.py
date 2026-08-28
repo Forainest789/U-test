@@ -1697,6 +1697,68 @@ def test_gpu_stage_batch_rejects_any_non_deferred_status_before_gpu(
     assert calls == []
 
 
+def test_qstar_resume_skips_single_not_available_row_without_validation_or_gpu(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    row = _gpu_stage_execution_row(tmp_path, "qstar")
+    row["commands"]["qstar"]["status"] = "not_available"
+    calls = []
+    for name in (
+        "_validated_prefix_contract",
+        "_validate_donor_target_compatibility",
+        "_run_logged",
+    ):
+        monkeypatch.setattr(
+            f"utest.subject_reappearance_harness.{name}",
+            lambda *_args, actual=name: calls.append(actual),
+        )
+
+    _execute_stage({"blocks": [row]}, "qstar", resume=True)
+
+    assert calls == []
+
+
+def test_qstar_resume_preflights_and_runs_only_deferred_rows_in_a_mixed_batch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    rows = [
+        _gpu_stage_execution_row(tmp_path / "deferred", "qstar"),
+        _gpu_stage_execution_row(tmp_path / "unavailable", "qstar"),
+    ]
+    rows[1]["commands"]["qstar"]["status"] = "not_available"
+    calls = []
+
+    def prefix_contract(row: dict) -> dict:
+        calls.append(f"prefix:{Path(row['block_dir']).parents[1].name}")
+        return {"snapshot": {"path": str(Path(row["block_dir"]) / "snapshot.pt")}}
+
+    def donor_geometry(row: dict) -> None:
+        calls.append(f"donor:{Path(row['block_dir']).parents[1].name}")
+
+    monkeypatch.setattr(
+        "utest.subject_reappearance_harness._validated_prefix_contract", prefix_contract
+    )
+    monkeypatch.setattr(
+        "utest.subject_reappearance_harness._validate_donor_target_compatibility",
+        donor_geometry,
+    )
+    monkeypatch.setattr(
+        "utest.subject_reappearance_harness._freeze_or_load_command_artifact",
+        lambda _row, _contract: {"qstar": ["gpu"]},
+    )
+    monkeypatch.setattr(
+        "utest.subject_reappearance_harness._validate_qstar_report", lambda *_args: None
+    )
+    monkeypatch.setattr(
+        "utest.subject_reappearance_harness._run_logged",
+        lambda *_args: calls.append("gpu"),
+    )
+
+    _execute_stage({"blocks": rows}, "qstar", resume=True)
+
+    assert calls == ["prefix:deferred", "donor:deferred", "prefix:deferred", "gpu"]
+
+
 def test_qstar_preflights_single_legacy_32_slot_donor_before_gpu(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

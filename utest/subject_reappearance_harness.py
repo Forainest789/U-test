@@ -1444,6 +1444,8 @@ def _execute_stage(
     resume: bool = False,
 ) -> None:
     rows = _selected_blocks(manifest, event_id, seed)
+    if stage == "qstar" and resume:
+        rows = [row for row in rows if row["commands"][stage]["status"] != "not_available"]
     if stage in {"preflight", "full", "qstar"}:
         for row in rows:
             status = row["commands"][stage]["status"]
@@ -1512,8 +1514,6 @@ def _execute_stage(
             )
             continue
         if stage == "qstar":
-            if resume and row["commands"]["qstar"]["status"] == "not_available":
-                continue
             if row["commands"]["qstar"]["status"] not in {"deferred_until_prefix"}:
                 raise ValueError(f"qstar is {row['commands']['qstar']['status']}")
             contract = _validated_prefix_contract(row)
