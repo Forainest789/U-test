@@ -1,0 +1,1813 @@
+{
+  "candidates": [
+    {
+      "candidate_id": "023745095d7093a09cae2a4f576df4008eaed049e153be804dc5a9961ec9b7e9",
+      "character_name": "Sir Alistair Burnet",
+      "eligible_donor_count": 7,
+      "eligible_donor_ids": [
+        "2098ac297a7a8d11fefdefa6ead9b243ffa5d3d1ec4dace79585b2626b2ba771",
+        "2c6c1e9cf0a402c92a9787fed93f079583450c6969d9f36f1a8e8cbd8ad8a49e",
+        "46ac068d229312ed4322dd6e21bc3691b33b520b90d6348e41aa86026b1fab5b",
+        "4b5a23eba1a089f8a4fe43a2073e0f572281fcad82de0a00165d76894cb6a971",
+        "60784d77755023da2d75041a882282aee7aed14e6eff5be3399c268e988a0cd9",
+        "75cc362310be646c961f11cf7c7fa041287646168e716354ea4432b53b76352b",
+        "f48b1cc454e48b120254a88897b099630180380196e6926d0f8696d3c2b79b53"
+      ],
+      "entity_uid": "51::Sir Alistair Burnet",
+      "event_id": "vistory51_sir_alistair_burnet_s4_s10",
+      "gap_bucket": "5-7",
+      "horizon": 6,
+      "official_character_description": "The most respected news anchor in Britain, an elderly man. He has rosy cheeks, black hair, and a comforting voice. He is dressed in a well-tailored suit, carrying himself with solemnity and dignity.",
+      "official_story": {
+        "path": "51/story.json",
+        "sha256": "4b008ea828e1131a48b9fa55750b1d94ef3b96ef6f4a159766be07a5b4135eb2"
+      },
+      "official_tag": "realistic_human",
+      "read_prompt": "Nighttime, the party headquarters in Smith Square. The meeting room is ablaze with light, Sir Alistair Burnet’s face fills the TV screen, champagne bottles pop, foam spraying, people cheer and embrace. Medium close up, low-angle shot. On the TV screen, Sir Alistair Burnet looks solemn yet gratified, announcing the government’s re-election. The room explodes in cheers as people toast in celebration.",
+      "reference": {
+        "path": "51/image/Sir Alistair Burnet/00.jpg",
+        "sha256": "332a6dd80c7a45281c6aea28d1c8b4814dae9e3d53edbc806c87d30ef15ad6d0"
+      },
+      "source_character_count": 1,
+      "source_prompt": "Nighttime, the party headquarters in Smith Square. The meeting room is brightly lit, the TV screen shows Sir Alistair Burnet’s face, champagne bottles and glasses are on the table, people cheer and embrace. Medium close up, high-angle shot. On the TV screen, Sir Alistair Burnet looks solemn yet pleased, announcing the exit poll results. The room erupts in cheers as people raise their glasses in celebration.",
+      "source_shot": 4,
+      "story_id": "51",
+      "style_class": "realistic",
+      "target_shot": 10
+    },
+    {
+      "candidate_id": "0b87e4c22e651a888d07ff3317272e6826b1e1fc1788c8f25e6e8e86f11fbae0",
+      "character_name": "Roger O'Neill",
+      "eligible_donor_count": 7,
+      "eligible_donor_ids": [
+        "2098ac297a7a8d11fefdefa6ead9b243ffa5d3d1ec4dace79585b2626b2ba771",
+        "2c6c1e9cf0a402c92a9787fed93f079583450c6969d9f36f1a8e8cbd8ad8a49e",
+        "46ac068d229312ed4322dd6e21bc3691b33b520b90d6348e41aa86026b1fab5b",
+        "4b5a23eba1a089f8a4fe43a2073e0f572281fcad82de0a00165d76894cb6a971",
+        "60784d77755023da2d75041a882282aee7aed14e6eff5be3399c268e988a0cd9",
+        "75cc362310be646c961f11cf7c7fa041287646168e716354ea4432b53b76352b",
+        "f48b1cc454e48b120254a88897b099630180380196e6926d0f8696d3c2b79b53"
+      ],
+      "entity_uid": "51::Roger O'Neill",
+      "event_id": "vistory51_roger_o_neill_s2_s8",
+      "gap_bucket": "5-7",
+      "horizon": 6,
+      "official_character_description": "Director of Communications for the ruling party, a middle-aged British man, not particularly robust. His personality is anxious and eager for quick results.",
+      "official_story": {
+        "path": "51/story.json",
+        "sha256": "4b008ea828e1131a48b9fa55750b1d94ef3b96ef6f4a159766be07a5b4135eb2"
+      },
+      "official_tag": "realistic_human",
+      "read_prompt": "Nighttime, a hidden courtyard in London’s Soho district. Old buildings surround it, cobblestones line the ground, miscellaneous items are stacked in corners, the green door is shut, and the air is thick with dampness and mildew. Medium long shot, back shot. Roger walks briskly across the courtyard, nervous, clutching his briefcase, glancing back to ensure he isn’t followed before quickly slipping through the green door.",
+      "reference": {
+        "path": "51/image/Roger O'Neill/00.jpg",
+        "sha256": "4737c36024dad342b8c2d86f6265723db1dfa4c6af8bd7a7c230fc594b4c5113"
+      },
+      "source_character_count": 1,
+      "source_prompt": "Nighttime, narrow streets in London's Soho district. Old buildings line the streets, dim streetlights cast a yellow glow, litter is scattered on the ground, distant car horns can be heard, and the air is damp. Medium long shot, high-angle shot. Roger bursts out of the taxi, his expression anxious, clutching a briefcase tightly as he sprints down the narrow streets, the buildings on either side blurring behind him.",
+      "source_shot": 2,
+      "story_id": "51",
+      "style_class": "realistic",
+      "target_shot": 8
+    },
+    {
+      "candidate_id": "0c1e307f8a63a13637beaefb92c15164e24030367c64622c85669273c839fceb",
+      "character_name": "Xu Sanduo",
+      "eligible_donor_count": 16,
+      "eligible_donor_ids": [
+        "0679c4005b96fb5b0792f8219f0bbde2fef2ca74d403f732f39b6d9a67f50165",
+        "17abce3714d605bc9c8e23e76b6581f945619af03a00da6f5a55412485f0c501",
+        "1aeb3be9918b92011802883b2618b18d91a31278a27a371df2d60c09783c5306",
+        "2fdd50c6ee3d8b2156fe2f972e73774dcae7687305e7a1c162772ecd8db13d8a",
+        "312dbc8946e853dbdeeb908ff2d6e0a6e7d5ebd5a5ca9ae6a66bb774329f88b8",
+        "32c363c318b3ed6f6592b5c0dd7a9dfced079b4ea6a83cbb5b486f0c188b99b1",
+        "4a61cb8e461fb9024e2353af88a678be345288e7a6e8fe03849c4c74966b298b",
+        "5ce439091e6d71dd975d2d6b50f2c96a0f50118464a75356fa882c094ecb81bd",
+        "62fd33f315366b83dcda70e80ec024884816b7dcafe00116e17ac38ccd2cf4f1",
+        "64de88982db0291848ccef0a385e57f148a95a4ee30e864344174803ccdf9929",
+        "6f66308e4829122f66fbf6c04cd7f6e5688fdc2ac0da460ccbb5cba67f5b312f",
+        "81d18baa57972fd8f0b92241083fdd132496c5cb67f53fb1e3a14874b5278689",
+        "8e03d3706c43dcb9f316fec1cd43b343b1db9df66dfb90898879f2addf14ae8a",
+        "a2e885c1f3620e4f9832c2b8105b80e7692c7f63da15d1cbedba4c9c86883c89",
+        "dcc8a5d1eea6eb12e8481ec2ca1968cc05606077f48509404a70f6babfa048ee",
+        "fa5df75840f9d778d657e262f5449fd541d01d166b823fe7ca2fcf2a1c9c09a8"
+      ],
+      "entity_uid": "20::Xu Sanduo",
+      "event_id": "vistory20_xu_sanduo_s10_s15",
+      "gap_bucket": "5-7",
+      "horizon": 5,
+      "official_character_description": "A young Chinese man with black hair and black eyes, around 18 years old, with dark skin and a thin build. Wearing the recruit uniform of the People's Liberation Army and a military cap, his expression is simple and confused.",
+      "official_story": {
+        "path": "20/story.json",
+        "sha256": "73da592da81fdedd9044013a2ecb62b5ed7902da5337a2a44fe70e27efb2414a"
+      },
+      "official_tag": "realistic_human",
+      "read_prompt": "Daytime, military camp training ground, tense atmosphere, new recruits and Wu Liuyi on the training ground, bright sunlight Medium close up, eye level shot. Xu Sanduo marches on the training ground, his movements awkward, while Wu Liuyi stands nearby, his expression stern but patient, correcting him step by step",
+      "reference": {
+        "path": "20/image/Xu Sanduo/00.jpg",
+        "sha256": "072e41dc57829f2527edb4f31e2f27df865668308ed54bb08180d981e45674bc"
+      },
+      "source_character_count": 2,
+      "source_prompt": "Early morning, military camp platform, tense atmosphere, main battle tank and new recruits on the platform, the glow of dawn Medium close up, eye level shot. Xu Sanduo stands at the train doorway, his hands raised in surrender, his expression terrified, while Gao Cheng stands nearby, his expression furious, shouting loudly",
+      "source_shot": 10,
+      "story_id": "20",
+      "style_class": "realistic",
+      "target_shot": 15
+    },
+    {
+      "candidate_id": "0cf237e6a2040c3190a01122f9f349618937e656fbb0a1b9fdce5aff02c7662d",
+      "character_name": "Mattie",
+      "eligible_donor_count": 7,
+      "eligible_donor_ids": [
+        "2098ac297a7a8d11fefdefa6ead9b243ffa5d3d1ec4dace79585b2626b2ba771",
+        "2c6c1e9cf0a402c92a9787fed93f079583450c6969d9f36f1a8e8cbd8ad8a49e",
+        "46ac068d229312ed4322dd6e21bc3691b33b520b90d6348e41aa86026b1fab5b",
+        "4b5a23eba1a089f8a4fe43a2073e0f572281fcad82de0a00165d76894cb6a971",
+        "60784d77755023da2d75041a882282aee7aed14e6eff5be3399c268e988a0cd9",
+        "75cc362310be646c961f11cf7c7fa041287646168e716354ea4432b53b76352b",
+        "f48b1cc454e48b120254a88897b099630180380196e6926d0f8696d3c2b79b53"
+      ],
+      "entity_uid": "51::Mattie",
+      "event_id": "vistory51_mattie_s6_s12",
+      "gap_bucket": "5-7",
+      "horizon": 6,
+      "official_character_description": "Reporter for 'The Daily Chronicle,' a young British woman, calm and rational. Her attire is simple and professional, fitting her role as a journalist.",
+      "official_story": {
+        "path": "51/story.json",
+        "sha256": "4b008ea828e1131a48b9fa55750b1d94ef3b96ef6f4a159766be07a5b4135eb2"
+      },
+      "official_tag": "realistic_human",
+      "read_prompt": "Nighttime, the newsroom of 'The Daily Chronicle.' Preston’s desk is nearby, documents rustle, the clock ticks, faint neon light seeps through the windows. Medium shot, side shot. Mattie stands by Preston’s desk, composed, arms crossed, looking at him firmly as she repeats her reminder to stay calm and wait for the first official results.",
+      "reference": {
+        "path": "51/image/Mattie/00.jpg",
+        "sha256": "38c8a68793bcece559165df6a4b2833abba257e4caf762d90d4cdf041f280d01"
+      },
+      "source_character_count": 1,
+      "source_prompt": "Nighttime, the newsroom of 'The Daily Chronicle.' Preston’s desk is nearby, documents rustle in the breeze, a clock ticks on the wall, faint neon light seeps through the windows. Close up, eye level shot. Mattie stands by Preston’s desk, composed, arms crossed, looking at him firmly as she reminds him to wait for the first official results.",
+      "source_shot": 6,
+      "story_id": "51",
+      "style_class": "realistic",
+      "target_shot": 12
+    },
+    {
+      "candidate_id": "14d813acf08df77903cdd563edd1e693e2fe0b7eb3fada492cb7f6422496e649",
+      "character_name": "Mo Sheng",
+      "eligible_donor_count": 12,
+      "eligible_donor_ids": [
+        "030c95e7bc619f7db8e05da5359e53d26cd84258e11868353a590a84897ecb06",
+        "2098ac297a7a8d11fefdefa6ead9b243ffa5d3d1ec4dace79585b2626b2ba771",
+        "2c6c1e9cf0a402c92a9787fed93f079583450c6969d9f36f1a8e8cbd8ad8a49e",
+        "46ac068d229312ed4322dd6e21bc3691b33b520b90d6348e41aa86026b1fab5b",
+        "4b5a23eba1a089f8a4fe43a2073e0f572281fcad82de0a00165d76894cb6a971",
+        "60784d77755023da2d75041a882282aee7aed14e6eff5be3399c268e988a0cd9",
+        "69f1c58871d216f2d0db85305e04440c017375e529573c687349858a9a0fbb37",
+        "7547e49f9c5422b09e158d622adddcb6d8d3ecf273d9857b58b1da894fdfd99a",
+        "759036aa3f2f7bb8a2590a3f6859aff2dc71acbcb24e544eac50e766271befaa",
+        "a56f0dc7a0d1473904fb49dbfb29c791d451d09dce036808a8dff321bd14d0b5",
+        "caae50962880be8f9656aad704f2796fd5cd5026d433e28f3cdf09e7fa74f3b9",
+        "f48b1cc454e48b120254a88897b099630180380196e6926d0f8696d3c2b79b53"
+      ],
+      "entity_uid": "66::Mo Sheng",
+      "event_id": "vistory66_mo_sheng_s9_s16",
+      "gap_bucket": "5-7",
+      "horizon": 7,
+      "official_character_description": "A young Chinese woman with black hair and black eyes, in her early 20s, with a delicate appearance and short hair, exuding a student-like vibe. She wears simple and comfortable clothing.",
+      "official_story": {
+        "path": "66/story.json",
+        "sha256": "ff27657ae58a2e1587468ba0633d787eba366620128ca3caca726596039db419"
+      },
+      "official_tag": "realistic_human",
+      "read_prompt": "Saturday afternoon, KFC restaurant second floor, relatively quiet, window-side table, Coke cup, burger, soft indoor lighting Full shot, eye level shot. Mo Sheng lowers her head in thought, while Yi Chen remains expressionless.",
+      "reference": {
+        "path": "66/image/Mo Sheng/00.jpg",
+        "sha256": "3beeda2c9537fda18555d3ceb409c0d7bc39413d9a9dd80765097c62afd53b83"
+      },
+      "source_character_count": 1,
+      "source_prompt": "Saturday afternoon, KFC restaurant second floor, relatively quiet, window-side table, Coke cup, burger, soft indoor lighting Medium close up, eye level shot. Mo Sheng looks stunned, deep in thought.",
+      "source_shot": 9,
+      "story_id": "66",
+      "style_class": "realistic",
+      "target_shot": 16
+    },
+    {
+      "candidate_id": "15d5e7b67b437a282169e912e7b9b7b9890eee46e91f5114134d93c979741752",
+      "character_name": "Village Chief",
+      "eligible_donor_count": 16,
+      "eligible_donor_ids": [
+        "17abce3714d605bc9c8e23e76b6581f945619af03a00da6f5a55412485f0c501",
+        "2fdd50c6ee3d8b2156fe2f972e73774dcae7687305e7a1c162772ecd8db13d8a",
+        "312dbc8946e853dbdeeb908ff2d6e0a6e7d5ebd5a5ca9ae6a66bb774329f88b8",
+        "32c363c318b3ed6f6592b5c0dd7a9dfced079b4ea6a83cbb5b486f0c188b99b1",
+        "4a61cb8e461fb9024e2353af88a678be345288e7a6e8fe03849c4c74966b298b",
+        "4d13caff08c340cac89c7e2a06457cf6bccfa8562ec4091d2ea16385759edc72",
+        "5ce439091e6d71dd975d2d6b50f2c96a0f50118464a75356fa882c094ecb81bd",
+        "62fd33f315366b83dcda70e80ec024884816b7dcafe00116e17ac38ccd2cf4f1",
+        "64de88982db0291848ccef0a385e57f148a95a4ee30e864344174803ccdf9929",
+        "6f66308e4829122f66fbf6c04cd7f6e5688fdc2ac0da460ccbb5cba67f5b312f",
+        "81d18baa57972fd8f0b92241083fdd132496c5cb67f53fb1e3a14874b5278689",
+        "8e03d3706c43dcb9f316fec1cd43b343b1db9df66dfb90898879f2addf14ae8a",
+        "a2e885c1f3620e4f9832c2b8105b80e7692c7f63da15d1cbedba4c9c86883c89",
+        "dcc8a5d1eea6eb12e8481ec2ca1968cc05606077f48509404a70f6babfa048ee",
+        "fa5df75840f9d778d657e262f5449fd541d01d166b823fe7ca2fcf2a1c9c09a8",
+        "fe8ae8be572ccd598cae8df250855da1682af8a4c201ecd35c0fb4ee32b3e5b8"
+      ],
+      "entity_uid": "71::Village Chief",
+      "event_id": "vistory71_village_chief_s14_s20",
+      "gap_bucket": "5-7",
+      "horizon": 6,
+      "official_character_description": "A middle-aged man with black hair and black eyes, in his 50s, average build and yellowish skin. Wearing a relatively decent long gown, steady in character.",
+      "official_story": {
+        "path": "71/story.json",
+        "sha256": "a63713d85697807cfef5d3af6c512f86a297e718bfd86d8c8e1d57a717929afa"
+      },
+      "official_tag": "realistic_human",
+      "read_prompt": "Nighttime, edge of the dried-up reservoir, fearful atmosphere, moonlight casting over the ground, distant figures of the village chief and my father, eerie and quiet village Wide shot, eye level shot. The figures of the village chief and my father resemble stone Buddhas under the moonlight, the scene eerily peaceful, the distant village completely dark",
+      "reference": {
+        "path": "71/image/Village Chief/00.jpg",
+        "sha256": "f6d4ad5a07ecb24a47b29cc9f729bc3733c96acabf3b25d5a97b0d68ca4f58e0"
+      },
+      "source_character_count": 2,
+      "source_prompt": "Nighttime, center of the dried-up reservoir, tense atmosphere, my father and village chief leading the way toward the stone Buddhas, a few young men following, moonlight casting over the ground Medium shot, eye level shot. My father and the village chief lead the way toward the stone Buddhas, a few young men following nervously, moonlight casting over them",
+      "source_shot": 14,
+      "story_id": "71",
+      "style_class": "realistic",
+      "target_shot": 20
+    },
+    {
+      "candidate_id": "1749440775a40166903a14217bc04a557579525ba15bd9beb8aad63e35b118eb",
+      "character_name": "Mr. Fogg",
+      "eligible_donor_count": 2,
+      "eligible_donor_ids": [
+        "5aa9a8156e6c42280d8c4c680a96a67400bba6be539afb9b39cab749d545ee9d",
+        "7953eb73e18a0e9006dc9d19e0c1a7c898ee68c67ff470789609e7a2605a4bcd"
+      ],
+      "entity_uid": "36::Mr. Fogg",
+      "event_id": "vistory36_mr_fogg_s12_s19",
+      "gap_bucket": "5-7",
+      "horizon": 7,
+      "official_character_description": "A British gentleman with graying hair and brown eyes, approximately in his 50s, handsome with a calm demeanor. Dressed in 19th-century British gentleman's attire, wearing a checked tweed suit and a white shirt.",
+      "official_story": {
+        "path": "36/story.json",
+        "sha256": "29db438ccbb9491aa91548458e26bb024e06dcdfb6bf31be36d9b8602e09a336"
+      },
+      "official_tag": "realistic_human",
+      "read_prompt": "Morning, Kelby train station, station shabby and simple, surrounded by low buildings and desolate wilderness, scattered debris and garbage on the ground, natural light bright, desolate atmosphere Full shot, high-angle shot. Mr. Fogg and Colonel Cromarty stand in front of the train station, expressions calm, looking at the surroundings",
+      "reference": {
+        "path": "36/image/Mr. Fogg/00.jpg",
+        "sha256": "c5933d2b06436c6b9242232f0c0d0b288f1bc0ecbd22abdb7434e85fba16ab84"
+      },
+      "source_character_count": 4,
+      "source_prompt": "Morning, palm forest outside Kelby, forest dense and deep, surrounded by tall trees and thick vegetation, scattered leaves and branches on the ground, natural light filtering through the leaves Wide shot, eye level shot. Mr. Fogg, Colonel Cromarty, Passepartout, and the Parsi guide ride on the elephant, the elephant slowly advancing through the palm forest",
+      "source_shot": 12,
+      "story_id": "36",
+      "style_class": "realistic",
+      "target_shot": 19
+    },
+    {
+      "candidate_id": "18cef787e5fe3f408f32fcf318d153e47a349c7f74087b65ac00bc937f1f3d78",
+      "character_name": "Nier",
+      "eligible_donor_count": 3,
+      "eligible_donor_ids": [
+        "5ace73eb8a52f642dc92fcc3fddd28afab143f0c766082d652f5a9f56ecc51d4",
+        "669a18086178895b6c972b40a352fb0eb87e27a91c27c3bc100fd51e44567686",
+        "c3e2da94750957d77e93d6e501165440495daaebecdc216b238e5f3a8c24921d"
+      ],
+      "entity_uid": "39::Nier",
+      "event_id": "vistory39_nier_s5_s10",
+      "gap_bucket": "5-7",
+      "horizon": 5,
+      "official_character_description": "A young Chinese woman, a maid, wearing a white cheongsam with bangs and her long hair tied up.",
+      "official_story": {
+        "path": "39/story.json",
+        "sha256": "56ac0cd7bbc909c993edc795bec93727825053bb0ab42ed005cb19efb7667860"
+      },
+      "official_tag": "realistic_human",
+      "read_prompt": "Daytime, outside Mrs. Liang's house, small iron gate Medium close up, eye level shot. Mrs. Liang looks sarcastic, Weilong’s expression fluctuates, Nier speaks beside her, looking clever",
+      "reference": {
+        "path": "39/image/Nier/00.jpg",
+        "sha256": "41ff1a1cfa0cee5477bccac702288e90fba75184963cb192df675a4e6deccf30"
+      },
+      "source_character_count": 3,
+      "source_prompt": "Daytime, outside Mrs. Liang's house, stone pillars, lawn, small iron gate Medium shot, eye level shot. Weilong stands at the doorway, Didi leans against a stone pillar while massaging her leg, Nier peeks out and runs away, Didi laughs and scolds Nier",
+      "source_shot": 5,
+      "story_id": "39",
+      "style_class": "realistic",
+      "target_shot": 10
+    },
+    {
+      "candidate_id": "1fcf6959cc65a989c934a28cb649b39bd14f3c62e7ab5e0908209bd1bce3e2c8",
+      "character_name": "My Father",
+      "eligible_donor_count": 12,
+      "eligible_donor_ids": [
+        "030c95e7bc619f7db8e05da5359e53d26cd84258e11868353a590a84897ecb06",
+        "2c6c1e9cf0a402c92a9787fed93f079583450c6969d9f36f1a8e8cbd8ad8a49e",
+        "46ac068d229312ed4322dd6e21bc3691b33b520b90d6348e41aa86026b1fab5b",
+        "4b5a23eba1a089f8a4fe43a2073e0f572281fcad82de0a00165d76894cb6a971",
+        "60784d77755023da2d75041a882282aee7aed14e6eff5be3399c268e988a0cd9",
+        "69f1c58871d216f2d0db85305e04440c017375e529573c687349858a9a0fbb37",
+        "7547e49f9c5422b09e158d622adddcb6d8d3ecf273d9857b58b1da894fdfd99a",
+        "759036aa3f2f7bb8a2590a3f6859aff2dc71acbcb24e544eac50e766271befaa",
+        "75cc362310be646c961f11cf7c7fa041287646168e716354ea4432b53b76352b",
+        "a56f0dc7a0d1473904fb49dbfb29c791d451d09dce036808a8dff321bd14d0b5",
+        "caae50962880be8f9656aad704f2796fd5cd5026d433e28f3cdf09e7fa74f3b9",
+        "f48b1cc454e48b120254a88897b099630180380196e6926d0f8696d3c2b79b53"
+      ],
+      "entity_uid": "71::My Father",
+      "event_id": "vistory71_my_father_s6_s13",
+      "gap_bucket": "5-7",
+      "horizon": 7,
+      "official_character_description": "A middle-aged man with black hair and black eyes, in his 40s, average build. Wearing a simple shirt and pants, with glasses, calm and responsible.",
+      "official_story": {
+        "path": "71/story.json",
+        "sha256": "a63713d85697807cfef5d3af6c512f86a297e718bfd86d8c8e1d57a717929afa"
+      },
+      "official_tag": "realistic_human",
+      "read_prompt": "Nighttime, center of the dried-up reservoir, tense atmosphere, village chief and my father discussing, villagers gathered but hesitant, moonlight casting over the ground Full shot, eye level shot. Village chief and my father discuss in the center, villagers gathered around but hesitant, expressions tense, moonlight casting over them",
+      "reference": {
+        "path": "71/image/My Father/00.jpg",
+        "sha256": "2e0a5660f56658974f659bfe3df5550e21189913aa0ca600e482784258236bb4"
+      },
+      "source_character_count": 1,
+      "source_prompt": "Daytime, open area in front of the village committee, heated atmosphere, villagers gathered together, simple village committee building, sunlight filtering through leaves Medium shot, eye level shot. My father stands among the villagers, urgently trying to persuade them, but their expressions show indifference or even impatience",
+      "source_shot": 6,
+      "story_id": "71",
+      "style_class": "realistic",
+      "target_shot": 13
+    },
+    {
+      "candidate_id": "26fd026374ddaa68cb9ded1c1875b049b358d71c5bd2ea8f18857e1a982231b5",
+      "character_name": "My Father",
+      "eligible_donor_count": 16,
+      "eligible_donor_ids": [
+        "17abce3714d605bc9c8e23e76b6581f945619af03a00da6f5a55412485f0c501",
+        "2fdd50c6ee3d8b2156fe2f972e73774dcae7687305e7a1c162772ecd8db13d8a",
+        "312dbc8946e853dbdeeb908ff2d6e0a6e7d5ebd5a5ca9ae6a66bb774329f88b8",
+        "32c363c318b3ed6f6592b5c0dd7a9dfced079b4ea6a83cbb5b486f0c188b99b1",
+        "4a61cb8e461fb9024e2353af88a678be345288e7a6e8fe03849c4c74966b298b",
+        "4d13caff08c340cac89c7e2a06457cf6bccfa8562ec4091d2ea16385759edc72",
+        "5ce439091e6d71dd975d2d6b50f2c96a0f50118464a75356fa882c094ecb81bd",
+        "62fd33f315366b83dcda70e80ec024884816b7dcafe00116e17ac38ccd2cf4f1",
+        "64de88982db0291848ccef0a385e57f148a95a4ee30e864344174803ccdf9929",
+        "6f66308e4829122f66fbf6c04cd7f6e5688fdc2ac0da460ccbb5cba67f5b312f",
+        "81d18baa57972fd8f0b92241083fdd132496c5cb67f53fb1e3a14874b5278689",
+        "8e03d3706c43dcb9f316fec1cd43b343b1db9df66dfb90898879f2addf14ae8a",
+        "a2e885c1f3620e4f9832c2b8105b80e7692c7f63da15d1cbedba4c9c86883c89",
+        "dcc8a5d1eea6eb12e8481ec2ca1968cc05606077f48509404a70f6babfa048ee",
+        "fa5df75840f9d778d657e262f5449fd541d01d166b823fe7ca2fcf2a1c9c09a8",
+        "fe8ae8be572ccd598cae8df250855da1682af8a4c201ecd35c0fb4ee32b3e5b8"
+      ],
+      "entity_uid": "71::My Father",
+      "event_id": "vistory71_my_father_s14_s20",
+      "gap_bucket": "5-7",
+      "horizon": 6,
+      "official_character_description": "A middle-aged man with black hair and black eyes, in his 40s, average build. Wearing a simple shirt and pants, with glasses, calm and responsible.",
+      "official_story": {
+        "path": "71/story.json",
+        "sha256": "a63713d85697807cfef5d3af6c512f86a297e718bfd86d8c8e1d57a717929afa"
+      },
+      "official_tag": "realistic_human",
+      "read_prompt": "Nighttime, edge of the dried-up reservoir, fearful atmosphere, moonlight casting over the ground, distant figures of the village chief and my father, eerie and quiet village Wide shot, eye level shot. The figures of the village chief and my father resemble stone Buddhas under the moonlight, the scene eerily peaceful, the distant village completely dark",
+      "reference": {
+        "path": "71/image/My Father/00.jpg",
+        "sha256": "2e0a5660f56658974f659bfe3df5550e21189913aa0ca600e482784258236bb4"
+      },
+      "source_character_count": 2,
+      "source_prompt": "Nighttime, center of the dried-up reservoir, tense atmosphere, my father and village chief leading the way toward the stone Buddhas, a few young men following, moonlight casting over the ground Medium shot, eye level shot. My father and the village chief lead the way toward the stone Buddhas, a few young men following nervously, moonlight casting over them",
+      "source_shot": 14,
+      "story_id": "71",
+      "style_class": "realistic",
+      "target_shot": 20
+    },
+    {
+      "candidate_id": "29530e5826b415ff532fb3e31a81825a635db359f17836eb58eb4bfc1d07603b",
+      "character_name": "Bryce's Father",
+      "eligible_donor_count": 17,
+      "eligible_donor_ids": [
+        "0679c4005b96fb5b0792f8219f0bbde2fef2ca74d403f732f39b6d9a67f50165",
+        "17abce3714d605bc9c8e23e76b6581f945619af03a00da6f5a55412485f0c501",
+        "1aeb3be9918b92011802883b2618b18d91a31278a27a371df2d60c09783c5306",
+        "2fdd50c6ee3d8b2156fe2f972e73774dcae7687305e7a1c162772ecd8db13d8a",
+        "312dbc8946e853dbdeeb908ff2d6e0a6e7d5ebd5a5ca9ae6a66bb774329f88b8",
+        "32c363c318b3ed6f6592b5c0dd7a9dfced079b4ea6a83cbb5b486f0c188b99b1",
+        "4d13caff08c340cac89c7e2a06457cf6bccfa8562ec4091d2ea16385759edc72",
+        "5ce439091e6d71dd975d2d6b50f2c96a0f50118464a75356fa882c094ecb81bd",
+        "62fd33f315366b83dcda70e80ec024884816b7dcafe00116e17ac38ccd2cf4f1",
+        "64de88982db0291848ccef0a385e57f148a95a4ee30e864344174803ccdf9929",
+        "6f66308e4829122f66fbf6c04cd7f6e5688fdc2ac0da460ccbb5cba67f5b312f",
+        "81d18baa57972fd8f0b92241083fdd132496c5cb67f53fb1e3a14874b5278689",
+        "8e03d3706c43dcb9f316fec1cd43b343b1db9df66dfb90898879f2addf14ae8a",
+        "a2e885c1f3620e4f9832c2b8105b80e7692c7f63da15d1cbedba4c9c86883c89",
+        "dcc8a5d1eea6eb12e8481ec2ca1968cc05606077f48509404a70f6babfa048ee",
+        "fa5df75840f9d778d657e262f5449fd541d01d166b823fe7ca2fcf2a1c9c09a8",
+        "fe8ae8be572ccd598cae8df250855da1682af8a4c201ecd35c0fb4ee32b3e5b8"
+      ],
+      "entity_uid": "59::Bryce's Father",
+      "event_id": "vistory59_bryce_s_father_s5_s10",
+      "gap_bucket": "5-7",
+      "horizon": 5,
+      "official_character_description": "A middle-aged American man with black hair and blue eyes, around his forties, dressed in typical male attire—a shirt, dress pants, and leather shoes—the quintessential middle-aged American man.",
+      "official_story": {
+        "path": "59/story.json",
+        "sha256": "e9a65bb9d17247ba58c7ae35cfdd3c018509106871600d47f16c4e5a6ccc38de"
+      },
+      "official_tag": "realistic_human",
+      "read_prompt": "Daytime, Bryce’s living room. Bryce’s father and Lynette sit on the sofa. Magazines and a remote lie on the coffee table. The atmosphere is slightly tense. Medium shot, eye level shot. Bryce stands in the middle of the room, looking helpless. His father sits on the sofa, awkwardly trying to defend him. Lynette sits nearby, smirking with a teasing glint in her eyes.",
+      "reference": {
+        "path": "59/image/Bryce's Father/00.jpg",
+        "sha256": "354f9217d26e4a6c09d39a4cf3edf667aea4e81c89f612f1bad18d5ebdb875f7"
+      },
+      "source_character_count": 2,
+      "source_prompt": "Daytime, in front of Bryce’s house. Moving boxes and clutter surround the truck. Sunlight creates bright patches on the ground. Close up, front angle shot. Juli faces Bryce’s father, beaming confidently. Bryce’s father leans forward slightly, looking polite but helpless.",
+      "source_shot": 5,
+      "story_id": "59",
+      "style_class": "realistic",
+      "target_shot": 10
+    },
+    {
+      "candidate_id": "2f1f98a174cc57885244e7a180ad7511521f9718fda1cf26e13af9e12866252f",
+      "character_name": "Zhao Qingqing",
+      "eligible_donor_count": 17,
+      "eligible_donor_ids": [
+        "0679c4005b96fb5b0792f8219f0bbde2fef2ca74d403f732f39b6d9a67f50165",
+        "17abce3714d605bc9c8e23e76b6581f945619af03a00da6f5a55412485f0c501",
+        "1aeb3be9918b92011802883b2618b18d91a31278a27a371df2d60c09783c5306",
+        "2fdd50c6ee3d8b2156fe2f972e73774dcae7687305e7a1c162772ecd8db13d8a",
+        "312dbc8946e853dbdeeb908ff2d6e0a6e7d5ebd5a5ca9ae6a66bb774329f88b8",
+        "32c363c318b3ed6f6592b5c0dd7a9dfced079b4ea6a83cbb5b486f0c188b99b1",
+        "4a61cb8e461fb9024e2353af88a678be345288e7a6e8fe03849c4c74966b298b",
+        "4d13caff08c340cac89c7e2a06457cf6bccfa8562ec4091d2ea16385759edc72",
+        "5ce439091e6d71dd975d2d6b50f2c96a0f50118464a75356fa882c094ecb81bd",
+        "62fd33f315366b83dcda70e80ec024884816b7dcafe00116e17ac38ccd2cf4f1",
+        "64de88982db0291848ccef0a385e57f148a95a4ee30e864344174803ccdf9929",
+        "6f66308e4829122f66fbf6c04cd7f6e5688fdc2ac0da460ccbb5cba67f5b312f",
+        "81d18baa57972fd8f0b92241083fdd132496c5cb67f53fb1e3a14874b5278689",
+        "8e03d3706c43dcb9f316fec1cd43b343b1db9df66dfb90898879f2addf14ae8a",
+        "dcc8a5d1eea6eb12e8481ec2ca1968cc05606077f48509404a70f6babfa048ee",
+        "fa5df75840f9d778d657e262f5449fd541d01d166b823fe7ca2fcf2a1c9c09a8",
+        "fe8ae8be572ccd598cae8df250855da1682af8a4c201ecd35c0fb4ee32b3e5b8"
+      ],
+      "entity_uid": "15::Zhao Qingqing",
+      "event_id": "vistory15_zhao_qingqing_s1_s6",
+      "gap_bucket": "5-7",
+      "horizon": 5,
+      "official_character_description": "A modern Chinese woman with black hair and eyes, in her thirties, with a dignified appearance. She wears simple and elegant modern professional attire, has a neat hairstyle, and a gentle yet resilient demeanor.",
+      "official_story": {
+        "path": "15/story.json",
+        "sha256": "aa0412ec1a09c1ab17e3b9426801f7326537bfdb1437c238cec36aae1bb4d76d"
+      },
+      "official_tag": "realistic_human",
+      "read_prompt": "Daytime, living room at home, toys scattered on the floor, a glass of water on the coffee table, a slightly chaotic and awkward atmosphere. Medium shot, eye level shot. Zhao Qingqing and her husband sit on the sofa, looking helpless. Gu Zhenzhen stands nearby, pointing at the toys on the floor, displeased. The daughter plays nearby, confused.",
+      "reference": {
+        "path": "15/image/Zhao Qingqing/00.jpg",
+        "sha256": "8b905c5efa1f0ebf3765370e77a080b53ba2a7514935ef2a1a6b18481eef8e1d"
+      },
+      "source_character_count": 2,
+      "source_prompt": "Daytime, hospital room, a bouquet of flowers on the bedside table, the city skyline visible outside the window, sunlight filtering through the curtains, a warm yet heavy atmosphere, the smell of disinfectant in the air. Medium shot, eye level shot. Zhao Qingqing sits by the hospital bed, holding Mother's hand, her expression sad and concerned. Mother lies in bed, pale-faced, her eyes gentle yet determined.",
+      "source_shot": 1,
+      "story_id": "15",
+      "style_class": "realistic",
+      "target_shot": 6
+    },
+    {
+      "candidate_id": "31bb09ae62da2325940583609d167b78db3e2f651bfa7f807a54d77a49d5a8fb",
+      "character_name": "Conseil",
+      "eligible_donor_count": 2,
+      "eligible_donor_ids": [
+        "8e20c92efde84944a909691f46b24a62e91dff3971a5964a669a7cce2c51c03d",
+        "c3e2da94750957d77e93d6e501165440495daaebecdc216b238e5f3a8c24921d"
+      ],
+      "entity_uid": "55::Conseil",
+      "event_id": "vistory55_conseil_s8_s13",
+      "gap_bucket": "5-7",
+      "horizon": 5,
+      "official_character_description": "A middle-aged French man with a gentle and meticulous personality. He has a short stature, sparse gray hair, and brown eyes. As the professor's assistant, he wears a neat uniform.",
+      "official_story": {
+        "path": "55/story.json",
+        "sha256": "234e2e03750112c5c6129eea1a681d2f399713ae3dfcb1a2684cff0515f48789"
+      },
+      "official_tag": "realistic_human",
+      "read_prompt": "Morning, inside the Nautilus submarine, lounge, luxurious decor, letter on the coffee table, sofa, ocean-themed painting on the wall, map table, bright lighting Medium shot, eye level shot. The three gather around the map table. Professor Aronnax points to Crespo Island on the map with a puzzled expression. Conseil and Ned Land lean in to look.",
+      "reference": {
+        "path": "55/image/Conseil/00.jpg",
+        "sha256": "aa1ff05382ff6c629a0fbc652cec7ed3a1992c6ebd58d00ca022eecfa2cbc65d"
+      },
+      "source_character_count": 3,
+      "source_prompt": "Noon, inside the Nautilus submarine, dining room, simple decor, dining table laden with food, tableware, nautical chart on the wall, bright lighting Medium shot, eye level shot. The three are eating. Professor Aronnax looks thoughtful, Conseil chews slowly, and Ned Land eats meat heartily.",
+      "source_shot": 8,
+      "story_id": "55",
+      "style_class": "realistic",
+      "target_shot": 13
+    },
+    {
+      "candidate_id": "350cd0fde2f28abb9ecee07286a74ea861b275d0c525e42c34a184b711eff20a",
+      "character_name": "Cheng Dieyi",
+      "eligible_donor_count": 12,
+      "eligible_donor_ids": [
+        "030c95e7bc619f7db8e05da5359e53d26cd84258e11868353a590a84897ecb06",
+        "2098ac297a7a8d11fefdefa6ead9b243ffa5d3d1ec4dace79585b2626b2ba771",
+        "2c6c1e9cf0a402c92a9787fed93f079583450c6969d9f36f1a8e8cbd8ad8a49e",
+        "46ac068d229312ed4322dd6e21bc3691b33b520b90d6348e41aa86026b1fab5b",
+        "60784d77755023da2d75041a882282aee7aed14e6eff5be3399c268e988a0cd9",
+        "69f1c58871d216f2d0db85305e04440c017375e529573c687349858a9a0fbb37",
+        "7547e49f9c5422b09e158d622adddcb6d8d3ecf273d9857b58b1da894fdfd99a",
+        "759036aa3f2f7bb8a2590a3f6859aff2dc71acbcb24e544eac50e766271befaa",
+        "75cc362310be646c961f11cf7c7fa041287646168e716354ea4432b53b76352b",
+        "a56f0dc7a0d1473904fb49dbfb29c791d451d09dce036808a8dff321bd14d0b5",
+        "caae50962880be8f9656aad704f2796fd5cd5026d433e28f3cdf09e7fa74f3b9",
+        "f48b1cc454e48b120254a88897b099630180380196e6926d0f8696d3c2b79b53"
+      ],
+      "entity_uid": "65::Cheng Dieyi",
+      "event_id": "vistory65_cheng_dieyi_s9_s15",
+      "gap_bucket": "5-7",
+      "horizon": 6,
+      "official_character_description": "A young Chinese man from ancient times with black hair and black eyes, around 20 years old, fair-skinned, delicate features, and a feminine temperament.",
+      "official_story": {
+        "path": "65/story.json",
+        "sha256": "a95d7b9c2df0281f877b22cdd981715c708a33239a04e5582e97b2d0df06d253"
+      },
+      "official_tag": "realistic_human",
+      "read_prompt": "Nighttime, backstage of the opera house, red curtains partially covering the stage, in front of a makeup table, mirrors reflecting the light, various Peking Opera props scattered on the table, quiet atmosphere, dim yellow lighting. Medium long shot, side angle shot. Cheng Dieyi stands in the distance with a complex expression, watching the intimate interaction between Duan Xiaolou and Juxian.",
+      "reference": {
+        "path": "65/image/Cheng Dieyi/00.jpg",
+        "sha256": "a0260c28afbef89031cb76200c7ed6a9de23630f01091d4cf3935e001a239725"
+      },
+      "source_character_count": 1,
+      "source_prompt": "Nighttime, street outside the opera house, red lanterns hanging from the eaves, shops lining the street, few pedestrians, quiet atmosphere, dim yellow lighting. Medium shot, side angle shot. Cheng Dieyi stands at the letter-writing stall with a sorrowful expression, holding a letter as he slowly tears it apart.",
+      "source_shot": 9,
+      "story_id": "65",
+      "style_class": "realistic",
+      "target_shot": 15
+    },
+    {
+      "candidate_id": "37756f6956b09018cbcb52063769d5e6820e4f31be23b4d13f968152ec431ae8",
+      "character_name": "Shi Jin",
+      "eligible_donor_count": 11,
+      "eligible_donor_ids": [
+        "030c95e7bc619f7db8e05da5359e53d26cd84258e11868353a590a84897ecb06",
+        "2098ac297a7a8d11fefdefa6ead9b243ffa5d3d1ec4dace79585b2626b2ba771",
+        "46ac068d229312ed4322dd6e21bc3691b33b520b90d6348e41aa86026b1fab5b",
+        "4b5a23eba1a089f8a4fe43a2073e0f572281fcad82de0a00165d76894cb6a971",
+        "69f1c58871d216f2d0db85305e04440c017375e529573c687349858a9a0fbb37",
+        "7547e49f9c5422b09e158d622adddcb6d8d3ecf273d9857b58b1da894fdfd99a",
+        "759036aa3f2f7bb8a2590a3f6859aff2dc71acbcb24e544eac50e766271befaa",
+        "75cc362310be646c961f11cf7c7fa041287646168e716354ea4432b53b76352b",
+        "a56f0dc7a0d1473904fb49dbfb29c791d451d09dce036808a8dff321bd14d0b5",
+        "caae50962880be8f9656aad704f2796fd5cd5026d433e28f3cdf09e7fa74f3b9",
+        "f48b1cc454e48b120254a88897b099630180380196e6926d0f8696d3c2b79b53"
+      ],
+      "entity_uid": "20::Shi Jin",
+      "event_id": "vistory20_shi_jin_s8_s13",
+      "gap_bucket": "5-7",
+      "horizon": 5,
+      "official_character_description": "A young Chinese man with black hair and black eyes, around his 20s, with dark skin and a medium build. Wearing the uniform of the People's Liberation Army and a military cap, his expression is serious yet gentle.",
+      "official_story": {
+        "path": "20/story.json",
+        "sha256": "73da592da81fdedd9044013a2ecb62b5ed7902da5337a2a44fe70e27efb2414a"
+      },
+      "official_tag": "realistic_human",
+      "read_prompt": "Early morning, military camp garage, reluctant atmosphere, armored vehicle and Shi Jin and Wu Liuyi in the garage, dim lighting Medium close up, eye level shot. Shi Jin and Wu Liuyi stand beside the armored vehicle, their expressions reluctant, gently touching its body",
+      "reference": {
+        "path": "20/image/Shi Jin/00.jpg",
+        "sha256": "eb61e378b93fb81abeccdba10fa3c42cef17ca35121905801b9638ae7400ebdf"
+      },
+      "source_character_count": 1,
+      "source_prompt": "Night, military camp training ground, serene atmosphere, new recruits and a bonfire on the training ground, starlight in the sky Medium shot, eye level shot. Shi Jin stands by the bonfire, his expression serious and proud, while the new recruits sit around him, their eyes fixed on him attentively",
+      "source_shot": 8,
+      "story_id": "20",
+      "style_class": "realistic",
+      "target_shot": 13
+    },
+    {
+      "candidate_id": "3819527d0fce1dac6cff793ec7c47e53251db639255c298e9d261da71767e883",
+      "character_name": "Yi Chen",
+      "eligible_donor_count": 17,
+      "eligible_donor_ids": [
+        "0679c4005b96fb5b0792f8219f0bbde2fef2ca74d403f732f39b6d9a67f50165",
+        "17abce3714d605bc9c8e23e76b6581f945619af03a00da6f5a55412485f0c501",
+        "1aeb3be9918b92011802883b2618b18d91a31278a27a371df2d60c09783c5306",
+        "2fdd50c6ee3d8b2156fe2f972e73774dcae7687305e7a1c162772ecd8db13d8a",
+        "312dbc8946e853dbdeeb908ff2d6e0a6e7d5ebd5a5ca9ae6a66bb774329f88b8",
+        "32c363c318b3ed6f6592b5c0dd7a9dfced079b4ea6a83cbb5b486f0c188b99b1",
+        "4a61cb8e461fb9024e2353af88a678be345288e7a6e8fe03849c4c74966b298b",
+        "4d13caff08c340cac89c7e2a06457cf6bccfa8562ec4091d2ea16385759edc72",
+        "5ce439091e6d71dd975d2d6b50f2c96a0f50118464a75356fa882c094ecb81bd",
+        "64de88982db0291848ccef0a385e57f148a95a4ee30e864344174803ccdf9929",
+        "6f66308e4829122f66fbf6c04cd7f6e5688fdc2ac0da460ccbb5cba67f5b312f",
+        "81d18baa57972fd8f0b92241083fdd132496c5cb67f53fb1e3a14874b5278689",
+        "8e03d3706c43dcb9f316fec1cd43b343b1db9df66dfb90898879f2addf14ae8a",
+        "a2e885c1f3620e4f9832c2b8105b80e7692c7f63da15d1cbedba4c9c86883c89",
+        "dcc8a5d1eea6eb12e8481ec2ca1968cc05606077f48509404a70f6babfa048ee",
+        "fa5df75840f9d778d657e262f5449fd541d01d166b823fe7ca2fcf2a1c9c09a8",
+        "fe8ae8be572ccd598cae8df250855da1682af8a4c201ecd35c0fb4ee32b3e5b8"
+      ],
+      "entity_uid": "66::Yi Chen",
+      "event_id": "vistory66_yi_chen_s20_s27",
+      "gap_bucket": "5-7",
+      "horizon": 7,
+      "official_character_description": "A young Chinese man with black hair and black eyes, in his early 20s, handsome with a calm demeanor. Dressed in a well-tailored suit, he gives off a professional and reliable impression.",
+      "official_story": {
+        "path": "66/story.json",
+        "sha256": "ff27657ae58a2e1587468ba0633d787eba366620128ca3caca726596039db419"
+      },
+      "official_tag": "realistic_human",
+      "read_prompt": "8 p.m., Mo Sheng’s living room, quiet, sofa, coffee table, balcony, dim lighting Medium shot, eye level shot. Yi Chen stands on the balcony, his back to the camera.",
+      "reference": {
+        "path": "66/image/Yi Chen/00.jpg",
+        "sha256": "98d99d89012788ac7904b33bf95482f7547bbf85fe0b7c75f2541d72b59f5d99"
+      },
+      "source_character_count": 2,
+      "source_prompt": "Saturday afternoon, KFC restaurant second floor, relatively quiet, window-side table, Coke cup, burger, soft indoor lighting Close up, eye level shot. Yi Chen lowers his head, focused on wiping the stain from Mo Sheng’s sweater.",
+      "source_shot": 20,
+      "story_id": "66",
+      "style_class": "realistic",
+      "target_shot": 27
+    },
+    {
+      "candidate_id": "3c6da5912ee2cf73e8b8bd0906ac8c1ddd2bc0c0e7e4f7d26162857d36e20c10",
+      "character_name": "Fang Fang's Mother",
+      "eligible_donor_count": 17,
+      "eligible_donor_ids": [
+        "0679c4005b96fb5b0792f8219f0bbde2fef2ca74d403f732f39b6d9a67f50165",
+        "17abce3714d605bc9c8e23e76b6581f945619af03a00da6f5a55412485f0c501",
+        "1aeb3be9918b92011802883b2618b18d91a31278a27a371df2d60c09783c5306",
+        "2fdd50c6ee3d8b2156fe2f972e73774dcae7687305e7a1c162772ecd8db13d8a",
+        "312dbc8946e853dbdeeb908ff2d6e0a6e7d5ebd5a5ca9ae6a66bb774329f88b8",
+        "32c363c318b3ed6f6592b5c0dd7a9dfced079b4ea6a83cbb5b486f0c188b99b1",
+        "4a61cb8e461fb9024e2353af88a678be345288e7a6e8fe03849c4c74966b298b",
+        "4d13caff08c340cac89c7e2a06457cf6bccfa8562ec4091d2ea16385759edc72",
+        "5ce439091e6d71dd975d2d6b50f2c96a0f50118464a75356fa882c094ecb81bd",
+        "62fd33f315366b83dcda70e80ec024884816b7dcafe00116e17ac38ccd2cf4f1",
+        "64de88982db0291848ccef0a385e57f148a95a4ee30e864344174803ccdf9929",
+        "6f66308e4829122f66fbf6c04cd7f6e5688fdc2ac0da460ccbb5cba67f5b312f",
+        "81d18baa57972fd8f0b92241083fdd132496c5cb67f53fb1e3a14874b5278689",
+        "a2e885c1f3620e4f9832c2b8105b80e7692c7f63da15d1cbedba4c9c86883c89",
+        "dcc8a5d1eea6eb12e8481ec2ca1968cc05606077f48509404a70f6babfa048ee",
+        "fa5df75840f9d778d657e262f5449fd541d01d166b823fe7ca2fcf2a1c9c09a8",
+        "fe8ae8be572ccd598cae8df250855da1682af8a4c201ecd35c0fb4ee32b3e5b8"
+      ],
+      "entity_uid": "72::Fang Fang's Mother",
+      "event_id": "vistory72_fang_fang_s_mother_s3_s9",
+      "gap_bucket": "5-7",
+      "horizon": 6,
+      "official_character_description": "A middle-aged woman with black hair and black eyes, around 50 years old. Her skin is dark, and she looks exhausted, with the hardships of life deeply etched on her face. She usually wears simple home clothes.",
+      "official_story": {
+        "path": "72/story.json",
+        "sha256": "b9d1bc039891cd2473fcddfcb5d3e3002186cbcdc6d6ad89644a24fad59529aa"
+      },
+      "official_tag": "realistic_human",
+      "read_prompt": "Daytime, Fang Fang's living room, tense atmosphere, bright lighting in the room, simple furniture, family portrait hanging on the wall. Full shot, eye level shot. The male police officer stands in the center of the living room, expression serious, questioning Fang Fang's mother. Fang Fang's mother sits on the sofa, looking nervous, her head bowed in silence.",
+      "reference": {
+        "path": "72/image/Fang Fang's Mother/00.jpg",
+        "sha256": "16ac8a25fb62d459beca3a84702e088ba9f4fd4d5644b8771ea74d696d92d3d3"
+      },
+      "source_character_count": 2,
+      "source_prompt": "Daytime, Fang Fang's living room, tense atmosphere, bright lighting in the room, simple furniture, a family portrait hanging on the wall, birds chirping outside the window. Full shot, eye level shot. Fang Fang stands in the center of the living room, looking agitated as she points at her mother. Fang Fang's mother sits on the sofa, looking exhausted, her head bowed in silence.",
+      "source_shot": 3,
+      "story_id": "72",
+      "style_class": "realistic",
+      "target_shot": 9
+    },
+    {
+      "candidate_id": "449941704904af0df86589827311a93344d91930f96e7c6847c555cca7cec1ab",
+      "character_name": "Me",
+      "eligible_donor_count": 7,
+      "eligible_donor_ids": [
+        "4ebec072547f9bf1df1290065e1ff3422a441bbf07543fdbc27bcb331bb45e5a",
+        "60a90cedf567e8e5623b83b15f49c10cf0113fad991d66b082d03490f783ab8d",
+        "b279bc54828c39c541bbefe564a4e96ae17e8d0bc9393b961363980b6b2220c0",
+        "c5c60e88fa93b682a4836905f7cd03e3260d19b9bcb9e46709c077ef298e64b9",
+        "dd2ac55db2cae713d10671f28a155ac0672e4f8f0e7a85c83e29c57842ebaa2d",
+        "ed0b6c2d249783516d73a3b2269ccd1c997e819d25e904bad6e181742788cc27",
+        "fddb86f3da76d2390b880277e856dccb3ee693962230a18d390ab53af107d8f0"
+      ],
+      "entity_uid": "71::Me",
+      "event_id": "vistory71_me_s4_s12",
+      "gap_bucket": "8-10",
+      "horizon": 8,
+      "official_character_description": "A young college student with black hair and black eyes, about 20 years old, fair-skinned and scholarly. Wearing a red sweater, introverted but thoughtful.",
+      "official_story": {
+        "path": "71/story.json",
+        "sha256": "a63713d85697807cfef5d3af6c512f86a297e718bfd86d8c8e1d57a717929afa"
+      },
+      "official_tag": "realistic_human",
+      "read_prompt": "Nighttime, center of the dried-up reservoir, tense atmosphere, uncle and Hu Laosan arguing, villagers gathered together, moonlight casting over the ground Medium shot, eye level shot. Uncle, enraged, is about to hit Hu Laosan. I stand nearby, urgently reminding everyone of Grandma’s warning, villagers displaying mixed expressions",
+      "reference": {
+        "path": "71/image/Me/00.jpg",
+        "sha256": "d224023da370a70a907599478f928626924d96a63e8eb3493bb2328a4f11b30f"
+      },
+      "source_character_count": 2,
+      "source_prompt": "Daytime, main room of the rural house, quiet atmosphere, old furniture, old photos hanging on the wall, soft light coming through the window Medium close up, eye level shot. I sit facing Grandma, who looks anxious and leans slightly forward. I nod in response, soft light casting over both of us",
+      "source_shot": 4,
+      "story_id": "71",
+      "style_class": "realistic",
+      "target_shot": 12
+    },
+    {
+      "candidate_id": "5870c74e0cbb5f42c3cbf750cfe9d9ed8c7d3c657e13d0d003b3e462fa617521",
+      "character_name": "Charles Collingridge",
+      "eligible_donor_count": 7,
+      "eligible_donor_ids": [
+        "2098ac297a7a8d11fefdefa6ead9b243ffa5d3d1ec4dace79585b2626b2ba771",
+        "2c6c1e9cf0a402c92a9787fed93f079583450c6969d9f36f1a8e8cbd8ad8a49e",
+        "46ac068d229312ed4322dd6e21bc3691b33b520b90d6348e41aa86026b1fab5b",
+        "4b5a23eba1a089f8a4fe43a2073e0f572281fcad82de0a00165d76894cb6a971",
+        "60784d77755023da2d75041a882282aee7aed14e6eff5be3399c268e988a0cd9",
+        "75cc362310be646c961f11cf7c7fa041287646168e716354ea4432b53b76352b",
+        "f48b1cc454e48b120254a88897b099630180380196e6926d0f8696d3c2b79b53"
+      ],
+      "entity_uid": "51::Charles Collingridge",
+      "event_id": "vistory51_charles_collingridge_s7_s13",
+      "gap_bucket": "5-7",
+      "horizon": 6,
+      "official_character_description": "The brother of the British Prime Minister, a middle-aged man leading a dissipated life. He lives in a small apartment, financially strained, often drowning his sorrows in bars. In appearance, he has a saggy face, thinning hair, and wears wrinkled suits with clean shirts and a new tie, attempting to conceal the traces of his indulgent lifestyle.",
+      "official_story": {
+        "path": "51/story.json",
+        "sha256": "4b008ea828e1131a48b9fa55750b1d94ef3b96ef6f4a159766be07a5b4135eb2"
+      },
+      "official_tag": "realistic_human",
+      "read_prompt": "Nighttime, the streets of Clapham, South London. Old buildings line the streets, dim streetlights cast a yellow glow, fallen leaves scatter the ground, distant car engines hum, and the city’s bustle fills the air. Wide shot, back shot. Charles steps out of the apartment, his expression complex, his figure lonely under the dim streetlights as he disappears into the night, heading toward the election victory party, the city’s neon lights glittering behind him.",
+      "reference": {
+        "path": "51/image/Charles Collingridge/00.jpg",
+        "sha256": "087434820e1343d942d89b9e2a9aca331c4148af54befc3658da5a8f8d09cff0"
+      },
+      "source_character_count": 1,
+      "source_prompt": "Nighttime, the small apartment in Clapham, South London. The living room is disheveled, clothes are piled on the sofa, a wall clock shows time is running short, city neon flickers outside. Medium shot, side shot. Charles stands in the middle of the living room, resigned, adjusting his tie with one hand and straightening his wrinkled suit with the other, trying to mask his indulgent lifestyle.",
+      "source_shot": 7,
+      "story_id": "51",
+      "style_class": "realistic",
+      "target_shot": 13
+    },
+    {
+      "candidate_id": "593d2b9d58e554d9fd662b7d70c7b5117fe97e3ed53bac93a931f3919413b122",
+      "character_name": "Shi Jin",
+      "eligible_donor_count": 11,
+      "eligible_donor_ids": [
+        "030c95e7bc619f7db8e05da5359e53d26cd84258e11868353a590a84897ecb06",
+        "2098ac297a7a8d11fefdefa6ead9b243ffa5d3d1ec4dace79585b2626b2ba771",
+        "46ac068d229312ed4322dd6e21bc3691b33b520b90d6348e41aa86026b1fab5b",
+        "4b5a23eba1a089f8a4fe43a2073e0f572281fcad82de0a00165d76894cb6a971",
+        "69f1c58871d216f2d0db85305e04440c017375e529573c687349858a9a0fbb37",
+        "7547e49f9c5422b09e158d622adddcb6d8d3ecf273d9857b58b1da894fdfd99a",
+        "759036aa3f2f7bb8a2590a3f6859aff2dc71acbcb24e544eac50e766271befaa",
+        "75cc362310be646c961f11cf7c7fa041287646168e716354ea4432b53b76352b",
+        "a56f0dc7a0d1473904fb49dbfb29c791d451d09dce036808a8dff321bd14d0b5",
+        "caae50962880be8f9656aad704f2796fd5cd5026d433e28f3cdf09e7fa74f3b9",
+        "f48b1cc454e48b120254a88897b099630180380196e6926d0f8696d3c2b79b53"
+      ],
+      "entity_uid": "20::Shi Jin",
+      "event_id": "vistory20_shi_jin_s1_s7",
+      "gap_bucket": "5-7",
+      "horizon": 6,
+      "official_character_description": "A young Chinese man with black hair and black eyes, around his 20s, with dark skin and a medium build. Wearing the uniform of the People's Liberation Army and a military cap, his expression is serious yet gentle.",
+      "official_story": {
+        "path": "20/story.json",
+        "sha256": "73da592da81fdedd9044013a2ecb62b5ed7902da5337a2a44fe70e27efb2414a"
+      },
+      "official_tag": "realistic_human",
+      "read_prompt": "Evening, small station platform, sorrowful atmosphere, new recruits and luggage on the platform, the glow of the setting sun Full shot, high-angle shot. Shi Jin stands on the platform, his expression helpless, as the new recruits step off the train in small groups, some still wiping their tears",
+      "reference": {
+        "path": "20/image/Shi Jin/00.jpg",
+        "sha256": "eb61e378b93fb81abeccdba10fa3c42cef17ca35121905801b9638ae7400ebdf"
+      },
+      "source_character_count": 1,
+      "source_prompt": "Evening, inside the military train carriage, crowded atmosphere, seats and luggage in the carriage, dim yellow lighting Medium shot, eye level shot. Shi Jin stands in the center of the carriage, his expression serious and concerned, holding a bottle of eye drops in his hand, scanning the carriage",
+      "source_shot": 1,
+      "story_id": "20",
+      "style_class": "realistic",
+      "target_shot": 7
+    },
+    {
+      "candidate_id": "5971cbc7247d1cedaacd10038398aaaf97f7ffd2d5c64a30e922d685d89b20d4",
+      "character_name": "Bella",
+      "eligible_donor_count": 17,
+      "eligible_donor_ids": [
+        "0679c4005b96fb5b0792f8219f0bbde2fef2ca74d403f732f39b6d9a67f50165",
+        "17abce3714d605bc9c8e23e76b6581f945619af03a00da6f5a55412485f0c501",
+        "1aeb3be9918b92011802883b2618b18d91a31278a27a371df2d60c09783c5306",
+        "2fdd50c6ee3d8b2156fe2f972e73774dcae7687305e7a1c162772ecd8db13d8a",
+        "312dbc8946e853dbdeeb908ff2d6e0a6e7d5ebd5a5ca9ae6a66bb774329f88b8",
+        "32c363c318b3ed6f6592b5c0dd7a9dfced079b4ea6a83cbb5b486f0c188b99b1",
+        "4a61cb8e461fb9024e2353af88a678be345288e7a6e8fe03849c4c74966b298b",
+        "4d13caff08c340cac89c7e2a06457cf6bccfa8562ec4091d2ea16385759edc72",
+        "5ce439091e6d71dd975d2d6b50f2c96a0f50118464a75356fa882c094ecb81bd",
+        "62fd33f315366b83dcda70e80ec024884816b7dcafe00116e17ac38ccd2cf4f1",
+        "64de88982db0291848ccef0a385e57f148a95a4ee30e864344174803ccdf9929",
+        "6f66308e4829122f66fbf6c04cd7f6e5688fdc2ac0da460ccbb5cba67f5b312f",
+        "8e03d3706c43dcb9f316fec1cd43b343b1db9df66dfb90898879f2addf14ae8a",
+        "a2e885c1f3620e4f9832c2b8105b80e7692c7f63da15d1cbedba4c9c86883c89",
+        "dcc8a5d1eea6eb12e8481ec2ca1968cc05606077f48509404a70f6babfa048ee",
+        "fa5df75840f9d778d657e262f5449fd541d01d166b823fe7ca2fcf2a1c9c09a8",
+        "fe8ae8be572ccd598cae8df250855da1682af8a4c201ecd35c0fb4ee32b3e5b8"
+      ],
+      "entity_uid": "42::Bella",
+      "event_id": "vistory42_bella_s15_s21",
+      "gap_bucket": "5-7",
+      "horizon": 6,
+      "official_character_description": "An ordinary human girl with rosy skin and hair tousled by the breeze.",
+      "official_story": {
+        "path": "42/story.json",
+        "sha256": "2123879e41357e0b734342223f024379131a09bf0d8d9e1555896b172cc07e78"
+      },
+      "official_tag": "realistic_human",
+      "read_prompt": "Daytime, grassy field, bright sunshine, blue sky with white clouds, gentle breeze, lush green grass Medium shot, eye level shot. Edward and Bella confess their feelings to each other, Bella says she’d rather die than be apart from him, her expression resolute",
+      "reference": {
+        "path": "42/image/Bella/00.jpg",
+        "sha256": "a8cb8f8673caf969deea17a4c31074e17860775bd53f63d1f8348160e02b8d46"
+      },
+      "source_character_count": 2,
+      "source_prompt": "Daytime, grassy field, bright sunshine, blue sky with white clouds, gentle breeze, lush green grass Medium shot, side shot. Edward holds Bella's hand, they sit quietly, their expressions serene",
+      "source_shot": 15,
+      "story_id": "42",
+      "style_class": "realistic",
+      "target_shot": 21
+    },
+    {
+      "candidate_id": "59cb42f2865de9ebb59f55dca37468d70f93cb5dc0a392915588f2f5e60f1bcb",
+      "character_name": "Cheng Cai",
+      "eligible_donor_count": 6,
+      "eligible_donor_ids": [
+        "4ebec072547f9bf1df1290065e1ff3422a441bbf07543fdbc27bcb331bb45e5a",
+        "60a90cedf567e8e5623b83b15f49c10cf0113fad991d66b082d03490f783ab8d",
+        "7e14ba4b33d2e425eb74088144935bd60f8a79e69fb46a713957a418efbe7352",
+        "b279bc54828c39c541bbefe564a4e96ae17e8d0bc9393b961363980b6b2220c0",
+        "ed0b6c2d249783516d73a3b2269ccd1c997e819d25e904bad6e181742788cc27",
+        "fddb86f3da76d2390b880277e856dccb3ee693962230a18d390ab53af107d8f0"
+      ],
+      "entity_uid": "20::Cheng Cai",
+      "event_id": "vistory20_cheng_cai_s6_s16",
+      "gap_bucket": "8-10",
+      "horizon": 10,
+      "official_character_description": "A young Chinese man with black hair and black eyes, around 18 years old, with dark skin and a strong build. Wearing the recruit uniform of the People's Liberation Army and a military cap, his expression is clever and confident.",
+      "official_story": {
+        "path": "20/story.json",
+        "sha256": "73da592da81fdedd9044013a2ecb62b5ed7902da5337a2a44fe70e27efb2414a"
+      },
+      "official_tag": "realistic_human",
+      "read_prompt": "Daytime, military camp training ground, busy atmosphere, new recruits and Cheng Cai on the training ground, bright sunlight Medium shot, eye level shot. Cheng Cai directs the new recruits’ training on the training ground, his expression confident, his movements efficient",
+      "reference": {
+        "path": "20/image/Cheng Cai/00.jpg",
+        "sha256": "234db817765015acd1bac357d7c72d301ff63ccbb82013e28a41ac07bf8fadce"
+      },
+      "source_character_count": 2,
+      "source_prompt": "Evening, inside the military train carriage, sorrowful yet warm atmosphere, seats and luggage in the carriage, dim yellow lighting Medium close up, eye level shot. Xu Sanduo and Cheng Cai sit facing each other, their faces marked by tears and smiles, holding each other’s hands",
+      "source_shot": 6,
+      "story_id": "20",
+      "style_class": "realistic",
+      "target_shot": 16
+    },
+    {
+      "candidate_id": "5d84b93e349a250ac272b002675ab0a60579c6cfa460ff84ea83d071b4f6da87",
+      "character_name": "Me",
+      "eligible_donor_count": 7,
+      "eligible_donor_ids": [
+        "4ebec072547f9bf1df1290065e1ff3422a441bbf07543fdbc27bcb331bb45e5a",
+        "60a90cedf567e8e5623b83b15f49c10cf0113fad991d66b082d03490f783ab8d",
+        "7e14ba4b33d2e425eb74088144935bd60f8a79e69fb46a713957a418efbe7352",
+        "b279bc54828c39c541bbefe564a4e96ae17e8d0bc9393b961363980b6b2220c0",
+        "c5c60e88fa93b682a4836905f7cd03e3260d19b9bcb9e46709c077ef298e64b9",
+        "dd2ac55db2cae713d10671f28a155ac0672e4f8f0e7a85c83e29c57842ebaa2d",
+        "fddb86f3da76d2390b880277e856dccb3ee693962230a18d390ab53af107d8f0"
+      ],
+      "entity_uid": "67::Me",
+      "event_id": "vistory67_me_s7_s15",
+      "gap_bucket": "8-10",
+      "horizon": 8,
+      "official_character_description": "A young Chinese man in his 20s, tall and slender. He has brown curly hair and usually wears a white coat.",
+      "official_story": {
+        "path": "67/story.json",
+        "sha256": "d98a3a7fea55e604f8f84f4a59323a8892a378493d52127c71be2c9935c28561"
+      },
+      "official_tag": "realistic_human",
+      "read_prompt": "Daytime, shared ward, Director Lin lying on the hospital bed, medical equipment and cabinets around, bright lighting Medium shot, side view, eye level shot. I stand beside Director Lin’s bed, carefully removing the gauze. Director Lin lies on the bed, his face pale, wincing in pain.",
+      "reference": {
+        "path": "67/image/Me/00.jpg",
+        "sha256": "d116b1a337355ec09431ffa4b094515476e8dc1f5733df315e089fa44dba1cb9"
+      },
+      "source_character_count": 2,
+      "source_prompt": "Evening, restaurant restroom, Director Lin lying on the floor, sinks and stalls around, dim lighting Full shot, front view, eye level shot. Director Lin is sprawled on the floor, fast asleep. I stand beside him with a bemused expression, struggling to lift him up.",
+      "source_shot": 7,
+      "story_id": "67",
+      "style_class": "realistic",
+      "target_shot": 15
+    },
+    {
+      "candidate_id": "5e907109eb65498ff2d2b433b4eb93906db5d701c1fc9882c0c2cf5b2bb52b2e",
+      "character_name": "Byeon Hakdo",
+      "eligible_donor_count": 12,
+      "eligible_donor_ids": [
+        "030c95e7bc619f7db8e05da5359e53d26cd84258e11868353a590a84897ecb06",
+        "2098ac297a7a8d11fefdefa6ead9b243ffa5d3d1ec4dace79585b2626b2ba771",
+        "2c6c1e9cf0a402c92a9787fed93f079583450c6969d9f36f1a8e8cbd8ad8a49e",
+        "46ac068d229312ed4322dd6e21bc3691b33b520b90d6348e41aa86026b1fab5b",
+        "4b5a23eba1a089f8a4fe43a2073e0f572281fcad82de0a00165d76894cb6a971",
+        "60784d77755023da2d75041a882282aee7aed14e6eff5be3399c268e988a0cd9",
+        "69f1c58871d216f2d0db85305e04440c017375e529573c687349858a9a0fbb37",
+        "7547e49f9c5422b09e158d622adddcb6d8d3ecf273d9857b58b1da894fdfd99a",
+        "759036aa3f2f7bb8a2590a3f6859aff2dc71acbcb24e544eac50e766271befaa",
+        "75cc362310be646c961f11cf7c7fa041287646168e716354ea4432b53b76352b",
+        "a56f0dc7a0d1473904fb49dbfb29c791d451d09dce036808a8dff321bd14d0b5",
+        "caae50962880be8f9656aad704f2796fd5cd5026d433e28f3cdf09e7fa74f3b9"
+      ],
+      "entity_uid": "11::Byeon Hakdo",
+      "event_id": "vistory11_byeon_hakdo_s11_s17",
+      "gap_bucket": "5-7",
+      "horizon": 6,
+      "official_character_description": "A middle-aged Korean man with black hair and black eyes, in his fifties, with a gloomy face and greedy eyes. He wears the official robes of a governor, dressed elaborately but with an arrogant demeanor.",
+      "official_story": {
+        "path": "11/story.json",
+        "sha256": "0ba88c516b10d30c6ae5b2e840860495a9a3e4cb2d7becb9efbb3080785991ae"
+      },
+      "official_tag": "realistic_human",
+      "read_prompt": "Daytime, the great hall of the Namwon governor’s office, a tense atmosphere. The hall is lavishly furnished with calligraphy and paintings on the walls. Wine and dishes are placed on the table, and guests are seated around it. Full shot, high-angle shot. Disguised as a beggar, Lee Mongryong stands in the center of the hall, his expression angry. He holds a brush and points it at Byeon Hakdo, who sits in the main seat, looking astonished.",
+      "reference": {
+        "path": "11/image/Byeon Hakdo/00.jpg",
+        "sha256": "90bad3589a3ae0a7b6e086c5c4180592b3b1f17e6c3fd79f702ce08d9920bbfd"
+      },
+      "source_character_count": 1,
+      "source_prompt": "Daytime, the study of the Namwon governor’s office, a disdainful atmosphere. The study is simply furnished with bookshelves filled with books. Writing utensils are placed on the desk, and the view of the courtyard can be seen through the window. Medium close up, side, eye level shot. Byeon Hakdo sits at his desk, his expression contemptuous. A subordinate stands nearby, looking troubled, holding a document in his hand.",
+      "source_shot": 11,
+      "story_id": "11",
+      "style_class": "realistic",
+      "target_shot": 17
+    },
+    {
+      "candidate_id": "6554cd135be1fa969ac2bd48688690d99a97941ce48d0bdd853312858b0e0463",
+      "character_name": "Wang Lei",
+      "eligible_donor_count": 1,
+      "eligible_donor_ids": [
+        "a381d2c2ebd3cc3d34194f55a479fdd2077a5e6bd8dd455b03950891bd6d89ff"
+      ],
+      "entity_uid": "73::Wang Lei",
+      "event_id": "vistory73_wang_lei_s4_s12",
+      "gap_bucket": "8-10",
+      "horizon": 8,
+      "official_character_description": "A seemingly honest middle-aged man with black hair and black eyes, wearing glasses and exuding a scholarly air. He is dressed in a neat suit and shirt, giving off an approachable vibe. In reality, he is a criminal involved in human trafficking.",
+      "official_story": {
+        "path": "73/story.json",
+        "sha256": "cdd232bbf9672f68042760699ad630b2dc76e515254d2e160da9e26feac56fe5"
+      },
+      "official_tag": "realistic_human",
+      "read_prompt": "Police station entrance, bright sunlight, a few police officers standing on the steps, surrounded by onlookers, the air filled with tension and relief. Medium shot, eye level shot. Wang Lei and Yang Kun are escorted into a police van, looking dejected. Officer Feng stands nearby, her gaze firm, surrounded by onlookers.",
+      "reference": {
+        "path": "73/image/Wang Lei/00.jpg",
+        "sha256": "b4a0cd2c4c9d777539f9c705a2c65516cdcd9dd68017f4dcf5a540be695ceb89"
+      },
+      "source_character_count": 1,
+      "source_prompt": "Police station interrogation room, white walls, gray floor, a metal table in the center with two chairs, a desk lamp on the table emitting harsh light. Close up, eye level shot. Wang Lei sits on the chair, his hands cuffed to the table, looking nervous, sweating on his forehead, his eyes darting, his lips trembling slightly.",
+      "source_shot": 4,
+      "story_id": "73",
+      "style_class": "realistic",
+      "target_shot": 12
+    },
+    {
+      "candidate_id": "6b0eabf2eadf7cbfddbb1cefd7b09d2cd619e0b0f6f1a57ad3e0cfd483fae988",
+      "character_name": "Aunt Liu",
+      "eligible_donor_count": 7,
+      "eligible_donor_ids": [
+        "60a90cedf567e8e5623b83b15f49c10cf0113fad991d66b082d03490f783ab8d",
+        "7e14ba4b33d2e425eb74088144935bd60f8a79e69fb46a713957a418efbe7352",
+        "b279bc54828c39c541bbefe564a4e96ae17e8d0bc9393b961363980b6b2220c0",
+        "c5c60e88fa93b682a4836905f7cd03e3260d19b9bcb9e46709c077ef298e64b9",
+        "dd2ac55db2cae713d10671f28a155ac0672e4f8f0e7a85c83e29c57842ebaa2d",
+        "ed0b6c2d249783516d73a3b2269ccd1c997e819d25e904bad6e181742788cc27",
+        "fddb86f3da76d2390b880277e856dccb3ee693962230a18d390ab53af107d8f0"
+      ],
+      "entity_uid": "15::Aunt Liu",
+      "event_id": "vistory15_aunt_liu_s3_s13",
+      "gap_bucket": "8-10",
+      "horizon": 10,
+      "official_character_description": "A middle-aged modern Chinese woman who enjoys square dancing, around sixty years old, with a slender figure. She wears plain everyday clothes.",
+      "official_story": {
+        "path": "15/story.json",
+        "sha256": "aa0412ec1a09c1ab17e3b9426801f7326537bfdb1437c238cec36aae1bb4d76d"
+      },
+      "official_tag": "realistic_human",
+      "read_prompt": "Daytime, neighborhood garden, Aunt Liu's bag on a bench, residents strolling nearby, a slightly anxious and uneasy atmosphere. Medium shot, eye level shot. Aunt Liu sits on the bench, anxious. Zhao Qingqing stands nearby, concerned.",
+      "reference": {
+        "path": "15/image/Aunt Liu/00.jpg",
+        "sha256": "4c2ac9d11bb905389320aa9afed719dca0153cd482fde03efaf005b0b7e21744"
+      },
+      "source_character_count": 2,
+      "source_prompt": "Evening, home dining room, simple dishes on the table, sunset outside the window, an atmosphere tinged with awkwardness and unease. Medium close up, side shot. Father eats with his head down, avoiding Aunt Liu's gaze. Aunt Liu sits across from him, looking disappointed.",
+      "source_shot": 3,
+      "story_id": "15",
+      "style_class": "realistic",
+      "target_shot": 13
+    },
+    {
+      "candidate_id": "70a7e361ff78f07ab0f75dac47e1c08243121e171a6d2b71ff84bf0c89d49890",
+      "character_name": "Paul Terrell",
+      "eligible_donor_count": 17,
+      "eligible_donor_ids": [
+        "0679c4005b96fb5b0792f8219f0bbde2fef2ca74d403f732f39b6d9a67f50165",
+        "1aeb3be9918b92011802883b2618b18d91a31278a27a371df2d60c09783c5306",
+        "2fdd50c6ee3d8b2156fe2f972e73774dcae7687305e7a1c162772ecd8db13d8a",
+        "312dbc8946e853dbdeeb908ff2d6e0a6e7d5ebd5a5ca9ae6a66bb774329f88b8",
+        "32c363c318b3ed6f6592b5c0dd7a9dfced079b4ea6a83cbb5b486f0c188b99b1",
+        "4a61cb8e461fb9024e2353af88a678be345288e7a6e8fe03849c4c74966b298b",
+        "4d13caff08c340cac89c7e2a06457cf6bccfa8562ec4091d2ea16385759edc72",
+        "5ce439091e6d71dd975d2d6b50f2c96a0f50118464a75356fa882c094ecb81bd",
+        "62fd33f315366b83dcda70e80ec024884816b7dcafe00116e17ac38ccd2cf4f1",
+        "64de88982db0291848ccef0a385e57f148a95a4ee30e864344174803ccdf9929",
+        "6f66308e4829122f66fbf6c04cd7f6e5688fdc2ac0da460ccbb5cba67f5b312f",
+        "81d18baa57972fd8f0b92241083fdd132496c5cb67f53fb1e3a14874b5278689",
+        "8e03d3706c43dcb9f316fec1cd43b343b1db9df66dfb90898879f2addf14ae8a",
+        "a2e885c1f3620e4f9832c2b8105b80e7692c7f63da15d1cbedba4c9c86883c89",
+        "dcc8a5d1eea6eb12e8481ec2ca1968cc05606077f48509404a70f6babfa048ee",
+        "fa5df75840f9d778d657e262f5449fd541d01d166b823fe7ca2fcf2a1c9c09a8",
+        "fe8ae8be572ccd598cae8df250855da1682af8a4c201ecd35c0fb4ee32b3e5b8"
+      ],
+      "entity_uid": "21::Paul Terrell",
+      "event_id": "vistory21_paul_terrell_s9_s14",
+      "gap_bucket": "5-7",
+      "horizon": 5,
+      "official_character_description": "A middle-aged American man dressed smartly with a robust build. Business-like, wearing a shirt and a sweater vest.",
+      "official_story": {
+        "path": "21/story.json",
+        "sha256": "ea7595a37ec21bca3d035d1ef0f1fcf6f5717e20221b9d85d188c65301ccbb46"
+      },
+      "official_tag": "realistic_human",
+      "read_prompt": "Daytime, inside the computer store, shelves stocked with various computer equipment, large boxes on the floor, bright lighting Full shot, eye level shot. Jobs and Woz stand in the center of the store, looking proud. Terrell inspects the computers in the boxes, expression satisfied.",
+      "reference": {
+        "path": "21/image/Paul Terrell/00.jpg",
+        "sha256": "8c4770f7bf0ca03fff78e55703e8bcd75477040d3d6e77e989e43e19c0f15b2f"
+      },
+      "source_character_count": 2,
+      "source_prompt": "Evening, Homebrew Computer Club, room crowded, various devices on tables, dim but enthusiastic lighting Medium shot, eye level shot. Terrell stands before Jobs, expression intrigued, holding an order form. Jobs smiles, a glimmer of excitement in his eyes.",
+      "source_shot": 9,
+      "story_id": "21",
+      "style_class": "realistic",
+      "target_shot": 14
+    },
+    {
+      "candidate_id": "75eb334a9c1c0d2043f9e43ebbacaa4a46ff11fffc68f3d2124028ff10890b55",
+      "character_name": "Charles Collingridge",
+      "eligible_donor_count": 7,
+      "eligible_donor_ids": [
+        "2098ac297a7a8d11fefdefa6ead9b243ffa5d3d1ec4dace79585b2626b2ba771",
+        "2c6c1e9cf0a402c92a9787fed93f079583450c6969d9f36f1a8e8cbd8ad8a49e",
+        "46ac068d229312ed4322dd6e21bc3691b33b520b90d6348e41aa86026b1fab5b",
+        "4b5a23eba1a089f8a4fe43a2073e0f572281fcad82de0a00165d76894cb6a971",
+        "60784d77755023da2d75041a882282aee7aed14e6eff5be3399c268e988a0cd9",
+        "75cc362310be646c961f11cf7c7fa041287646168e716354ea4432b53b76352b",
+        "f48b1cc454e48b120254a88897b099630180380196e6926d0f8696d3c2b79b53"
+      ],
+      "entity_uid": "51::Charles Collingridge",
+      "event_id": "vistory51_charles_collingridge_s1_s7",
+      "gap_bucket": "5-7",
+      "horizon": 6,
+      "official_character_description": "The brother of the British Prime Minister, a middle-aged man leading a dissipated life. He lives in a small apartment, financially strained, often drowning his sorrows in bars. In appearance, he has a saggy face, thinning hair, and wears wrinkled suits with clean shirts and a new tie, attempting to conceal the traces of his indulgent lifestyle.",
+      "official_story": {
+        "path": "51/story.json",
+        "sha256": "4b008ea828e1131a48b9fa55750b1d94ef3b96ef6f4a159766be07a5b4135eb2"
+      },
+      "official_tag": "realistic_human",
+      "read_prompt": "Nighttime, the small apartment in Clapham, South London. The living room is disheveled, clothes are piled on the sofa, a wall clock shows time is running short, city neon flickers outside. Medium shot, side shot. Charles stands in the middle of the living room, resigned, adjusting his tie with one hand and straightening his wrinkled suit with the other, trying to mask his indulgent lifestyle.",
+      "reference": {
+        "path": "51/image/Charles Collingridge/00.jpg",
+        "sha256": "087434820e1343d942d89b9e2a9aca331c4148af54befc3658da5a8f8d09cff0"
+      },
+      "source_character_count": 1,
+      "source_prompt": "Nighttime, a small apartment in Clapham, South London. The living room is cluttered, an old clock hangs on the wall, liquor bottles and cigarette butts are scattered on the coffee table, dim lighting with faint city neon seeping through the window. Medium shot, eye level shot. Charles stands in front of a mirror, looking exhausted, holding an electric razor in his right hand and leaning on the sink with his left. The mirror reflects his saggy face and thinning hair, his shirt not fully buttoned.",
+      "source_shot": 1,
+      "story_id": "51",
+      "style_class": "realistic",
+      "target_shot": 7
+    },
+    {
+      "candidate_id": "78290b08cad0e3460e9af800344bdc3556ad06d2e305cde8e7abeab658742f8c",
+      "character_name": "Duan Xiaolou (Stage Appearance)",
+      "eligible_donor_count": 16,
+      "eligible_donor_ids": [
+        "0679c4005b96fb5b0792f8219f0bbde2fef2ca74d403f732f39b6d9a67f50165",
+        "17abce3714d605bc9c8e23e76b6581f945619af03a00da6f5a55412485f0c501",
+        "1aeb3be9918b92011802883b2618b18d91a31278a27a371df2d60c09783c5306",
+        "2fdd50c6ee3d8b2156fe2f972e73774dcae7687305e7a1c162772ecd8db13d8a",
+        "312dbc8946e853dbdeeb908ff2d6e0a6e7d5ebd5a5ca9ae6a66bb774329f88b8",
+        "32c363c318b3ed6f6592b5c0dd7a9dfced079b4ea6a83cbb5b486f0c188b99b1",
+        "4a61cb8e461fb9024e2353af88a678be345288e7a6e8fe03849c4c74966b298b",
+        "4d13caff08c340cac89c7e2a06457cf6bccfa8562ec4091d2ea16385759edc72",
+        "5ce439091e6d71dd975d2d6b50f2c96a0f50118464a75356fa882c094ecb81bd",
+        "62fd33f315366b83dcda70e80ec024884816b7dcafe00116e17ac38ccd2cf4f1",
+        "64de88982db0291848ccef0a385e57f148a95a4ee30e864344174803ccdf9929",
+        "6f66308e4829122f66fbf6c04cd7f6e5688fdc2ac0da460ccbb5cba67f5b312f",
+        "81d18baa57972fd8f0b92241083fdd132496c5cb67f53fb1e3a14874b5278689",
+        "8e03d3706c43dcb9f316fec1cd43b343b1db9df66dfb90898879f2addf14ae8a",
+        "a2e885c1f3620e4f9832c2b8105b80e7692c7f63da15d1cbedba4c9c86883c89",
+        "fe8ae8be572ccd598cae8df250855da1682af8a4c201ecd35c0fb4ee32b3e5b8"
+      ],
+      "entity_uid": "65::Duan Xiaolou (Stage Appearance)",
+      "event_id": "vistory65_duan_xiaolou_stage_appearance_s2_s7",
+      "gap_bucket": "5-7",
+      "horizon": 5,
+      "official_character_description": "A young Chinese man from ancient times, around 20 years old, burly physique, strong facial features, and a masculine temperament. Dressed in elaborate Peking Opera costumes with heavy makeup, portraying the role of the Conqueror on stage.",
+      "official_story": {
+        "path": "65/story.json",
+        "sha256": "a95d7b9c2df0281f877b22cdd981715c708a33239a04e5582e97b2d0df06d253"
+      },
+      "official_tag": "realistic_human",
+      "read_prompt": "Nighttime, ancient opera house, red lanterns hanging from the eaves, center stage with red curtains slowly parting, audience seats filled with people, tense atmosphere, sounds of Peking Opera gongs and drums echoing in the air, sudden gunfire shattering the silence, soft yellow lighting illuminating the stage. Full shot, eye level shot. Duan Xiaolou stands at the center of the stage with a tense expression, gesturing toward Juxian in the audience, who looks frightened.",
+      "reference": {
+        "path": "65/image/Duan Xiaolou (Stage Appearance)/00.jpg",
+        "sha256": "7e2f3f4d02d9e720dc7edb184ba4baafaab59a2c4183152bac43a6a328ca6408"
+      },
+      "source_character_count": 2,
+      "source_prompt": "Nighttime, backstage of the opera house, in front of a makeup table, mirrors reflecting the light, various Peking Opera props scattered on the table, red curtains partially covering the stage, quiet atmosphere, dim yellow lighting. Medium shot, side angle shot. Duan Xiaolou sits at the makeup table removing his makeup, while Cheng Dieyi stands behind him with a curious expression, pointing at the new teapot on the table, which has chrysanthemum patterns.",
+      "source_shot": 2,
+      "story_id": "65",
+      "style_class": "realistic",
+      "target_shot": 7
+    },
+    {
+      "candidate_id": "8859f2cf52fd31dec51320d47bfa96f229cd29fcb801ede9969a2d8cd56a9a59",
+      "character_name": "Ned Land",
+      "eligible_donor_count": 2,
+      "eligible_donor_ids": [
+        "8e20c92efde84944a909691f46b24a62e91dff3971a5964a669a7cce2c51c03d",
+        "c3e2da94750957d77e93d6e501165440495daaebecdc216b238e5f3a8c24921d"
+      ],
+      "entity_uid": "55::Ned Land",
+      "event_id": "vistory55_ned_land_s8_s13",
+      "gap_bucket": "5-7",
+      "horizon": 5,
+      "official_character_description": "A strong Canadian harpooner with a straightforward and irritable temperament. He is tall and muscular, with thick brown hair and sharp blue eyes. He wears simple sailor attire and always carries a sharp dagger.",
+      "official_story": {
+        "path": "55/story.json",
+        "sha256": "234e2e03750112c5c6129eea1a681d2f399713ae3dfcb1a2684cff0515f48789"
+      },
+      "official_tag": "realistic_human",
+      "read_prompt": "Morning, inside the Nautilus submarine, lounge, luxurious decor, letter on the coffee table, sofa, ocean-themed painting on the wall, map table, bright lighting Medium shot, eye level shot. The three gather around the map table. Professor Aronnax points to Crespo Island on the map with a puzzled expression. Conseil and Ned Land lean in to look.",
+      "reference": {
+        "path": "55/image/Ned Land/00.jpg",
+        "sha256": "b9d91c665bb7ef987204fccfdafb10afbfa87687bf32908d1e837dfbd05d7110"
+      },
+      "source_character_count": 3,
+      "source_prompt": "Noon, inside the Nautilus submarine, dining room, simple decor, dining table laden with food, tableware, nautical chart on the wall, bright lighting Medium shot, eye level shot. The three are eating. Professor Aronnax looks thoughtful, Conseil chews slowly, and Ned Land eats meat heartily.",
+      "source_shot": 8,
+      "story_id": "55",
+      "style_class": "realistic",
+      "target_shot": 13
+    },
+    {
+      "candidate_id": "88dded14998a985999a6cd3e987ae9f95a48793b5aa9eb0208d157a51dc7c947",
+      "character_name": "Village Chief",
+      "eligible_donor_count": 2,
+      "eligible_donor_ids": [
+        "5b8826c2c15922085dc7a79a75fe23b43035e88539a37f46cb9826bac79fb291",
+        "ea4151cbde071ac7eec3a1451f14a858ac020150c3a7411e609e010344b98919"
+      ],
+      "entity_uid": "71::Village Chief",
+      "event_id": "vistory71_village_chief_s3_s13",
+      "gap_bucket": "8-10",
+      "horizon": 10,
+      "official_character_description": "A middle-aged man with black hair and black eyes, in his 50s, average build and yellowish skin. Wearing a relatively decent long gown, steady in character.",
+      "official_story": {
+        "path": "71/story.json",
+        "sha256": "a63713d85697807cfef5d3af6c512f86a297e718bfd86d8c8e1d57a717929afa"
+      },
+      "official_tag": "realistic_human",
+      "read_prompt": "Nighttime, center of the dried-up reservoir, tense atmosphere, village chief and my father discussing, villagers gathered but hesitant, moonlight casting over the ground Full shot, eye level shot. Village chief and my father discuss in the center, villagers gathered around but hesitant, expressions tense, moonlight casting over them",
+      "reference": {
+        "path": "71/image/Village Chief/00.jpg",
+        "sha256": "f6d4ad5a07ecb24a47b29cc9f729bc3733c96acabf3b25d5a97b0d68ca4f58e0"
+      },
+      "source_character_count": 1,
+      "source_prompt": "Daytime, open area in front of the village committee, lively discussion atmosphere, villagers gathered together, simple village committee building, sunlight filtering through leaves Full shot, eye level shot. The village chief stands in the center of the frame, surrounded by villagers engaged in lively discussion, expressions animated, sunlight filtering through leaves onto them",
+      "source_shot": 3,
+      "story_id": "71",
+      "style_class": "realistic",
+      "target_shot": 13
+    },
+    {
+      "candidate_id": "96a7cf4dc141cd4be3e5a861bd4ca3b32b133079d9938503b66077f27b5533aa",
+      "character_name": "Duan Xiaolou",
+      "eligible_donor_count": 3,
+      "eligible_donor_ids": [
+        "5ace73eb8a52f642dc92fcc3fddd28afab143f0c766082d652f5a9f56ecc51d4",
+        "669a18086178895b6c972b40a352fb0eb87e27a91c27c3bc100fd51e44567686",
+        "8e20c92efde84944a909691f46b24a62e91dff3971a5964a669a7cce2c51c03d"
+      ],
+      "entity_uid": "65::Duan Xiaolou",
+      "event_id": "vistory65_duan_xiaolou_s6_s13",
+      "gap_bucket": "5-7",
+      "horizon": 7,
+      "official_character_description": "A young Chinese man from ancient times with black hair and black eyes, around 20 years old, burly physique, strong facial features, and a masculine temperament.",
+      "official_story": {
+        "path": "65/story.json",
+        "sha256": "a95d7b9c2df0281f877b22cdd981715c708a33239a04e5582e97b2d0df06d253"
+      },
+      "official_tag": "realistic_human",
+      "read_prompt": "Nighttime, backstage of the opera house, red curtains partially covering the stage, in front of a makeup table, mirrors reflecting the light, various Peking Opera props scattered on the table, quiet atmosphere, dim yellow lighting. Medium shot, side angle shot. Duan Xiaolou stands in front of the makeup table with a hesitant expression, while Juxian stands opposite him with a determined look, expressing her feelings.",
+      "reference": {
+        "path": "65/image/Duan Xiaolou/00.jpg",
+        "sha256": "4a6b6993e8d2d15d6b76f68594da489224873049b6f01f8607be80bc49874ece"
+      },
+      "source_character_count": 3,
+      "source_prompt": "Nighttime, room in the House of Blossoms, red silk curtains, exquisite furniture, tea set on the table, quiet atmosphere, dim red lighting. Medium shot, side angle shot. Duan Xiaolou sits at the table with a tender expression, while Juxian stands beside him pouring tea. Cheng Dieyi stands outside the door, looking pained as he secretly watches the scene.",
+      "source_shot": 6,
+      "story_id": "65",
+      "style_class": "realistic",
+      "target_shot": 13
+    },
+    {
+      "candidate_id": "9ceb45993124676994cc075f575592a685e02cdd7b7f9c45e3b24bca2465c814",
+      "character_name": "Preston",
+      "eligible_donor_count": 7,
+      "eligible_donor_ids": [
+        "2098ac297a7a8d11fefdefa6ead9b243ffa5d3d1ec4dace79585b2626b2ba771",
+        "2c6c1e9cf0a402c92a9787fed93f079583450c6969d9f36f1a8e8cbd8ad8a49e",
+        "46ac068d229312ed4322dd6e21bc3691b33b520b90d6348e41aa86026b1fab5b",
+        "4b5a23eba1a089f8a4fe43a2073e0f572281fcad82de0a00165d76894cb6a971",
+        "60784d77755023da2d75041a882282aee7aed14e6eff5be3399c268e988a0cd9",
+        "75cc362310be646c961f11cf7c7fa041287646168e716354ea4432b53b76352b",
+        "f48b1cc454e48b120254a88897b099630180380196e6926d0f8696d3c2b79b53"
+      ],
+      "entity_uid": "51::Preston",
+      "event_id": "vistory51_preston_s5_s11",
+      "gap_bucket": "5-7",
+      "horizon": 6,
+      "official_character_description": "Editor of 'The Daily Chronicle,' a middle-aged British man with a quick temper. On election night, he is dressed casually.",
+      "official_story": {
+        "path": "51/story.json",
+        "sha256": "4b008ea828e1131a48b9fa55750b1d94ef3b96ef6f4a159766be07a5b4135eb2"
+      },
+      "official_tag": "realistic_human",
+      "read_prompt": "Nighttime, the newsroom of 'The Daily Chronicle.' Preston’s desk is a mess, paper is scribbled over, the wall clock shows it’s late, city neon still flickers outside. Close up, frontal shot. Preston sits at his desk, enraged, slamming his pen down so hard it bounces. His hair is disheveled, eyes bloodshot, radiating extreme dissatisfaction.",
+      "reference": {
+        "path": "51/image/Preston/00.jpg",
+        "sha256": "1cf2c0641a6a2d4c8077870571f9a0fa5f5b57bf4736115108d471c4968d4e6d"
+      },
+      "source_character_count": 1,
+      "source_prompt": "Nighttime, the newsroom of 'The Daily Chronicle.' The desk is cluttered, newspaper clippings cover the walls, documents and computers are piled on the table, a printer hums, and the air smells of coffee. Frontal, dutch angle shot. Preston sits at his desk, furious, scribbling aggressively on paper with a pen, crumpled papers scattered around him.",
+      "source_shot": 5,
+      "story_id": "51",
+      "style_class": "realistic",
+      "target_shot": 11
+    },
+    {
+      "candidate_id": "9db125c029bc855cc74c464e2dafc92a4d77adb0ea4d4720b4f0d3cc9d16684a",
+      "character_name": "Mr. Fogg",
+      "eligible_donor_count": 16,
+      "eligible_donor_ids": [
+        "0679c4005b96fb5b0792f8219f0bbde2fef2ca74d403f732f39b6d9a67f50165",
+        "17abce3714d605bc9c8e23e76b6581f945619af03a00da6f5a55412485f0c501",
+        "1aeb3be9918b92011802883b2618b18d91a31278a27a371df2d60c09783c5306",
+        "2fdd50c6ee3d8b2156fe2f972e73774dcae7687305e7a1c162772ecd8db13d8a",
+        "32c363c318b3ed6f6592b5c0dd7a9dfced079b4ea6a83cbb5b486f0c188b99b1",
+        "4a61cb8e461fb9024e2353af88a678be345288e7a6e8fe03849c4c74966b298b",
+        "4d13caff08c340cac89c7e2a06457cf6bccfa8562ec4091d2ea16385759edc72",
+        "5ce439091e6d71dd975d2d6b50f2c96a0f50118464a75356fa882c094ecb81bd",
+        "62fd33f315366b83dcda70e80ec024884816b7dcafe00116e17ac38ccd2cf4f1",
+        "64de88982db0291848ccef0a385e57f148a95a4ee30e864344174803ccdf9929",
+        "81d18baa57972fd8f0b92241083fdd132496c5cb67f53fb1e3a14874b5278689",
+        "8e03d3706c43dcb9f316fec1cd43b343b1db9df66dfb90898879f2addf14ae8a",
+        "a2e885c1f3620e4f9832c2b8105b80e7692c7f63da15d1cbedba4c9c86883c89",
+        "dcc8a5d1eea6eb12e8481ec2ca1968cc05606077f48509404a70f6babfa048ee",
+        "fa5df75840f9d778d657e262f5449fd541d01d166b823fe7ca2fcf2a1c9c09a8",
+        "fe8ae8be572ccd598cae8df250855da1682af8a4c201ecd35c0fb4ee32b3e5b8"
+      ],
+      "entity_uid": "36::Mr. Fogg",
+      "event_id": "vistory36_mr_fogg_s2_s8",
+      "gap_bucket": "5-7",
+      "horizon": 6,
+      "official_character_description": "A British gentleman with graying hair and brown eyes, approximately in his 50s, handsome with a calm demeanor. Dressed in 19th-century British gentleman's attire, wearing a checked tweed suit and a white shirt.",
+      "official_story": {
+        "path": "36/story.json",
+        "sha256": "29db438ccbb9491aa91548458e26bb024e06dcdfb6bf31be36d9b8602e09a336"
+      },
+      "official_tag": "realistic_human",
+      "read_prompt": "Morning, Kelby train station, station shabby and simple, surrounded by low buildings and desolate wilderness, scattered debris and garbage on the ground, natural light bright, desolate atmosphere Full shot, high-angle shot. Mr. Fogg and Colonel Cromarty stand in front of the train station, expressions calm, looking at the surroundings",
+      "reference": {
+        "path": "36/image/Mr. Fogg/00.jpg",
+        "sha256": "c5933d2b06436c6b9242232f0c0d0b288f1bc0ecbd22abdb7434e85fba16ab84"
+      },
+      "source_character_count": 2,
+      "source_prompt": "Daytime, inside the train compartment, slight shaking, outside the window the Indian wilderness scenery flashes by, seats inside the compartment neat, a cup of tea on the small table, curtains fluttering slightly in the wind, natural light streaming through the windows Medium close up, eye level shot. Mr. Fogg slightly tilts his head, expression calm, Colonel Cromarty looks at Mr. Fogg, expression serious",
+      "source_shot": 2,
+      "story_id": "36",
+      "style_class": "realistic",
+      "target_shot": 8
+    },
+    {
+      "candidate_id": "9f2dcc40b262d1a89466895c6909b9cba15c2f0bb2fe577dbab005aedc1e3e4f",
+      "character_name": "Aunt",
+      "eligible_donor_count": 6,
+      "eligible_donor_ids": [
+        "4ebec072547f9bf1df1290065e1ff3422a441bbf07543fdbc27bcb331bb45e5a",
+        "7e14ba4b33d2e425eb74088144935bd60f8a79e69fb46a713957a418efbe7352",
+        "c5c60e88fa93b682a4836905f7cd03e3260d19b9bcb9e46709c077ef298e64b9",
+        "dd2ac55db2cae713d10671f28a155ac0672e4f8f0e7a85c83e29c57842ebaa2d",
+        "ed0b6c2d249783516d73a3b2269ccd1c997e819d25e904bad6e181742788cc27",
+        "fddb86f3da76d2390b880277e856dccb3ee693962230a18d390ab53af107d8f0"
+      ],
+      "entity_uid": "16::Aunt",
+      "event_id": "vistory16_aunt_s10_s18",
+      "gap_bucket": "8-10",
+      "horizon": 8,
+      "official_character_description": "A middle-aged woman with black hair and black eyes, around 50 years old. She wears slightly outdated clothing and has a selfish and snobbish personality.",
+      "official_story": {
+        "path": "16/story.json",
+        "sha256": "6b1ad31634e5da0108acd51b16da2e7f29b202858fcc5d0e556f4bedb22d005e"
+      },
+      "official_tag": "realistic_human",
+      "read_prompt": "Nighttime, Aunt’s dining room, table laden with dishes and wine glasses, Aunt and Uncle smiling widely, raising glasses repeatedly. Full shot, eye level shot. At the table, Aunt and Uncle raise glasses, beaming at Chen Sihan and her father. Grandma sits nearby, expression expectant.",
+      "reference": {
+        "path": "16/image/Aunt/00.jpg",
+        "sha256": "4ccd17f8a9689f76c8e70e91f56f49ce98e3334ab2d3c3e1d68cc24390e16074"
+      },
+      "source_character_count": 2,
+      "source_prompt": "Daytime, Chen Sihan’s living room, Aunt standing at the door, expression furious, Chen Sihan’s father blocking her path, looking determined. Medium shot, eye level shot. Chen Sihan’s father stands at the door, arms outstretched, blocking Aunt’s way. Aunt, looking furious, points and shouts at him.",
+      "source_shot": 10,
+      "story_id": "16",
+      "style_class": "realistic",
+      "target_shot": 18
+    },
+    {
+      "candidate_id": "a6b0aac7fbcd4115735300ea1a6c5f8d050b6950698234e65c0228c1f8f4834a",
+      "character_name": "Jack Twist",
+      "eligible_donor_count": 17,
+      "eligible_donor_ids": [
+        "0679c4005b96fb5b0792f8219f0bbde2fef2ca74d403f732f39b6d9a67f50165",
+        "17abce3714d605bc9c8e23e76b6581f945619af03a00da6f5a55412485f0c501",
+        "1aeb3be9918b92011802883b2618b18d91a31278a27a371df2d60c09783c5306",
+        "2fdd50c6ee3d8b2156fe2f972e73774dcae7687305e7a1c162772ecd8db13d8a",
+        "312dbc8946e853dbdeeb908ff2d6e0a6e7d5ebd5a5ca9ae6a66bb774329f88b8",
+        "32c363c318b3ed6f6592b5c0dd7a9dfced079b4ea6a83cbb5b486f0c188b99b1",
+        "4a61cb8e461fb9024e2353af88a678be345288e7a6e8fe03849c4c74966b298b",
+        "4d13caff08c340cac89c7e2a06457cf6bccfa8562ec4091d2ea16385759edc72",
+        "5ce439091e6d71dd975d2d6b50f2c96a0f50118464a75356fa882c094ecb81bd",
+        "62fd33f315366b83dcda70e80ec024884816b7dcafe00116e17ac38ccd2cf4f1",
+        "6f66308e4829122f66fbf6c04cd7f6e5688fdc2ac0da460ccbb5cba67f5b312f",
+        "81d18baa57972fd8f0b92241083fdd132496c5cb67f53fb1e3a14874b5278689",
+        "8e03d3706c43dcb9f316fec1cd43b343b1db9df66dfb90898879f2addf14ae8a",
+        "a2e885c1f3620e4f9832c2b8105b80e7692c7f63da15d1cbedba4c9c86883c89",
+        "dcc8a5d1eea6eb12e8481ec2ca1968cc05606077f48509404a70f6babfa048ee",
+        "fa5df75840f9d778d657e262f5449fd541d01d166b823fe7ca2fcf2a1c9c09a8",
+        "fe8ae8be572ccd598cae8df250855da1682af8a4c201ecd35c0fb4ee32b3e5b8"
+      ],
+      "entity_uid": "41::Jack Twist",
+      "event_id": "vistory41_jack_twist_s13_s19",
+      "gap_bucket": "5-7",
+      "horizon": 6,
+      "official_character_description": "A middle-aged American man with black hair and dark eyes, about 40 years old. He is short but sturdy, with curly hair and buck teeth. In his youth, he aspired to a rodeo career. He wears faded jeans and leather boots, and an old hat. He is outgoing and loves to laugh.",
+      "official_story": {
+        "path": "41/story.json",
+        "sha256": "6756b7a98a3006edc9de45331bc2fa667c27c9bc2ad573aa41f71361678464f9"
+      },
+      "official_tag": "realistic_human",
+      "read_prompt": "Daytime, Brokeback Mountain pasture, blue sky with white clouds, a flock of sheep in the distance, wildflowers blooming on the grassland, Ennis and Jack sit side by side under a large tree, looking young and happy. Medium shot, eye level shot. Ennis and Jack sit side by side under a large tree, Ennis looking reserved yet happy, Jack looking outgoing, their hands lightly clasped together, the background showing undulating grassland and sheep.",
+      "reference": {
+        "path": "41/image/Jack Twist/00.jpg",
+        "sha256": "748f89e675d83fa2c29e18166452bd38ce467fb1097c25b9b40b9bba487b7a6e"
+      },
+      "source_character_count": 2,
+      "source_prompt": "Evening, outside an old trailer, surrounded by a desolate farm, the sun setting, soft lighting, Ennis and Jack stand by the trailer, preparing to part. Medium long shot, side shot. Ennis and Jack stand by the trailer, Ennis looking pained, Jack looking reluctant, they embrace tightly before Jack turns and walks toward the truck.",
+      "source_shot": 13,
+      "story_id": "41",
+      "style_class": "realistic",
+      "target_shot": 19
+    },
+    {
+      "candidate_id": "b661d03286288fce151753082b828d2723eecebc080c0faac805ac58b573c3e5",
+      "character_name": "Khal Drogo",
+      "eligible_donor_count": 16,
+      "eligible_donor_ids": [
+        "0679c4005b96fb5b0792f8219f0bbde2fef2ca74d403f732f39b6d9a67f50165",
+        "17abce3714d605bc9c8e23e76b6581f945619af03a00da6f5a55412485f0c501",
+        "1aeb3be9918b92011802883b2618b18d91a31278a27a371df2d60c09783c5306",
+        "2fdd50c6ee3d8b2156fe2f972e73774dcae7687305e7a1c162772ecd8db13d8a",
+        "312dbc8946e853dbdeeb908ff2d6e0a6e7d5ebd5a5ca9ae6a66bb774329f88b8",
+        "4a61cb8e461fb9024e2353af88a678be345288e7a6e8fe03849c4c74966b298b",
+        "4d13caff08c340cac89c7e2a06457cf6bccfa8562ec4091d2ea16385759edc72",
+        "62fd33f315366b83dcda70e80ec024884816b7dcafe00116e17ac38ccd2cf4f1",
+        "64de88982db0291848ccef0a385e57f148a95a4ee30e864344174803ccdf9929",
+        "6f66308e4829122f66fbf6c04cd7f6e5688fdc2ac0da460ccbb5cba67f5b312f",
+        "81d18baa57972fd8f0b92241083fdd132496c5cb67f53fb1e3a14874b5278689",
+        "8e03d3706c43dcb9f316fec1cd43b343b1db9df66dfb90898879f2addf14ae8a",
+        "a2e885c1f3620e4f9832c2b8105b80e7692c7f63da15d1cbedba4c9c86883c89",
+        "dcc8a5d1eea6eb12e8481ec2ca1968cc05606077f48509404a70f6babfa048ee",
+        "fa5df75840f9d778d657e262f5449fd541d01d166b823fe7ca2fcf2a1c9c09a8",
+        "fe8ae8be572ccd598cae8df250855da1682af8a4c201ecd35c0fb4ee32b3e5b8"
+      ],
+      "entity_uid": "52::Khal Drogo",
+      "event_id": "vistory52_khal_drogo_s8_s13",
+      "gap_bucket": "5-7",
+      "horizon": 5,
+      "official_character_description": "A powerful Dothraki leader. He is tall and muscular, with bronze skin, long black hair braided with bells and gold rings. He wears horsehide pants and a painted leather vest, with a heavy golden belt around his waist. He is a stern and ruthless warrior.",
+      "official_story": {
+        "path": "52/story.json",
+        "sha256": "b70ffae8e3323be0b143e36a6fe3f98c8a095bc5918fd54cd74d1de8869612cd"
+      },
+      "official_tag": "realistic_human",
+      "read_prompt": "Nighttime, inside the palace, tense atmosphere, ornately decorated palace, banquet tables, torchlight Medium shot, high-angle shot. Khal Drogo steps down from his throne, his bloodriders grabbing Viserys, who struggles helplessly.",
+      "reference": {
+        "path": "52/image/Khal Drogo/00.jpg",
+        "sha256": "23b2176657e70f8e480d4b79e370a47f653d2dfbabee735a408a5b2f5087cd28"
+      },
+      "source_character_count": 2,
+      "source_prompt": "Nighttime, inside the palace, celebratory atmosphere, ornately decorated palace, banquet tables, music and drumbeats, torchlight Full shot, eye level shot. Daenerys and Khal Drogo walk side by side into the palace, where the feast is in full swing, people laughing and chatting, music and drumbeats filling the air.",
+      "source_shot": 8,
+      "story_id": "52",
+      "style_class": "realistic",
+      "target_shot": 13
+    },
+    {
+      "candidate_id": "b7dbb4c30fa6928f3a8b74ded5ba778ad962051c961366d3c8a32beebda24e18",
+      "character_name": "Khal Drogo",
+      "eligible_donor_count": 12,
+      "eligible_donor_ids": [
+        "030c95e7bc619f7db8e05da5359e53d26cd84258e11868353a590a84897ecb06",
+        "2098ac297a7a8d11fefdefa6ead9b243ffa5d3d1ec4dace79585b2626b2ba771",
+        "2c6c1e9cf0a402c92a9787fed93f079583450c6969d9f36f1a8e8cbd8ad8a49e",
+        "4b5a23eba1a089f8a4fe43a2073e0f572281fcad82de0a00165d76894cb6a971",
+        "60784d77755023da2d75041a882282aee7aed14e6eff5be3399c268e988a0cd9",
+        "69f1c58871d216f2d0db85305e04440c017375e529573c687349858a9a0fbb37",
+        "7547e49f9c5422b09e158d622adddcb6d8d3ecf273d9857b58b1da894fdfd99a",
+        "759036aa3f2f7bb8a2590a3f6859aff2dc71acbcb24e544eac50e766271befaa",
+        "75cc362310be646c961f11cf7c7fa041287646168e716354ea4432b53b76352b",
+        "a56f0dc7a0d1473904fb49dbfb29c791d451d09dce036808a8dff321bd14d0b5",
+        "caae50962880be8f9656aad704f2796fd5cd5026d433e28f3cdf09e7fa74f3b9",
+        "f48b1cc454e48b120254a88897b099630180380196e6926d0f8696d3c2b79b53"
+      ],
+      "entity_uid": "52::Khal Drogo",
+      "event_id": "vistory52_khal_drogo_s3_s8",
+      "gap_bucket": "5-7",
+      "horizon": 5,
+      "official_character_description": "A powerful Dothraki leader. He is tall and muscular, with bronze skin, long black hair braided with bells and gold rings. He wears horsehide pants and a painted leather vest, with a heavy golden belt around his waist. He is a stern and ruthless warrior.",
+      "official_story": {
+        "path": "52/story.json",
+        "sha256": "b70ffae8e3323be0b143e36a6fe3f98c8a095bc5918fd54cd74d1de8869612cd"
+      },
+      "official_tag": "realistic_human",
+      "read_prompt": "Nighttime, inside the palace, celebratory atmosphere, ornately decorated palace, banquet tables, music and drumbeats, torchlight Full shot, eye level shot. Daenerys and Khal Drogo walk side by side into the palace, where the feast is in full swing, people laughing and chatting, music and drumbeats filling the air.",
+      "reference": {
+        "path": "52/image/Khal Drogo/00.jpg",
+        "sha256": "23b2176657e70f8e480d4b79e370a47f653d2dfbabee735a408a5b2f5087cd28"
+      },
+      "source_character_count": 1,
+      "source_prompt": "Nighttime, beside the fire pit, tense atmosphere, burning bonfire, bloodstains on the ground, firelight illuminating the scene Medium close up, front shot. Khal Drogo stands beside Daenerys, his muscular frame holding the bloody horse heart, his expression cold and stern.",
+      "source_shot": 3,
+      "story_id": "52",
+      "style_class": "realistic",
+      "target_shot": 8
+    },
+    {
+      "candidate_id": "bd8319f1d274a2b5b6f62c5ff00b50d3adc2fb140b949f3b1bb40ece6669ab59",
+      "character_name": "Wu Liuyi",
+      "eligible_donor_count": 6,
+      "eligible_donor_ids": [
+        "4ebec072547f9bf1df1290065e1ff3422a441bbf07543fdbc27bcb331bb45e5a",
+        "60a90cedf567e8e5623b83b15f49c10cf0113fad991d66b082d03490f783ab8d",
+        "7e14ba4b33d2e425eb74088144935bd60f8a79e69fb46a713957a418efbe7352",
+        "b279bc54828c39c541bbefe564a4e96ae17e8d0bc9393b961363980b6b2220c0",
+        "ed0b6c2d249783516d73a3b2269ccd1c997e819d25e904bad6e181742788cc27",
+        "fddb86f3da76d2390b880277e856dccb3ee693962230a18d390ab53af107d8f0"
+      ],
+      "entity_uid": "20::Wu Liuyi",
+      "event_id": "vistory20_wu_liuyi_s15_s24",
+      "gap_bucket": "8-10",
+      "horizon": 9,
+      "official_character_description": "A young Chinese man with black hair and black eyes, around his 20s, with dark skin and a strong build. Wearing the uniform of the People's Liberation Army and a military cap, his expression is serious and stern.",
+      "official_story": {
+        "path": "20/story.json",
+        "sha256": "73da592da81fdedd9044013a2ecb62b5ed7902da5337a2a44fe70e27efb2414a"
+      },
+      "official_tag": "realistic_human",
+      "read_prompt": "Daytime, military camp training ground, expectant atmosphere, new recruits and Shi Jin and Wu Liuyi on the training ground, bright sunlight Medium shot, eye level shot. Shi Jin and Wu Liuyi stand at the edge of the training ground, their expressions expectant yet serious, scanning the new recruits",
+      "reference": {
+        "path": "20/image/Wu Liuyi/00.jpg",
+        "sha256": "66b035a3275ef7ebb8c4898fda36514fb2880bf88988495e4ccc639c441dacc5"
+      },
+      "source_character_count": 2,
+      "source_prompt": "Daytime, military camp training ground, tense atmosphere, new recruits and Wu Liuyi on the training ground, bright sunlight Medium close up, eye level shot. Xu Sanduo marches on the training ground, his movements awkward, while Wu Liuyi stands nearby, his expression stern but patient, correcting him step by step",
+      "source_shot": 15,
+      "story_id": "20",
+      "style_class": "realistic",
+      "target_shot": 24
+    },
+    {
+      "candidate_id": "d4f0a50c60545832c1177c46beb7af80ca37bf1ca9386511457f01772ff077b9",
+      "character_name": "Conseil",
+      "eligible_donor_count": 17,
+      "eligible_donor_ids": [
+        "0679c4005b96fb5b0792f8219f0bbde2fef2ca74d403f732f39b6d9a67f50165",
+        "17abce3714d605bc9c8e23e76b6581f945619af03a00da6f5a55412485f0c501",
+        "1aeb3be9918b92011802883b2618b18d91a31278a27a371df2d60c09783c5306",
+        "312dbc8946e853dbdeeb908ff2d6e0a6e7d5ebd5a5ca9ae6a66bb774329f88b8",
+        "32c363c318b3ed6f6592b5c0dd7a9dfced079b4ea6a83cbb5b486f0c188b99b1",
+        "4a61cb8e461fb9024e2353af88a678be345288e7a6e8fe03849c4c74966b298b",
+        "4d13caff08c340cac89c7e2a06457cf6bccfa8562ec4091d2ea16385759edc72",
+        "5ce439091e6d71dd975d2d6b50f2c96a0f50118464a75356fa882c094ecb81bd",
+        "62fd33f315366b83dcda70e80ec024884816b7dcafe00116e17ac38ccd2cf4f1",
+        "64de88982db0291848ccef0a385e57f148a95a4ee30e864344174803ccdf9929",
+        "6f66308e4829122f66fbf6c04cd7f6e5688fdc2ac0da460ccbb5cba67f5b312f",
+        "81d18baa57972fd8f0b92241083fdd132496c5cb67f53fb1e3a14874b5278689",
+        "8e03d3706c43dcb9f316fec1cd43b343b1db9df66dfb90898879f2addf14ae8a",
+        "a2e885c1f3620e4f9832c2b8105b80e7692c7f63da15d1cbedba4c9c86883c89",
+        "dcc8a5d1eea6eb12e8481ec2ca1968cc05606077f48509404a70f6babfa048ee",
+        "fa5df75840f9d778d657e262f5449fd541d01d166b823fe7ca2fcf2a1c9c09a8",
+        "fe8ae8be572ccd598cae8df250855da1682af8a4c201ecd35c0fb4ee32b3e5b8"
+      ],
+      "entity_uid": "55::Conseil",
+      "event_id": "vistory55_conseil_s2_s7",
+      "gap_bucket": "5-7",
+      "horizon": 5,
+      "official_character_description": "A middle-aged French man with a gentle and meticulous personality. He has a short stature, sparse gray hair, and brown eyes. As the professor's assistant, he wears a neat uniform.",
+      "official_story": {
+        "path": "55/story.json",
+        "sha256": "234e2e03750112c5c6129eea1a681d2f399713ae3dfcb1a2684cff0515f48789"
+      },
+      "official_tag": "realistic_human",
+      "read_prompt": "Morning, inside the Nautilus submarine, dining room, simple decor, dining table, chairs, nautical chart on the wall, bright lighting Full shot, eye level shot. The three sit around the dining table with puzzled expressions. Conseil frowns slightly, while Ned Land crosses his arms.",
+      "reference": {
+        "path": "55/image/Conseil/00.jpg",
+        "sha256": "aa1ff05382ff6c629a0fbc652cec7ed3a1992c6ebd58d00ca022eecfa2cbc65d"
+      },
+      "source_character_count": 2,
+      "source_prompt": "Early morning, inside the Nautilus submarine, bedroom, quiet atmosphere, bed, desk, map hanging on the wall, soft lighting Medium close up, eye level shot. Conseil stands by the bed, slightly bending forward with a concerned expression. Professor Aronnax sits on the bed, smiling in response.",
+      "source_shot": 2,
+      "story_id": "55",
+      "style_class": "realistic",
+      "target_shot": 7
+    },
+    {
+      "candidate_id": "d590fe2530dcedaa8e171b58f2423d4cb144974117a3fb083c23685432e48df4",
+      "character_name": "Li Xia",
+      "eligible_donor_count": 1,
+      "eligible_donor_ids": [
+        "a381d2c2ebd3cc3d34194f55a479fdd2077a5e6bd8dd455b03950891bd6d89ff"
+      ],
+      "entity_uid": "73::Li Xia",
+      "event_id": "vistory73_li_xia_s5_s14",
+      "gap_bucket": "8-10",
+      "horizon": 9,
+      "official_character_description": "A middle-aged woman with black hair and black eyes, mentally unstable, with a vacant gaze and numb expression.",
+      "official_story": {
+        "path": "73/story.json",
+        "sha256": "cdd232bbf9672f68042760699ad630b2dc76e515254d2e160da9e26feac56fe5"
+      },
+      "official_tag": "realistic_human",
+      "read_prompt": "Same as Shot 13, a city rescue center, tidy room, warm paintings on the walls, sunlight streaming through the window. Close up, eye level shot. Li Xia sits on a chair, her eyes gradually clearing, clutching a photo of her sister Zhang Jiejie, tears welling in her eyes.",
+      "reference": {
+        "path": "73/image/Li Xia/00.jpg",
+        "sha256": "8ea9442e2299c9ec70fb5499c9fb13538d08570f9192b96c56f5fcec99b7f231"
+      },
+      "source_character_count": 1,
+      "source_prompt": "Another interrogation room in the police station, same as Shot 4, white walls, gray floor, a metal table in the center with two chairs, a desk lamp on the table emitting soft light. Close up, eye level shot. Li Xia sits on the chair, her hands cuffed to the table, her eyes vacant, constantly repeating 'He was going to kill me,' her body trembling slightly.",
+      "source_shot": 5,
+      "story_id": "73",
+      "style_class": "realistic",
+      "target_shot": 14
+    },
+    {
+      "candidate_id": "e0ec35aed073852b689978a932b3ef781ba5b05a4dcbfdf39fe8f57f48b96ba6",
+      "character_name": "Cheng Dieyi (Stage Appearance)",
+      "eligible_donor_count": 16,
+      "eligible_donor_ids": [
+        "0679c4005b96fb5b0792f8219f0bbde2fef2ca74d403f732f39b6d9a67f50165",
+        "17abce3714d605bc9c8e23e76b6581f945619af03a00da6f5a55412485f0c501",
+        "1aeb3be9918b92011802883b2618b18d91a31278a27a371df2d60c09783c5306",
+        "2fdd50c6ee3d8b2156fe2f972e73774dcae7687305e7a1c162772ecd8db13d8a",
+        "312dbc8946e853dbdeeb908ff2d6e0a6e7d5ebd5a5ca9ae6a66bb774329f88b8",
+        "32c363c318b3ed6f6592b5c0dd7a9dfced079b4ea6a83cbb5b486f0c188b99b1",
+        "4a61cb8e461fb9024e2353af88a678be345288e7a6e8fe03849c4c74966b298b",
+        "4d13caff08c340cac89c7e2a06457cf6bccfa8562ec4091d2ea16385759edc72",
+        "5ce439091e6d71dd975d2d6b50f2c96a0f50118464a75356fa882c094ecb81bd",
+        "62fd33f315366b83dcda70e80ec024884816b7dcafe00116e17ac38ccd2cf4f1",
+        "64de88982db0291848ccef0a385e57f148a95a4ee30e864344174803ccdf9929",
+        "6f66308e4829122f66fbf6c04cd7f6e5688fdc2ac0da460ccbb5cba67f5b312f",
+        "81d18baa57972fd8f0b92241083fdd132496c5cb67f53fb1e3a14874b5278689",
+        "8e03d3706c43dcb9f316fec1cd43b343b1db9df66dfb90898879f2addf14ae8a",
+        "a2e885c1f3620e4f9832c2b8105b80e7692c7f63da15d1cbedba4c9c86883c89",
+        "fe8ae8be572ccd598cae8df250855da1682af8a4c201ecd35c0fb4ee32b3e5b8"
+      ],
+      "entity_uid": "65::Cheng Dieyi (Stage Appearance)",
+      "event_id": "vistory65_cheng_dieyi_stage_appearance_s1_s8",
+      "gap_bucket": "5-7",
+      "horizon": 7,
+      "official_character_description": "A young Chinese man from ancient times, around 20 years old, fair-skinned, delicate features, and a feminine temperament. Dressed in elaborate Peking Opera costumes with heavy makeup, portraying the role of Yu Ji on stage.",
+      "official_story": {
+        "path": "65/story.json",
+        "sha256": "a95d7b9c2df0281f877b22cdd981715c708a33239a04e5582e97b2d0df06d253"
+      },
+      "official_tag": "realistic_human",
+      "read_prompt": "Nighttime, ancient opera house, center stage with red curtains slowly parting, audience seats filled with people, tense atmosphere, sounds of Peking Opera gongs and drums echoing in the air, soft yellow lighting illuminating the stage. Medium close up, front angle shot. Cheng Dieyi stands at the center of the stage with a pained expression, his gaze fixed on Juxian and Duan Xiaolou in the audience, his hand trembling slightly as he holds Yu Ji's sword.",
+      "reference": {
+        "path": "65/image/Cheng Dieyi (Stage Appearance)/00.jpg",
+        "sha256": "d9b5e85301eacac603e2bbc2de57a8b58186f34012d2ceca62b64f2d68311a19"
+      },
+      "source_character_count": 2,
+      "source_prompt": "Nighttime, ancient opera house, red lanterns hanging from the eaves, center stage with red curtains slowly parting, audience seats filled with people, lively atmosphere, sounds of Peking Opera gongs and drums echoing in the air, soft yellow lighting illuminating the stage. Full shot, eye level shot. Duan Xiaolou and Cheng Dieyi stand at the center of the stage. Duan Xiaolou wears the Conqueror's costume with a commanding expression, while Cheng Dieyi wears Yu Ji's costume with a tender expression. The two are performing a classic scene from 'Farewell My Concubine.'",
+      "source_shot": 1,
+      "story_id": "65",
+      "style_class": "realistic",
+      "target_shot": 8
+    },
+    {
+      "candidate_id": "e708f8a46fe626ddd761fc98cbab006e68fdb717332dc5f4e6e2f37711533b57",
+      "character_name": "Huang Rong",
+      "eligible_donor_count": 7,
+      "eligible_donor_ids": [
+        "4ebec072547f9bf1df1290065e1ff3422a441bbf07543fdbc27bcb331bb45e5a",
+        "60a90cedf567e8e5623b83b15f49c10cf0113fad991d66b082d03490f783ab8d",
+        "7e14ba4b33d2e425eb74088144935bd60f8a79e69fb46a713957a418efbe7352",
+        "b279bc54828c39c541bbefe564a4e96ae17e8d0bc9393b961363980b6b2220c0",
+        "c5c60e88fa93b682a4836905f7cd03e3260d19b9bcb9e46709c077ef298e64b9",
+        "dd2ac55db2cae713d10671f28a155ac0672e4f8f0e7a85c83e29c57842ebaa2d",
+        "ed0b6c2d249783516d73a3b2269ccd1c997e819d25e904bad6e181742788cc27"
+      ],
+      "entity_uid": "04::Huang Rong",
+      "event_id": "vistory04_huang_rong_s3_s12",
+      "gap_bucket": "8-10",
+      "horizon": 9,
+      "official_character_description": "A clever ancient Chinese maiden with a beautiful appearance, dressed in traveler's clothing, her eyes bright and lively.",
+      "official_story": {
+        "path": "04/story.json",
+        "sha256": "1e6e6c520562fdeaf23bdd9d157cf50720f3e5bbbb3f71007c7235d3848f35a4"
+      },
+      "official_tag": "realistic_human",
+      "read_prompt": "Daytime, streets of Zhongdu, bustling with pedestrians, bright sunlight Medium close up, eye level shot. Huang Rong smiles and bids Guo Jing farewell before turning and disappearing into the crowd. Guo Jing looks reluctant, watching the direction she vanished.",
+      "reference": {
+        "path": "04/image/Huang Rong/00.jpg",
+        "sha256": "cdbe4882d21d5348a34b4b12b458645054214830741985cb8d7d11755595620c"
+      },
+      "source_character_count": 2,
+      "source_prompt": "Daytime, streets of Zhongdu, bustling and noisy, shops lining both sides of the street, crowds of pedestrians, bright sunlight with dust rising from the street Full shot, high-angle shot. Guo Jing and Huang Rong stand in the middle of the street, looking around in amazement. The street is packed with people, and vendors' cries fill the air.",
+      "source_shot": 3,
+      "story_id": "04",
+      "style_class": "realistic",
+      "target_shot": 12
+    },
+    {
+      "candidate_id": "eac1a82abe6c19271ed2d5aac6410a33d35e024c67eeabc67d6cb8eb759fedee",
+      "character_name": "Shi Jin",
+      "eligible_donor_count": 16,
+      "eligible_donor_ids": [
+        "0679c4005b96fb5b0792f8219f0bbde2fef2ca74d403f732f39b6d9a67f50165",
+        "17abce3714d605bc9c8e23e76b6581f945619af03a00da6f5a55412485f0c501",
+        "1aeb3be9918b92011802883b2618b18d91a31278a27a371df2d60c09783c5306",
+        "2fdd50c6ee3d8b2156fe2f972e73774dcae7687305e7a1c162772ecd8db13d8a",
+        "312dbc8946e853dbdeeb908ff2d6e0a6e7d5ebd5a5ca9ae6a66bb774329f88b8",
+        "32c363c318b3ed6f6592b5c0dd7a9dfced079b4ea6a83cbb5b486f0c188b99b1",
+        "4a61cb8e461fb9024e2353af88a678be345288e7a6e8fe03849c4c74966b298b",
+        "5ce439091e6d71dd975d2d6b50f2c96a0f50118464a75356fa882c094ecb81bd",
+        "62fd33f315366b83dcda70e80ec024884816b7dcafe00116e17ac38ccd2cf4f1",
+        "64de88982db0291848ccef0a385e57f148a95a4ee30e864344174803ccdf9929",
+        "6f66308e4829122f66fbf6c04cd7f6e5688fdc2ac0da460ccbb5cba67f5b312f",
+        "81d18baa57972fd8f0b92241083fdd132496c5cb67f53fb1e3a14874b5278689",
+        "8e03d3706c43dcb9f316fec1cd43b343b1db9df66dfb90898879f2addf14ae8a",
+        "a2e885c1f3620e4f9832c2b8105b80e7692c7f63da15d1cbedba4c9c86883c89",
+        "dcc8a5d1eea6eb12e8481ec2ca1968cc05606077f48509404a70f6babfa048ee",
+        "fa5df75840f9d778d657e262f5449fd541d01d166b823fe7ca2fcf2a1c9c09a8"
+      ],
+      "entity_uid": "20::Shi Jin",
+      "event_id": "vistory20_shi_jin_s14_s19",
+      "gap_bucket": "5-7",
+      "horizon": 5,
+      "official_character_description": "A young Chinese man with black hair and black eyes, around his 20s, with dark skin and a medium build. Wearing the uniform of the People's Liberation Army and a military cap, his expression is serious yet gentle.",
+      "official_story": {
+        "path": "20/story.json",
+        "sha256": "73da592da81fdedd9044013a2ecb62b5ed7902da5337a2a44fe70e27efb2414a"
+      },
+      "official_tag": "realistic_human",
+      "read_prompt": "Daytime, military camp office, tense atmosphere, Shi Jin and Xu Sanduo in the office, bright lighting Medium shot, eye level shot. Xu Sanduo stands before Shi Jin, tears streaming down his face, while Shi Jin sits behind the desk, his expression gentle, listening patiently",
+      "reference": {
+        "path": "20/image/Shi Jin/00.jpg",
+        "sha256": "eb61e378b93fb81abeccdba10fa3c42cef17ca35121905801b9638ae7400ebdf"
+      },
+      "source_character_count": 2,
+      "source_prompt": "Early morning, military camp garage, resigned atmosphere, armored vehicle and Shi Jin and Wu Liuyi in the garage, dim lighting Medium shot, eye level shot. Shi Jin and Wu Liuyi stand side by side beside the armored vehicle, Wu Liuyi looking serious, Shi Jin with a wry smile, speaking quietly",
+      "source_shot": 14,
+      "story_id": "20",
+      "style_class": "realistic",
+      "target_shot": 19
+    },
+    {
+      "candidate_id": "f3f15d0951bb4e8a092de7d388efb4ab09a0f215211ed0902354c15de9e8cbd9",
+      "character_name": "Colonel Cromarty",
+      "eligible_donor_count": 16,
+      "eligible_donor_ids": [
+        "0679c4005b96fb5b0792f8219f0bbde2fef2ca74d403f732f39b6d9a67f50165",
+        "17abce3714d605bc9c8e23e76b6581f945619af03a00da6f5a55412485f0c501",
+        "1aeb3be9918b92011802883b2618b18d91a31278a27a371df2d60c09783c5306",
+        "2fdd50c6ee3d8b2156fe2f972e73774dcae7687305e7a1c162772ecd8db13d8a",
+        "32c363c318b3ed6f6592b5c0dd7a9dfced079b4ea6a83cbb5b486f0c188b99b1",
+        "4a61cb8e461fb9024e2353af88a678be345288e7a6e8fe03849c4c74966b298b",
+        "4d13caff08c340cac89c7e2a06457cf6bccfa8562ec4091d2ea16385759edc72",
+        "5ce439091e6d71dd975d2d6b50f2c96a0f50118464a75356fa882c094ecb81bd",
+        "62fd33f315366b83dcda70e80ec024884816b7dcafe00116e17ac38ccd2cf4f1",
+        "64de88982db0291848ccef0a385e57f148a95a4ee30e864344174803ccdf9929",
+        "81d18baa57972fd8f0b92241083fdd132496c5cb67f53fb1e3a14874b5278689",
+        "8e03d3706c43dcb9f316fec1cd43b343b1db9df66dfb90898879f2addf14ae8a",
+        "a2e885c1f3620e4f9832c2b8105b80e7692c7f63da15d1cbedba4c9c86883c89",
+        "dcc8a5d1eea6eb12e8481ec2ca1968cc05606077f48509404a70f6babfa048ee",
+        "fa5df75840f9d778d657e262f5449fd541d01d166b823fe7ca2fcf2a1c9c09a8",
+        "fe8ae8be572ccd598cae8df250855da1682af8a4c201ecd35c0fb4ee32b3e5b8"
+      ],
+      "entity_uid": "36::Colonel Cromarty",
+      "event_id": "vistory36_colonel_cromarty_s2_s8",
+      "gap_bucket": "5-7",
+      "horizon": 6,
+      "official_character_description": "A British brigadier with short curly brown hair and green eyes, approximately in his 40s, with a serious appearance. Wearing a black coat and a blue long scarf.",
+      "official_story": {
+        "path": "36/story.json",
+        "sha256": "29db438ccbb9491aa91548458e26bb024e06dcdfb6bf31be36d9b8602e09a336"
+      },
+      "official_tag": "realistic_human",
+      "read_prompt": "Morning, Kelby train station, station shabby and simple, surrounded by low buildings and desolate wilderness, scattered debris and garbage on the ground, natural light bright, desolate atmosphere Full shot, high-angle shot. Mr. Fogg and Colonel Cromarty stand in front of the train station, expressions calm, looking at the surroundings",
+      "reference": {
+        "path": "36/image/Colonel Cromarty/00.jpg",
+        "sha256": "6f5807dda74a8591af5440754c10f22433ae9b74490d7a064b73525787963680"
+      },
+      "source_character_count": 2,
+      "source_prompt": "Daytime, inside the train compartment, slight shaking, outside the window the Indian wilderness scenery flashes by, seats inside the compartment neat, a cup of tea on the small table, curtains fluttering slightly in the wind, natural light streaming through the windows Medium close up, eye level shot. Mr. Fogg slightly tilts his head, expression calm, Colonel Cromarty looks at Mr. Fogg, expression serious",
+      "source_shot": 2,
+      "story_id": "36",
+      "style_class": "realistic",
+      "target_shot": 8
+    },
+    {
+      "candidate_id": "f8f6a36a12661f9f149c1b6a41c9cdfdb57a765faed366293db28f4059550d1c",
+      "character_name": "Daenerys",
+      "eligible_donor_count": 16,
+      "eligible_donor_ids": [
+        "0679c4005b96fb5b0792f8219f0bbde2fef2ca74d403f732f39b6d9a67f50165",
+        "17abce3714d605bc9c8e23e76b6581f945619af03a00da6f5a55412485f0c501",
+        "1aeb3be9918b92011802883b2618b18d91a31278a27a371df2d60c09783c5306",
+        "2fdd50c6ee3d8b2156fe2f972e73774dcae7687305e7a1c162772ecd8db13d8a",
+        "312dbc8946e853dbdeeb908ff2d6e0a6e7d5ebd5a5ca9ae6a66bb774329f88b8",
+        "4a61cb8e461fb9024e2353af88a678be345288e7a6e8fe03849c4c74966b298b",
+        "4d13caff08c340cac89c7e2a06457cf6bccfa8562ec4091d2ea16385759edc72",
+        "62fd33f315366b83dcda70e80ec024884816b7dcafe00116e17ac38ccd2cf4f1",
+        "64de88982db0291848ccef0a385e57f148a95a4ee30e864344174803ccdf9929",
+        "6f66308e4829122f66fbf6c04cd7f6e5688fdc2ac0da460ccbb5cba67f5b312f",
+        "81d18baa57972fd8f0b92241083fdd132496c5cb67f53fb1e3a14874b5278689",
+        "8e03d3706c43dcb9f316fec1cd43b343b1db9df66dfb90898879f2addf14ae8a",
+        "a2e885c1f3620e4f9832c2b8105b80e7692c7f63da15d1cbedba4c9c86883c89",
+        "dcc8a5d1eea6eb12e8481ec2ca1968cc05606077f48509404a70f6babfa048ee",
+        "fa5df75840f9d778d657e262f5449fd541d01d166b823fe7ca2fcf2a1c9c09a8",
+        "fe8ae8be572ccd598cae8df250855da1682af8a4c201ecd35c0fb4ee32b3e5b8"
+      ],
+      "entity_uid": "52::Daenerys",
+      "event_id": "vistory52_daenerys_s12_s17",
+      "gap_bucket": "5-7",
+      "horizon": 5,
+      "official_character_description": "A young and beautiful pregnant woman with white hair, black eyes, and fair skin. She wears Dothraki-style clothing, with colorful patterns painted on her robe.",
+      "official_story": {
+        "path": "52/story.json",
+        "sha256": "b70ffae8e3323be0b143e36a6fe3f98c8a095bc5918fd54cd74d1de8869612cd"
+      },
+      "official_tag": "realistic_human",
+      "read_prompt": "Nighttime, inside the palace, sorrowful atmosphere, ornately decorated palace, banquet tables, bloodstains on the ground, torchlight Close up, front shot. Daenerys gazes at Viserys' lifeless body, her expression sorrowful and despairing, tears welling in her eyes.",
+      "reference": {
+        "path": "52/image/Daenerys/00.jpg",
+        "sha256": "27acab0a00844a404d7f5dc54022a0906c9869c7129161ee138ee79ca70974e2"
+      },
+      "source_character_count": 2,
+      "source_prompt": "Nighttime, inside the palace, tense atmosphere, ornately decorated palace, banquet tables, torchlight Medium close up, front shot. Daenerys faces Viserys, her expression fearful as she tries to speak reason, but Viserys ignores her, waving his sword wildly.",
+      "source_shot": 12,
+      "story_id": "52",
+      "style_class": "realistic",
+      "target_shot": 17
+    },
+    {
+      "candidate_id": "fff7e6d59513ee59b8a25cdc981092cdd37786a939db23136e715955d87b7459",
+      "character_name": "Colonel Cromarty",
+      "eligible_donor_count": 2,
+      "eligible_donor_ids": [
+        "5aa9a8156e6c42280d8c4c680a96a67400bba6be539afb9b39cab749d545ee9d",
+        "7953eb73e18a0e9006dc9d19e0c1a7c898ee68c67ff470789609e7a2605a4bcd"
+      ],
+      "entity_uid": "36::Colonel Cromarty",
+      "event_id": "vistory36_colonel_cromarty_s12_s19",
+      "gap_bucket": "5-7",
+      "horizon": 7,
+      "official_character_description": "A British brigadier with short curly brown hair and green eyes, approximately in his 40s, with a serious appearance. Wearing a black coat and a blue long scarf.",
+      "official_story": {
+        "path": "36/story.json",
+        "sha256": "29db438ccbb9491aa91548458e26bb024e06dcdfb6bf31be36d9b8602e09a336"
+      },
+      "official_tag": "realistic_human",
+      "read_prompt": "Morning, Kelby train station, station shabby and simple, surrounded by low buildings and desolate wilderness, scattered debris and garbage on the ground, natural light bright, desolate atmosphere Full shot, high-angle shot. Mr. Fogg and Colonel Cromarty stand in front of the train station, expressions calm, looking at the surroundings",
+      "reference": {
+        "path": "36/image/Colonel Cromarty/00.jpg",
+        "sha256": "6f5807dda74a8591af5440754c10f22433ae9b74490d7a064b73525787963680"
+      },
+      "source_character_count": 4,
+      "source_prompt": "Morning, palm forest outside Kelby, forest dense and deep, surrounded by tall trees and thick vegetation, scattered leaves and branches on the ground, natural light filtering through the leaves Wide shot, eye level shot. Mr. Fogg, Colonel Cromarty, Passepartout, and the Parsi guide ride on the elephant, the elephant slowly advancing through the palm forest",
+      "source_shot": 12,
+      "story_id": "36",
+      "style_class": "realistic",
+      "target_shot": 19
+    }
+  ],
+  "dataset_commit": "92f845531b67e97a67ae04b256ec5d8c020e8341",
+  "excluded_entity_uids": [
+    "15::Gu Zhenzhen",
+    "16::Chen Sihan's Father",
+    "79::Song Yuchen"
+  ],
+  "original_event_id": "vistory15_gu_zhenzhen_s8_s20",
+  "schema_version": 1,
+  "selection_sha256": "600d5b4f9a4ce654763b17a7468fcd76eafb225e993afd84082ae7f9a6e9cb25"
+}

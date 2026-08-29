@@ -10,11 +10,11 @@ import pytest
 
 from tools.prepare_slotmem_vistory_reappearance import main
 from utest.prefix_contract import sha256_file
-from utest.vistory_reappearance import convert_event, prepare_dataset
-
-
-FROZEN_SELECTION = (
-    Path(__file__).parents[1] / "events" / "vistorybench_reappearance_v1.json"
+from utest.vistory_reappearance import (
+    convert_event,
+    frozen_target_event_ids,
+    load_frozen_selection,
+    prepare_dataset,
 )
 
 
@@ -236,56 +236,80 @@ def test_prepare_writes_hashed_portable_event_bundle(tmp_path) -> None:
 
 
 def test_frozen_selection_keeps_approved_events_shots_and_hashes() -> None:
-    selection = json.loads(FROZEN_SELECTION.read_text(encoding="utf-8"))
+    selection = load_frozen_selection()
+    events = selection["events"]
 
     assert selection["dataset_commit"] == "92f845531b67e97a67ae04b256ec5d8c020e8341"
     assert selection["evaluator_commit"] == "b44ec9108668cc2bcc8c5280886b235e9fb8bea9"
     assert selection["seeds"] == [0, 1, 2]
-    assert [
-        (
-            event["story_id"],
-            event["event_id"],
-            event["character_name"],
-            event["source_shot"],
-            event["target_shot"],
-            event["story_sha256"],
-        )
-        for event in selection["events"]
-    ] == [
-        (
-            "79",
-            "vistory79_song_yuchen_s2_s8",
-            "Song Yuchen",
-            2,
-            8,
-            "4298F6EFAA5F2D4A9D69C86E169E0167CE324334F656033A6D692CAFD9484109",
-        ),
-        (
-            "15",
-            "vistory15_gu_zhenzhen_s8_s20",
-            "Gu Zhenzhen",
-            8,
-            20,
-            "AA0412EC1A09C1AB17E3B9426801F7326537BFDB1437C238CEC36AAE1BB4D76D",
-        ),
-        (
-            "16",
-            "vistory16_chen_father_s1_s10",
-            "Chen Sihan's Father",
-            1,
-            10,
-            "6B1AD31634E5DA0108ACD51B16DA2E7F29B202858FCC5D0E556F4BEDB22D005E",
-        ),
-    ]
+    assert len(events) == 3
+    assert events[0] == {
+        "story_id": "79",
+        "event_id": "vistory79_song_yuchen_s2_s8",
+        "character_name": "Song Yuchen",
+        "source_shot": 2,
+        "target_shot": 8,
+        "story_sha256": "4298F6EFAA5F2D4A9D69C86E169E0167CE324334F656033A6D692CAFD9484109",
+    }
+    assert events[2] == {
+        "story_id": "16",
+        "event_id": "vistory16_chen_father_s1_s10",
+        "character_name": "Chen Sihan's Father",
+        "source_shot": 1,
+        "target_shot": 10,
+        "story_sha256": "6B1AD31634E5DA0108ACD51B16DA2E7F29B202858FCC5D0E556F4BEDB22D005E",
+    }
+    assert events[1]["event_id"] == selection["replacement_selection"]["selected_event_id"]
+    assert events[1]["character_name"] != "Gu Zhenzhen"
+    assert "vistory15_gu_zhenzhen_s8_s20" not in frozen_target_event_ids()
 
 
 def test_frozen_selection_story_hashes_are_64_digit_uppercase_hex() -> None:
-    selection = json.loads(FROZEN_SELECTION.read_text(encoding="utf-8"))
+    selection = load_frozen_selection()
 
     assert all(
         re.fullmatch(r"[0-9A-F]{64}", event["story_sha256"])
         for event in selection["events"]
     )
+
+
+def _write_mutated_frozen_selection(tmp_path: Path, selection: dict) -> Path:
+    path = tmp_path / "selection.json"
+    path.write_text(json.dumps(selection), encoding="utf-8")
+    return path
+
+
+def test_frozen_selection_rejects_a_changed_retained_position(tmp_path: Path) -> None:
+    selection = load_frozen_selection()
+    selection["events"][0]["target_shot"] = 9
+
+    with pytest.raises(ValueError, match="retained frozen event changed"):
+        load_frozen_selection(_write_mutated_frozen_selection(tmp_path, selection))
+
+
+def test_frozen_selection_rejects_an_original_replacement_identity(tmp_path: Path) -> None:
+    selection = load_frozen_selection()
+    selection["events"][1].update(
+        story_id="15",
+        event_id="vistory15_gu_zhenzhen_s8_s20",
+        character_name="Gu Zhenzhen",
+        source_shot=8,
+        target_shot=20,
+    )
+    selection["replacement_selection"]["selected_event_id"] = selection["events"][1]["event_id"]
+    selection["replacement_selection"]["horizon"] = 12
+    selection["replacement_selection"]["horizon_distance"] = 0
+
+    with pytest.raises(ValueError, match="exclude all three original target identities"):
+        load_frozen_selection(_write_mutated_frozen_selection(tmp_path, selection))
+
+
+def test_frozen_selection_rejects_stale_replacement_binding(tmp_path: Path) -> None:
+    selection = load_frozen_selection()
+    selection["replacement_selection"]["selected_event_id"] = "stale"
+
+    with pytest.raises(ValueError, match="selected event mismatch"):
+        load_frozen_selection(_write_mutated_frozen_selection(tmp_path, selection))
 
 
 def test_cli_prepares_dataset_from_explicit_selection(tmp_path, capsys) -> None:

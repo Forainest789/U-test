@@ -12,6 +12,7 @@ import pytest
 import utest.vistory_donors as donor_module
 from utest.prefix_contract import sha256_file
 from utest.vistory_donors import (
+    TARGET_EVENT_IDS,
     build_donor_candidate_survey,
     donor_rejection_reasons,
     enumerate_official_recurrences,
@@ -19,6 +20,11 @@ from utest.vistory_donors import (
     horizon_bucket,
     validate_frozen_vistory_tree,
 )
+from utest.vistory_reappearance import frozen_target_event_ids, load_frozen_selection
+
+
+def test_target_event_ids_are_derived_from_the_frozen_selection() -> None:
+    assert TARGET_EVENT_IDS == frozen_target_event_ids()
 
 
 def _story(characters: dict[str, str], appearances: dict[int, list[str]]) -> dict:
@@ -260,10 +266,8 @@ def _write_target_inputs_many(
 def _three_target_fixture(tmp_path: Path) -> tuple[Path, Path]:
     data_root = tmp_path / "official"
     target_specs: list[dict[str, object]] = []
-    target_ids = (
-        "vistory79_song_yuchen_s2_s8",
-        "vistory15_gu_zhenzhen_s8_s20",
-        "vistory16_chen_father_s1_s10",
+    target_ids = tuple(
+        event["event_id"] for event in load_frozen_selection()["events"]
     )
     for offset, (horizon, event_id) in enumerate(zip((6, 9, 12), target_ids)):
         target_story_id = str(10 + offset)
@@ -800,11 +804,7 @@ def test_freeze_materializes_exactly_three_seed_zero_donor_events(
 
     assert selection["donor_seed"] == 0
     assert len(selection["events"]) == 3
-    assert {row["target_event_id"] for row in selection["events"]} == {
-        "vistory79_song_yuchen_s2_s8",
-        "vistory15_gu_zhenzhen_s8_s20",
-        "vistory16_chen_father_s1_s10",
-    }
+    assert {row["target_event_id"] for row in selection["events"]} == TARGET_EVENT_IDS
     for row in selection["events"]:
         audit = next(
             item

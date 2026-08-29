@@ -1,0 +1,196 @@
+{
+  "candidates": [
+    {
+      "candidate_id": "023745095d7093a09cae2a4f576df4008eaed049e153be804dc5a9961ec9b7e9",
+      "female_character": false
+    },
+    {
+      "candidate_id": "0b87e4c22e651a888d07ff3317272e6826b1e1fc1788c8f25e6e8e86f11fbae0",
+      "female_character": false
+    },
+    {
+      "candidate_id": "0c1e307f8a63a13637beaefb92c15164e24030367c64622c85669273c839fceb",
+      "female_character": false
+    },
+    {
+      "candidate_id": "0cf237e6a2040c3190a01122f9f349618937e656fbb0a1b9fdce5aff02c7662d",
+      "female_character": false
+    },
+    {
+      "candidate_id": "14d813acf08df77903cdd563edd1e693e2fe0b7eb3fada492cb7f6422496e649",
+      "female_character": true
+    },
+    {
+      "candidate_id": "15d5e7b67b437a282169e912e7b9b7b9890eee46e91f5114134d93c979741752",
+      "female_character": false
+    },
+    {
+      "candidate_id": "1749440775a40166903a14217bc04a557579525ba15bd9beb8aad63e35b118eb",
+      "female_character": false
+    },
+    {
+      "candidate_id": "18cef787e5fe3f408f32fcf318d153e47a349c7f74087b65ac00bc937f1f3d78",
+      "female_character": true
+    },
+    {
+      "candidate_id": "1fcf6959cc65a989c934a28cb649b39bd14f3c62e7ab5e0908209bd1bce3e2c8",
+      "female_character": false
+    },
+    {
+      "candidate_id": "26fd026374ddaa68cb9ded1c1875b049b358d71c5bd2ea8f18857e1a982231b5",
+      "female_character": false
+    },
+    {
+      "candidate_id": "29530e5826b415ff532fb3e31a81825a635db359f17836eb58eb4bfc1d07603b",
+      "female_character": false
+    },
+    {
+      "candidate_id": "2f1f98a174cc57885244e7a180ad7511521f9718fda1cf26e13af9e12866252f",
+      "female_character": true
+    },
+    {
+      "candidate_id": "31bb09ae62da2325940583609d167b78db3e2f651bfa7f807a54d77a49d5a8fb",
+      "female_character": false
+    },
+    {
+      "candidate_id": "350cd0fde2f28abb9ecee07286a74ea861b275d0c525e42c34a184b711eff20a",
+      "female_character": false
+    },
+    {
+      "candidate_id": "37756f6956b09018cbcb52063769d5e6820e4f31be23b4d13f968152ec431ae8",
+      "female_character": false
+    },
+    {
+      "candidate_id": "3819527d0fce1dac6cff793ec7c47e53251db639255c298e9d261da71767e883",
+      "female_character": false
+    },
+    {
+      "candidate_id": "3c6da5912ee2cf73e8b8bd0906ac8c1ddd2bc0c0e7e4f7d26162857d36e20c10",
+      "female_character": false
+    },
+    {
+      "candidate_id": "449941704904af0df86589827311a93344d91930f96e7c6847c555cca7cec1ab",
+      "female_character": false
+    },
+    {
+      "candidate_id": "5870c74e0cbb5f42c3cbf750cfe9d9ed8c7d3c657e13d0d003b3e462fa617521",
+      "female_character": false
+    },
+    {
+      "candidate_id": "593d2b9d58e554d9fd662b7d70c7b5117fe97e3ed53bac93a931f3919413b122",
+      "female_character": false
+    },
+    {
+      "candidate_id": "5971cbc7247d1cedaacd10038398aaaf97f7ffd2d5c64a30e922d685d89b20d4",
+      "female_character": true
+    },
+    {
+      "candidate_id": "59cb42f2865de9ebb59f55dca37468d70f93cb5dc0a392915588f2f5e60f1bcb",
+      "female_character": false
+    },
+    {
+      "candidate_id": "5d84b93e349a250ac272b002675ab0a60579c6cfa460ff84ea83d071b4f6da87",
+      "female_character": false
+    },
+    {
+      "candidate_id": "5e907109eb65498ff2d2b433b4eb93906db5d701c1fc9882c0c2cf5b2bb52b2e",
+      "female_character": false
+    },
+    {
+      "candidate_id": "6554cd135be1fa969ac2bd48688690d99a97941ce48d0bdd853312858b0e0463",
+      "female_character": false
+    },
+    {
+      "candidate_id": "6b0eabf2eadf7cbfddbb1cefd7b09d2cd619e0b0f6f1a57ad3e0cfd483fae988",
+      "female_character": false
+    },
+    {
+      "candidate_id": "70a7e361ff78f07ab0f75dac47e1c08243121e171a6d2b71ff84bf0c89d49890",
+      "female_character": false
+    },
+    {
+      "candidate_id": "75eb334a9c1c0d2043f9e43ebbacaa4a46ff11fffc68f3d2124028ff10890b55",
+      "female_character": false
+    },
+    {
+      "candidate_id": "78290b08cad0e3460e9af800344bdc3556ad06d2e305cde8e7abeab658742f8c",
+      "female_character": false
+    },
+    {
+      "candidate_id": "8859f2cf52fd31dec51320d47bfa96f229cd29fcb801ede9969a2d8cd56a9a59",
+      "female_character": false
+    },
+    {
+      "candidate_id": "88dded14998a985999a6cd3e987ae9f95a48793b5aa9eb0208d157a51dc7c947",
+      "female_character": false
+    },
+    {
+      "candidate_id": "96a7cf4dc141cd4be3e5a861bd4ca3b32b133079d9938503b66077f27b5533aa",
+      "female_character": false
+    },
+    {
+      "candidate_id": "9ceb45993124676994cc075f575592a685e02cdd7b7f9c45e3b24bca2465c814",
+      "female_character": false
+    },
+    {
+      "candidate_id": "9db125c029bc855cc74c464e2dafc92a4d77adb0ea4d4720b4f0d3cc9d16684a",
+      "female_character": false
+    },
+    {
+      "candidate_id": "9f2dcc40b262d1a89466895c6909b9cba15c2f0bb2fe577dbab005aedc1e3e4f",
+      "female_character": false
+    },
+    {
+      "candidate_id": "a6b0aac7fbcd4115735300ea1a6c5f8d050b6950698234e65c0228c1f8f4834a",
+      "female_character": false
+    },
+    {
+      "candidate_id": "b661d03286288fce151753082b828d2723eecebc080c0faac805ac58b573c3e5",
+      "female_character": false
+    },
+    {
+      "candidate_id": "b7dbb4c30fa6928f3a8b74ded5ba778ad962051c961366d3c8a32beebda24e18",
+      "female_character": false
+    },
+    {
+      "candidate_id": "bd8319f1d274a2b5b6f62c5ff00b50d3adc2fb140b949f3b1bb40ece6669ab59",
+      "female_character": false
+    },
+    {
+      "candidate_id": "d4f0a50c60545832c1177c46beb7af80ca37bf1ca9386511457f01772ff077b9",
+      "female_character": false
+    },
+    {
+      "candidate_id": "d590fe2530dcedaa8e171b58f2423d4cb144974117a3fb083c23685432e48df4",
+      "female_character": true
+    },
+    {
+      "candidate_id": "e0ec35aed073852b689978a932b3ef781ba5b05a4dcbfdf39fe8f57f48b96ba6",
+      "female_character": false
+    },
+    {
+      "candidate_id": "e708f8a46fe626ddd761fc98cbab006e68fdb717332dc5f4e6e2f37711533b57",
+      "female_character": true
+    },
+    {
+      "candidate_id": "eac1a82abe6c19271ed2d5aac6410a33d35e024c67eeabc67d6cb8eb759fedee",
+      "female_character": false
+    },
+    {
+      "candidate_id": "f3f15d0951bb4e8a092de7d388efb4ab09a0f215211ed0902354c15de9e8cbd9",
+      "female_character": false
+    },
+    {
+      "candidate_id": "f8f6a36a12661f9f149c1b6a41c9cdfdb57a765faed366293db28f4059550d1c",
+      "female_character": false
+    },
+    {
+      "candidate_id": "fff7e6d59513ee59b8a25cdc981092cdd37786a939db23136e715955d87b7459",
+      "female_character": false
+    }
+  ],
+  "dataset_commit": "92f845531b67e97a67ae04b256ec5d8c020e8341",
+  "reviewer": "wangshixiao",
+  "schema_version": 1,
+  "survey_sha256": "af44edabe4d70845869ca49fefb18a1c9199c37dd500cf276c37a9cc3c166562"
+}

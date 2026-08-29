@@ -12,12 +12,80 @@ from utest.prefix_contract import sha256_file
 from utest.vistory_target_selection import (
     build_replacement_target_survey,
     freeze_replacement_selection,
+    validate_frozen_replacement_provenance,
     write_replacement_review_template,
 )
+from utest.vistory_reappearance import load_frozen_selection
 
 
 DATASET_COMMIT = "92f845531b67e97a67ae04b256ec5d8c020e8341"
 EVALUATOR_COMMIT = "b44ec9108668cc2bcc8c5280886b235e9fb8bea9"
+EVENTS_ROOT = Path(__file__).parents[1] / "events"
+
+
+def test_checked_in_replacement_provenance_is_exactly_bound() -> None:
+    selection = load_frozen_selection()
+    survey_path = EVENTS_ROOT / "vistorybench_replacement_target_survey_v1.json"
+    review_path = EVENTS_ROOT / "vistorybench_replacement_target_review_v1.json"
+    survey = json.loads(survey_path.read_text(encoding="utf-8"))
+    review = json.loads(review_path.read_text(encoding="utf-8"))
+
+    validate_frozen_replacement_provenance(selection, survey, review)
+
+    assert sha256_file(survey_path) == "af44edabe4d70845869ca49fefb18a1c9199c37dd500cf276c37a9cc3c166562"
+    assert sha256_file(review_path) == "32ded0398440d4b582ecce4c126a6bea8b838a3376d76ddeaaf0ea9bbaecba65"
+    assert len(survey["candidates"]) == len(review["candidates"]) == 47
+    dispositions = {
+        row["candidate_id"]: row["female_character"] for row in review["candidates"]
+    }
+    confirmed = [
+        row for row in survey["candidates"] if dispositions[row["candidate_id"]]
+    ]
+    assert len(confirmed) == 6
+    selected = min(
+        confirmed,
+        key=lambda row: (
+            -row["eligible_donor_count"],
+            abs(row["horizon"] - 12),
+            row["event_id"],
+        ),
+    )
+    assert selected["event_id"] == "vistory42_bella_s15_s21"
+    assert selected["candidate_id"] == selection["replacement_selection"]["selected_candidate_id"]
+
+
+def _checked_in_replacement_artifacts() -> tuple[dict, dict, dict]:
+    return (
+        load_frozen_selection(),
+        json.loads(
+            (EVENTS_ROOT / "vistorybench_replacement_target_survey_v1.json").read_text(
+                encoding="utf-8"
+            )
+        ),
+        json.loads(
+            (EVENTS_ROOT / "vistorybench_replacement_target_review_v1.json").read_text(
+                encoding="utf-8"
+            )
+        ),
+    )
+
+
+def test_frozen_provenance_rejects_a_changed_human_disposition() -> None:
+    selection, survey, review = _checked_in_replacement_artifacts()
+    review["candidates"][0]["female_character"] = not review["candidates"][0][
+        "female_character"
+    ]
+
+    with pytest.raises(ValueError, match="review SHA-256 mismatch"):
+        validate_frozen_replacement_provenance(selection, survey, review)
+
+
+def test_frozen_provenance_rejects_a_changed_selected_event() -> None:
+    selection, survey, review = _checked_in_replacement_artifacts()
+    selection["events"][1]["event_id"] = "forged"
+
+    with pytest.raises(ValueError, match="does not match reviewed winner"):
+        validate_frozen_replacement_provenance(selection, survey, review)
 
 
 def _story(characters: dict[str, str], appearances: dict[int, list[str]]) -> dict:

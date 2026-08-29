@@ -16,14 +16,10 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from .prefix_contract import sha256_file, write_bytes_no_clobber, write_json_no_clobber
-from .vistory_reappearance import convert_event
+from .vistory_reappearance import convert_event, frozen_target_event_ids
 
 
-TARGET_EVENT_IDS = {
-    "vistory79_song_yuchen_s2_s8",
-    "vistory15_gu_zhenzhen_s8_s20",
-    "vistory16_chen_father_s1_s10",
-}
+TARGET_EVENT_IDS = frozen_target_event_ids()
 VISTORY_DATASET_COMMIT = "92f845531b67e97a67ae04b256ec5d8c020e8341"
 VISTORY_STORY_IDS = frozenset(f"{story_id:02d}" for story_id in range(1, 81))
 REVIEW_FIELDS = {

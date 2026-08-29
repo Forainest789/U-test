@@ -142,7 +142,7 @@ def _prepared_inputs(tmp_path: Path) -> Path:
     records = []
     specs = (
         ("vistory79_song_yuchen_s2_s8", "79", "Song Yuchen", 2, 8, 6),
-        ("vistory15_gu_zhenzhen_s8_s20", "15", "Gu Zhenzhen", 8, 20, 12),
+        ("vistory42_bella_s15_s21", "42", "Bella", 15, 21, 6),
         ("vistory16_chen_father_s1_s10", "16", "Chen Sihan's Father", 1, 10, 9),
     )
     for event_id, story_id, character, source_shot, target_shot, target_idx in specs:

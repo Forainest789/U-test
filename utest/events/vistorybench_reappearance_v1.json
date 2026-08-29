@@ -1,33 +1,49 @@
 {
-  "schema_version": 1,
-  "task_id": "vistorybench_subject_reappearance_v1",
   "dataset_commit": "92f845531b67e97a67ae04b256ec5d8c020e8341",
   "evaluator_commit": "b44ec9108668cc2bcc8c5280886b235e9fb8bea9",
-  "seeds": [0, 1, 2],
   "events": [
     {
-      "story_id": "79",
-      "event_id": "vistory79_song_yuchen_s2_s8",
       "character_name": "Song Yuchen",
+      "event_id": "vistory79_song_yuchen_s2_s8",
       "source_shot": 2,
-      "target_shot": 8,
-      "story_sha256": "4298F6EFAA5F2D4A9D69C86E169E0167CE324334F656033A6D692CAFD9484109"
+      "story_id": "79",
+      "story_sha256": "4298F6EFAA5F2D4A9D69C86E169E0167CE324334F656033A6D692CAFD9484109",
+      "target_shot": 8
     },
     {
-      "story_id": "15",
-      "event_id": "vistory15_gu_zhenzhen_s8_s20",
-      "character_name": "Gu Zhenzhen",
-      "source_shot": 8,
-      "target_shot": 20,
-      "story_sha256": "AA0412EC1A09C1AB17E3B9426801F7326537BFDB1437C238CEC36AAE1BB4D76D"
+      "character_name": "Bella",
+      "event_id": "vistory42_bella_s15_s21",
+      "source_shot": 15,
+      "story_id": "42",
+      "story_sha256": "2123879E41357E0B734342223F024379131A09BF0D8D9E1555896B172CC07E78",
+      "target_shot": 21
     },
     {
-      "story_id": "16",
-      "event_id": "vistory16_chen_father_s1_s10",
       "character_name": "Chen Sihan's Father",
+      "event_id": "vistory16_chen_father_s1_s10",
       "source_shot": 1,
-      "target_shot": 10,
-      "story_sha256": "6B1AD31634E5DA0108ACD51B16DA2E7F29B202858FCC5D0E556F4BEDB22D005E"
+      "story_id": "16",
+      "story_sha256": "6B1AD31634E5DA0108ACD51B16DA2E7F29B202858FCC5D0E556F4BEDB22D005E",
+      "target_shot": 10
     }
-  ]
+  ],
+  "replacement_selection": {
+    "dataset_commit": "92f845531b67e97a67ae04b256ec5d8c020e8341",
+    "eligible_donor_count": 17,
+    "horizon": 6,
+    "horizon_distance": 6,
+    "original_event_id": "vistory15_gu_zhenzhen_s8_s20",
+    "review_sha256": "32ded0398440d4b582ecce4c126a6bea8b838a3376d76ddeaaf0ea9bbaecba65",
+    "reviewer": "wangshixiao",
+    "selected_candidate_id": "5971cbc7247d1cedaacd10038398aaaf97f7ffd2d5c64a30e922d685d89b20d4",
+    "selected_event_id": "vistory42_bella_s15_s21",
+    "survey_sha256": "af44edabe4d70845869ca49fefb18a1c9199c37dd500cf276c37a9cc3c166562"
+  },
+  "schema_version": 1,
+  "seeds": [
+    0,
+    1,
+    2
+  ],
+  "task_id": "vistorybench_subject_reappearance_v1"
 }

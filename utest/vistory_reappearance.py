@@ -10,6 +10,168 @@ from pathlib import Path
 from .prefix_contract import sha256_file
 
 
+FROZEN_SELECTION_PATH = (
+    Path(__file__).parent / "events" / "vistorybench_reappearance_v1.json"
+)
+VISTORY_DATASET_COMMIT = "92f845531b67e97a67ae04b256ec5d8c020e8341"
+VISTORY_EVALUATOR_COMMIT = "b44ec9108668cc2bcc8c5280886b235e9fb8bea9"
+VISTORY_TASK_ID = "vistorybench_subject_reappearance_v1"
+_EVENT_FIELDS = {
+    "story_id",
+    "event_id",
+    "character_name",
+    "source_shot",
+    "target_shot",
+    "story_sha256",
+}
+_REPLACEMENT_FIELDS = {
+    "original_event_id",
+    "selected_event_id",
+    "selected_candidate_id",
+    "eligible_donor_count",
+    "horizon",
+    "horizon_distance",
+    "survey_sha256",
+    "review_sha256",
+    "reviewer",
+    "dataset_commit",
+}
+_RETAINED_EVENTS = {
+    0: {
+        "story_id": "79",
+        "event_id": "vistory79_song_yuchen_s2_s8",
+        "character_name": "Song Yuchen",
+        "source_shot": 2,
+        "target_shot": 8,
+        "story_sha256": "4298F6EFAA5F2D4A9D69C86E169E0167CE324334F656033A6D692CAFD9484109",
+    },
+    2: {
+        "story_id": "16",
+        "event_id": "vistory16_chen_father_s1_s10",
+        "character_name": "Chen Sihan's Father",
+        "source_shot": 1,
+        "target_shot": 10,
+        "story_sha256": "6B1AD31634E5DA0108ACD51B16DA2E7F29B202858FCC5D0E556F4BEDB22D005E",
+    },
+}
+_ORIGINAL_IDENTITIES = {
+    ("79", "Song Yuchen", "vistory79_song_yuchen_s2_s8"),
+    ("15", "Gu Zhenzhen", "vistory15_gu_zhenzhen_s8_s20"),
+    ("16", "Chen Sihan's Father", "vistory16_chen_father_s1_s10"),
+}
+
+
+def _require_exact_fields(value: Mapping, expected: set[str], label: str) -> None:
+    missing = sorted(expected - set(value))
+    extra = sorted(set(value) - expected)
+    if missing or extra:
+        raise ValueError(f"{label} schema mismatch: missing={missing}, extra={extra}")
+
+
+def _require_sha256(value: object, label: str, *, uppercase: bool) -> str:
+    pattern = r"[0-9A-F]{64}" if uppercase else r"[0-9a-f]{64}"
+    if not isinstance(value, str) or re.fullmatch(pattern, value) is None:
+        case = "uppercase" if uppercase else "lowercase"
+        raise ValueError(f"{label} must be 64 {case} hexadecimal digits")
+    return value
+
+
+def load_frozen_selection(path: Path | None = None) -> dict:
+    """Load and fail closed on the checked-in three-event authority."""
+    selection_path = FROZEN_SELECTION_PATH if path is None else Path(path)
+    try:
+        selection = json.loads(selection_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise ValueError(f"invalid frozen target selection: {selection_path}: {error}") from error
+    if not isinstance(selection, dict):
+        raise ValueError("frozen target selection must be a JSON object")
+    _require_exact_fields(
+        selection,
+        {
+            "schema_version",
+            "task_id",
+            "dataset_commit",
+            "evaluator_commit",
+            "seeds",
+            "events",
+            "replacement_selection",
+        },
+        "frozen target selection",
+    )
+    if type(selection["schema_version"]) is not int or selection["schema_version"] != 1:
+        raise ValueError("frozen target selection schema_version must be integer 1")
+    if selection["task_id"] != VISTORY_TASK_ID:
+        raise ValueError("frozen target selection task_id mismatch")
+    if selection["dataset_commit"] != VISTORY_DATASET_COMMIT:
+        raise ValueError("frozen target selection dataset_commit mismatch")
+    if selection["evaluator_commit"] != VISTORY_EVALUATOR_COMMIT:
+        raise ValueError("frozen target selection evaluator_commit mismatch")
+    if selection["seeds"] != [0, 1, 2] or any(
+        type(seed) is not int for seed in selection["seeds"]
+    ):
+        raise ValueError("frozen target selection seeds must be integer [0, 1, 2]")
+
+    events = selection["events"]
+    if not isinstance(events, list) or len(events) != 3:
+        raise ValueError("frozen target selection must contain exactly three events")
+    for index, event in enumerate(events):
+        if not isinstance(event, Mapping):
+            raise ValueError(f"frozen event {index} must be a JSON object")
+        _require_exact_fields(event, _EVENT_FIELDS, f"frozen event {index}")
+        if not all(isinstance(event[field], str) and event[field] for field in (
+            "story_id", "event_id", "character_name"
+        )):
+            raise ValueError(f"frozen event {index} identity fields must be non-empty strings")
+        if type(event["source_shot"]) is not int or type(event["target_shot"]) is not int:
+            raise ValueError(f"frozen event {index} shots must be integers")
+        if event["target_shot"] - event["source_shot"] < 2:
+            raise ValueError(f"frozen event {index} must have a nonempty absence interval")
+        _require_sha256(event["story_sha256"], f"frozen event {index} story_sha256", uppercase=True)
+    for index, expected in _RETAINED_EVENTS.items():
+        if events[index] != expected:
+            raise ValueError(f"retained frozen event changed at position {index}")
+    replacement_identity = (events[1]["story_id"], events[1]["character_name"])
+    original_entity_uids = {(story_id, name) for story_id, name, _ in _ORIGINAL_IDENTITIES}
+    original_event_ids = {event_id for _, _, event_id in _ORIGINAL_IDENTITIES}
+    if (
+        replacement_identity in original_entity_uids
+        or events[1]["event_id"] in original_event_ids
+    ):
+        raise ValueError("replacement must exclude all three original target identities")
+    event_ids = [event["event_id"] for event in events]
+    if len(event_ids) != len(set(event_ids)):
+        raise ValueError("frozen target event_ids must be unique")
+
+    replacement = selection["replacement_selection"]
+    if not isinstance(replacement, Mapping):
+        raise ValueError("replacement_selection must be a JSON object")
+    _require_exact_fields(replacement, _REPLACEMENT_FIELDS, "replacement_selection")
+    if replacement["original_event_id"] != "vistory15_gu_zhenzhen_s8_s20":
+        raise ValueError("replacement_selection original_event_id mismatch")
+    if replacement["selected_event_id"] != events[1]["event_id"]:
+        raise ValueError("replacement_selection selected event mismatch")
+    if replacement["dataset_commit"] != VISTORY_DATASET_COMMIT:
+        raise ValueError("replacement_selection dataset_commit mismatch")
+    if not isinstance(replacement["reviewer"], str) or not replacement["reviewer"].strip():
+        raise ValueError("replacement_selection reviewer must be non-empty")
+    for field in ("selected_candidate_id", "survey_sha256", "review_sha256"):
+        _require_sha256(replacement[field], f"replacement_selection {field}", uppercase=False)
+    for field in ("eligible_donor_count", "horizon", "horizon_distance"):
+        if type(replacement[field]) is not int:
+            raise ValueError(f"replacement_selection {field} must be an integer")
+    if replacement["eligible_donor_count"] <= 0:
+        raise ValueError("replacement_selection must have an eligible donor")
+    horizon = events[1]["target_shot"] - events[1]["source_shot"]
+    if replacement["horizon"] != horizon or replacement["horizon_distance"] != abs(horizon - 12):
+        raise ValueError("replacement_selection horizon binding mismatch")
+    return selection
+
+
+def frozen_target_event_ids(path: Path | None = None) -> frozenset[str]:
+    """Return target IDs derived from the validated frozen authority."""
+    return frozenset(event["event_id"] for event in load_frozen_selection(path)["events"])
+
+
 def convert_event(official: Mapping, spec: Mapping) -> tuple[dict, dict]:
     """Slice one frozen source-to-first-reappearance interval."""
     subject = str(spec["character_name"])

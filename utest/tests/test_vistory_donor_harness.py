@@ -22,13 +22,10 @@ from utest.vistory_donor_harness import (
     validate_completed_donor_run,
     validate_frozen_selection,
 )
+from utest.vistory_donors import TARGET_EVENT_IDS
 
 
-TARGET_IDS = (
-    "vistory15_gu_zhenzhen_s8_s20",
-    "vistory16_chen_father_s1_s10",
-    "vistory79_song_yuchen_s2_s8",
-)
+TARGET_IDS = tuple(sorted(TARGET_EVENT_IDS))
 
 
 @pytest.fixture(autouse=True)

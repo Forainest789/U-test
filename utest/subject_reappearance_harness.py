@@ -34,15 +34,12 @@ from .subject_subspace_audit import SUBSPACE_ARMS
 from .subject_subspace_audit import validate_subject_subspace_manifest
 from .source_semantic_scores import validate_source_semantic_scores_file
 from .qstar import SEVEN_RUNS, classify_qstar, qstar_deltas
+from .vistory_reappearance import load_frozen_selection
 
 
 PREFLIGHT_ARMS = ("full_correct", "no_memory", "zero_path", "wrong_subject")
 FULL_ARMS = SUBSPACE_ARMS
-_FROZEN_SELECTION = json.loads(
-    (Path(__file__).parent / "events" / "vistorybench_reappearance_v1.json").read_text(
-        encoding="utf-8"
-    )
-)
+_FROZEN_SELECTION = load_frozen_selection()
 TASK_ID = _FROZEN_SELECTION["task_id"]
 DATASET_COMMIT = _FROZEN_SELECTION["dataset_commit"]
 EVALUATOR_COMMIT = _FROZEN_SELECTION["evaluator_commit"]
