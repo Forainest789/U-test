@@ -364,11 +364,18 @@ def test_default_authority_hashes_and_parses_the_same_byte_read(
         monkeypatch.setattr(reappearance_module, attribute, target)
 
     selection_path = copied["FROZEN_SELECTION_PATH"]
+    authority_paths = set(copied.values())
+    read_counts = {path: 0 for path in authority_paths}
+    attack_executed = False
+    original_read_bytes = Path.read_bytes
 
-    def swap_after_hash(path: Path) -> str:
-        digest = sha256_file(path)
-        if Path(path) == selection_path:
-            forged = json.loads(selection_path.read_text(encoding="utf-8"))
+    def read_then_swap(path: Path) -> bytes:
+        nonlocal attack_executed
+        raw = original_read_bytes(path)
+        if path in authority_paths:
+            read_counts[path] += 1
+        if path == selection_path and read_counts[path] == 1:
+            forged = json.loads(raw.decode("utf-8"))
             forged["events"][1].update(
                 story_id="41",
                 event_id="vistory41_mallory_s15_s21",
@@ -378,12 +385,15 @@ def test_default_authority_hashes_and_parses_the_same_byte_read(
                 "event_id"
             ]
             selection_path.write_text(json.dumps(forged), encoding="utf-8")
-        return digest
+            attack_executed = True
+        return raw
 
-    monkeypatch.setattr(reappearance_module, "sha256_file", swap_after_hash)
+    monkeypatch.setattr(Path, "read_bytes", read_then_swap)
 
     selection = load_frozen_selection()
 
+    assert attack_executed is True
+    assert read_counts == {path: 1 for path in authority_paths}
     assert selection["events"][1]["event_id"] == "vistory42_bella_s15_s21"
 
 
