@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "dataset_commit": "92f845531b67e97a67ae04b256ec5d8c020e8341",
+  "survey_sha256": "8d70b19a1b8c4c293495e5e2b853d54e4431ccd8bc9aa38c9f50d5c914baad57",
+  "reviews": [
+    {
+      "target_event_id": "vistory79_song_yuchen_s2_s8",
+      "candidate_id": "2e08901266442994503aa6c94b30cb8c75617d70266647a0a70425cc6dcfbc55",
+      "target_presentation_class": "male",
+      "donor_presentation_class": "male",
+      "target_dominant_colour": "black",
+      "donor_dominant_colour": "brown",
+      "donor_source_visible": true,
+      "donor_read_check_visible": true,
+      "approved": false,
+      "tie_group": null,
+      "reviewer": "wangshixiao"
+    },
+    {
+      "target_event_id": "vistory79_song_yuchen_s2_s8",
+      "candidate_id": "6cde40c6ee47af0ec9fb2b0596a0088316c4510eea0f8a203dd40544e220fa13",
+      "target_presentation_class": "male",
+      "donor_presentation_class": "male",
+      "target_dominant_colour": "black",
+      "donor_dominant_colour": "blue-grey",
+      "donor_source_visible": true,
+      "donor_read_check_visible": true,
+      "approved": false,
+      "tie_group": null,
+      "reviewer": "wangshixiao"
+    },
+    {
+      "target_event_id": "vistory79_song_yuchen_s2_s8",
+      "candidate_id": "ad04290d1a7ddd4691b8337c3a71afca0e8daee38a706be8c5a40f83bb725938",
+      "target_presentation_class": "male",
+      "donor_presentation_class": "male",
+      "target_dominant_colour": "black",
+      "donor_dominant_colour": "black",
+      "donor_source_visible": true,
+      "donor_read_check_visible": true,
+      "approved": true,
+      "tie_group": null,
+      "reviewer": "wangshixiao"
+    }
+  ]
+}

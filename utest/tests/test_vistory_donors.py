@@ -12,8 +12,10 @@ import pytest
 import utest.vistory_donors as donor_module
 from utest.prefix_contract import sha256_file
 from utest.vistory_donors import (
+    EXPLORATORY_SINGLE_EVENT_SCOPE,
     TARGET_EVENT_IDS,
     build_donor_candidate_survey,
+    donor_selection_event_ids,
     donor_rejection_reasons,
     enumerate_official_recurrences,
     freeze_donor_selection,
@@ -25,6 +27,46 @@ from utest.vistory_reappearance import frozen_target_event_ids, load_frozen_sele
 
 def test_target_event_ids_are_derived_from_the_frozen_selection() -> None:
     assert TARGET_EVENT_IDS == frozen_target_event_ids()
+
+
+@pytest.mark.parametrize(
+    "selection",
+    [
+        {"protocol_scope": None},
+        {"target_event_ids": None},
+        {"protocol_scope": None, "target_event_ids": None},
+    ],
+)
+def test_donor_selection_scope_rejects_explicit_null_fields(
+    selection: dict[str, object],
+) -> None:
+    with pytest.raises(ValueError, match="protocol_scope"):
+        donor_selection_event_ids(selection)
+
+
+SONG_EVENT_ID = "vistory79_song_yuchen_s2_s8"
+
+
+def test_song_yuchen_donor_review_freezes_three_candidates_and_one_approval() -> None:
+    path = (
+        Path(__file__).resolve().parents[1]
+        / "events"
+        / "vistorybench_song_yuchen_donor_review_v1.json"
+    )
+    review = json.loads(path.read_text(encoding="utf-8"))
+    expected_candidate_ids = {
+        "2e08901266442994503aa6c94b30cb8c75617d70266647a0a70425cc6dcfbc55",
+        "6cde40c6ee47af0ec9fb2b0596a0088316c4510eea0f8a203dd40544e220fa13",
+        "ad04290d1a7ddd4691b8337c3a71afca0e8daee38a706be8c5a40f83bb725938",
+    }
+
+    assert {row["candidate_id"] for row in review["reviews"]} == expected_candidate_ids
+    assert {
+        row["candidate_id"] for row in review["reviews"] if row["approved"]
+    } == {
+        "ad04290d1a7ddd4691b8337c3a71afca0e8daee38a706be8c5a40f83bb725938"
+    }
+    assert {row["target_event_id"] for row in review["reviews"]} == {SONG_EVENT_ID}
 
 
 def _story(characters: dict[str, str], appearances: dict[int, list[str]]) -> dict:
@@ -803,6 +845,8 @@ def test_freeze_materializes_exactly_three_seed_zero_donor_events(
     )
 
     assert selection["donor_seed"] == 0
+    assert "protocol_scope" not in selection
+    assert "target_event_ids" not in selection
     assert len(selection["events"]) == 3
     assert {row["target_event_id"] for row in selection["events"]} == TARGET_EVENT_IDS
     for row in selection["events"]:
@@ -819,6 +863,179 @@ def test_freeze_materializes_exactly_three_seed_zero_donor_events(
         assert (event_root / "event.json").is_file()
         assert (event_root / "reference.jpg").is_file()
         assert (event_root / "manifest.json").is_file()
+
+
+def test_exploratory_freeze_materializes_only_the_explicit_frozen_event(
+    tmp_path: Path,
+) -> None:
+    data_root, targets = _three_target_fixture(tmp_path)
+    survey_path = tmp_path / "survey.json"
+    survey = build_donor_candidate_survey(
+        data_root=data_root,
+        target_inputs_path=targets,
+        output_path=survey_path,
+    )
+    review_path = tmp_path / "review.json"
+    review = _write_review_for_survey(review_path, survey_path, survey)
+    review["reviews"] = [
+        row for row in review["reviews"] if row["target_event_id"] == SONG_EVENT_ID
+    ]
+    review_path.write_text(json.dumps(review), encoding="utf-8")
+
+    selection = freeze_donor_selection(
+        data_root=data_root,
+        target_inputs_path=targets,
+        survey_path=survey_path,
+        review_path=review_path,
+        output_root=tmp_path / "selection",
+        exploratory_target_event_id=SONG_EVENT_ID,
+    )
+
+    assert selection["protocol_scope"] == EXPLORATORY_SINGLE_EVENT_SCOPE
+    assert selection["target_event_ids"] == [SONG_EVENT_ID]
+    assert [row["target_event_id"] for row in selection["events"]] == [SONG_EVENT_ID]
+    assert {row["target_event_id"] for row in selection["candidate_audit"]} == {
+        SONG_EVENT_ID
+    }
+
+
+def test_exploratory_freeze_rejects_review_rows_outside_declared_event(
+    tmp_path: Path,
+) -> None:
+    data_root, targets = _three_target_fixture(tmp_path)
+    survey_path = tmp_path / "survey.json"
+    survey = build_donor_candidate_survey(
+        data_root=data_root,
+        target_inputs_path=targets,
+        output_path=survey_path,
+    )
+    review_path = tmp_path / "review.json"
+    _write_review_for_survey(review_path, survey_path, survey)
+
+    with pytest.raises(ValueError, match="outside exploratory target"):
+        freeze_donor_selection(
+            data_root=data_root,
+            target_inputs_path=targets,
+            survey_path=survey_path,
+            review_path=review_path,
+            output_root=tmp_path / "selection",
+            exploratory_target_event_id=SONG_EVENT_ID,
+        )
+
+
+def test_exploratory_freeze_rejects_unknown_target_event_id(tmp_path: Path) -> None:
+    data_root, targets = _three_target_fixture(tmp_path)
+    survey_path = tmp_path / "survey.json"
+    survey = build_donor_candidate_survey(
+        data_root=data_root,
+        target_inputs_path=targets,
+        output_path=survey_path,
+    )
+    review_path = tmp_path / "review.json"
+    _write_review_for_survey(review_path, survey_path, survey)
+
+    with pytest.raises(ValueError, match="exactly one frozen target event ID"):
+        freeze_donor_selection(
+            data_root=data_root,
+            target_inputs_path=targets,
+            survey_path=survey_path,
+            review_path=review_path,
+            output_root=tmp_path / "selection",
+            exploratory_target_event_id="not-a-frozen-event",
+        )
+
+
+def test_exploratory_freeze_requires_every_scoped_candidate_review(
+    tmp_path: Path,
+) -> None:
+    data_root, targets = _three_target_fixture(tmp_path)
+    survey_path = tmp_path / "survey.json"
+    survey = build_donor_candidate_survey(
+        data_root=data_root,
+        target_inputs_path=targets,
+        output_path=survey_path,
+    )
+    review_path = tmp_path / "review.json"
+    review = _write_review_for_survey(review_path, survey_path, survey)
+    review["reviews"] = []
+    review_path.write_text(json.dumps(review), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="unreviewed eligible candidate IDs"):
+        freeze_donor_selection(
+            data_root=data_root,
+            target_inputs_path=targets,
+            survey_path=survey_path,
+            review_path=review_path,
+            output_root=tmp_path / "selection",
+            exploratory_target_event_id=SONG_EVENT_ID,
+        )
+
+
+def test_exploratory_freeze_rejects_duplicate_scoped_review(tmp_path: Path) -> None:
+    data_root, targets = _three_target_fixture(tmp_path)
+    survey_path = tmp_path / "survey.json"
+    survey = build_donor_candidate_survey(
+        data_root=data_root,
+        target_inputs_path=targets,
+        output_path=survey_path,
+    )
+    review_path = tmp_path / "review.json"
+    review = _write_review_for_survey(review_path, survey_path, survey)
+    scoped = [
+        row for row in review["reviews"] if row["target_event_id"] == SONG_EVENT_ID
+    ]
+    review["reviews"] = [scoped[0], dict(scoped[0])]
+    review_path.write_text(json.dumps(review), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="duplicate review candidate_id"):
+        freeze_donor_selection(
+            data_root=data_root,
+            target_inputs_path=targets,
+            survey_path=survey_path,
+            review_path=review_path,
+            output_root=tmp_path / "selection",
+            exploratory_target_event_id=SONG_EVENT_ID,
+        )
+
+
+def test_exploratory_freeze_rejects_two_approved_scoped_candidates(
+    tmp_path: Path,
+) -> None:
+    data_root, targets = _three_target_fixture(tmp_path)
+    _write_official_story(
+        data_root,
+        "30",
+        _story(
+            {"ExtraDonor": "realistic_human"},
+            {1: ["ExtraDonor"], 7: ["ExtraDonor"]},
+        ),
+        reference_names=("ExtraDonor",),
+    )
+    survey_path = tmp_path / "survey.json"
+    survey = build_donor_candidate_survey(
+        data_root=data_root,
+        target_inputs_path=targets,
+        output_path=survey_path,
+    )
+    review_path = tmp_path / "review.json"
+    review = _write_review_for_survey(review_path, survey_path, survey)
+    review["reviews"] = [
+        row for row in review["reviews"] if row["target_event_id"] == SONG_EVENT_ID
+    ]
+    assert len(review["reviews"]) == 2
+    for row in review["reviews"]:
+        row["tie_group"] = "declared-tie"
+    review_path.write_text(json.dumps(review), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="exactly one approved donor candidate"):
+        freeze_donor_selection(
+            data_root=data_root,
+            target_inputs_path=targets,
+            survey_path=survey_path,
+            review_path=review_path,
+            output_root=tmp_path / "selection",
+            exploratory_target_event_id=SONG_EVENT_ID,
+        )
 
 
 def test_freeze_rejects_mismatched_presentation_class(tmp_path: Path) -> None:
@@ -1322,6 +1539,10 @@ def test_prepare_vistory_donors_cli_help_is_directly_executable(
     )
 
     assert result.returncode == 0, result.stderr
+    if arguments == ["freeze", "--help"]:
+        assert "--exploratory-target-event-id" in result.stdout
+        assert "formal three-event or explicit exploratory single-event" in result.stdout
+        assert "exactly three" not in result.stdout
 
 
 def test_freeze_rejects_review_fields_outside_strict_schema(tmp_path: Path) -> None:

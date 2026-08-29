@@ -32,13 +32,19 @@ def _parser() -> argparse.ArgumentParser:
     survey.add_argument("--output", required=True, type=Path)
 
     freeze = commands.add_parser(
-        "freeze", help="Freeze exactly three reviewed donor event bundles."
+        "freeze",
+        help="Freeze formal three-event or explicit exploratory single-event donor bundles.",
+        description=(
+            "Freeze formal three-event or explicit exploratory single-event donor "
+            "bundles."
+        ),
     )
     freeze.add_argument("--data-root", required=True, type=Path)
     freeze.add_argument("--targets", required=True, type=Path)
     freeze.add_argument("--survey", required=True, type=Path)
     freeze.add_argument("--review", required=True, type=Path)
     freeze.add_argument("--output-root", required=True, type=Path)
+    freeze.add_argument("--exploratory-target-event-id")
     return parser
 
 
@@ -57,6 +63,7 @@ def main(argv: Sequence[str] | None = None) -> None:
             survey_path=args.survey,
             review_path=args.review,
             output_root=args.output_root,
+            exploratory_target_event_id=args.exploratory_target_event_id,
         )
     print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))
 

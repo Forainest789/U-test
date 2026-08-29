@@ -20,6 +20,7 @@ from .vistory_reappearance import convert_event, frozen_target_event_ids
 
 
 TARGET_EVENT_IDS = frozen_target_event_ids()
+EXPLORATORY_SINGLE_EVENT_SCOPE = "exploratory_single_event"
 VISTORY_DATASET_COMMIT = "92f845531b67e97a67ae04b256ec5d8c020e8341"
 VISTORY_STORY_IDS = frozenset(f"{story_id:02d}" for story_id in range(1, 81))
 REVIEW_FIELDS = {
@@ -74,6 +75,25 @@ TARGET_EVENT_REQUIRED_FIELDS = {
     "reference_path",
     "reference_sha256",
 }
+
+
+def donor_selection_event_ids(selection: Mapping) -> frozenset[str]:
+    if "protocol_scope" not in selection and "target_event_ids" not in selection:
+        return TARGET_EVENT_IDS
+    scope = selection.get("protocol_scope")
+    declared = selection.get("target_event_ids")
+    if scope != EXPLORATORY_SINGLE_EVENT_SCOPE:
+        raise ValueError("unsupported donor selection protocol_scope")
+    if (
+        not isinstance(declared, list)
+        or len(declared) != 1
+        or not isinstance(declared[0], str)
+        or declared[0] not in TARGET_EVENT_IDS
+    ):
+        raise ValueError(
+            "exploratory donor selection must declare exactly one frozen target event ID"
+        )
+    return frozenset(declared)
 
 
 def horizon_bucket(horizon: int) -> str:
@@ -701,11 +721,21 @@ def _read_json(path: Path, label: str) -> dict:
 
 
 def _selected_reviews(
-    review: Mapping, survey: Mapping
+    review: Mapping,
+    survey: Mapping,
+    target_event_ids: frozenset[str] = TARGET_EVENT_IDS,
+    *,
+    allow_ties: bool = True,
 ) -> tuple[list[tuple[dict, dict]], list[dict]]:
-    candidates = {row["candidate_id"]: row for row in survey["candidates"]}
+    candidates = {
+        row["candidate_id"]: row
+        for row in survey["candidates"]
+        if row["target_event_id"] in target_event_ids
+    }
     reviews_by_target: dict[str, list[tuple[dict, dict]]] = {
-        target["event_id"]: [] for target in survey["targets"]
+        target["event_id"]: []
+        for target in survey["targets"]
+        if target["event_id"] in target_event_ids
     }
     seen_candidate_ids: set[str] = set()
     dispositions: list[dict] = []
@@ -737,6 +767,8 @@ def _selected_reviews(
             or not reviewed["tie_group"].strip()
         ):
             raise ValueError("review tie_group must be null or a non-empty string")
+        if reviewed["target_event_id"] not in target_event_ids:
+            raise ValueError("review row is outside exploratory target")
         candidate_id = reviewed.get("candidate_id")
         if candidate_id in seen_candidate_ids:
             raise ValueError(f"duplicate review candidate_id: {candidate_id}")
@@ -793,6 +825,10 @@ def _selected_reviews(
         if not approved:
             raise ValueError(f"zero approved donor candidates for {target_event_id}")
         if len(approved) > 1:
+            if not allow_ties:
+                raise ValueError(
+                    "exploratory target must have exactly one approved donor candidate"
+                )
             tie_groups = {review.get("tie_group") for _, review in approved}
             if len(tie_groups) != 1 or not next(iter(tie_groups)):
                 raise ValueError(
@@ -813,6 +849,7 @@ def freeze_donor_selection(
     survey_path: Path,
     review_path: Path,
     output_root: Path,
+    exploratory_target_event_id: str | None = None,
 ) -> dict[str, object]:
     data_root = Path(data_root).resolve()
     target_inputs_path = Path(target_inputs_path).resolve()
@@ -845,17 +882,33 @@ def freeze_donor_selection(
     if not isinstance(review.get("reviews"), list):
         raise ValueError("review reviews must be a list")
 
-    selected, review_dispositions = _selected_reviews(review, survey)
+    scope_fields = (
+        {
+            "protocol_scope": EXPLORATORY_SINGLE_EVENT_SCOPE,
+            "target_event_ids": [exploratory_target_event_id],
+        }
+        if exploratory_target_event_id is not None
+        else {}
+    )
+    expected_target_ids = donor_selection_event_ids(scope_fields)
+    selected, review_dispositions = _selected_reviews(
+        review,
+        survey,
+        expected_target_ids,
+        allow_ties=exploratory_target_event_id is None,
+    )
     selected_target_ids = {candidate["target_event_id"] for candidate, _ in selected}
-    if selected_target_ids != TARGET_EVENT_IDS:
+    if selected_target_ids != expected_target_ids:
         raise ValueError(
-            "frozen donor selection must contain exactly the three target event IDs"
+            "frozen donor selection does not match the declared target event IDs"
         )
     dispositions_by_id = {
         row["candidate_id"]: row for row in review_dispositions
     }
     candidate_audit = []
     for candidate in survey["candidates"]:
+        if candidate["target_event_id"] not in expected_target_ids:
+            continue
         disposition = dispositions_by_id.get(candidate["candidate_id"])
         if disposition is None:
             raise RuntimeError("validated review coverage became incomplete")
@@ -881,6 +934,7 @@ def freeze_donor_selection(
             "reasons": row["reasons"],
         }
         for row in survey["rejections"]
+        if row["target_event_id"] in expected_target_ids
     )
     candidate_audit.sort(
         key=lambda row: (row["candidate_id"], row["structural_status"])
@@ -992,6 +1046,7 @@ def freeze_donor_selection(
             "dataset_commit": survey["dataset_commit"],
             "selection_seed": 0,
             "donor_seed": 0,
+            **scope_fields,
             "path_contract": {
                 "selection_paths_relative_to": "selection_parent",
                 "event_paths_relative_to": "event_parent",
