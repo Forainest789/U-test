@@ -19,13 +19,21 @@ from utest.tests.test_vistory_donor_harness import (
     _materialize_completion,
     _materialize_execution,
     _materialize_prefix,
+    _exploratory_selection,
     _selection,
     _write_json,
 )
 from utest.subject_reappearance_harness import build_run_manifest as build_subject_run_manifest
 from utest.subject_subspace_audit import validate_frozen_donor_artifact
-from utest.vistory_donor_bundle import freeze_vistory_donor_map, validate_target_inputs
+from utest.vistory_donor_bundle import (
+    build_validated_event_donor_map,
+    freeze_vistory_donor_map,
+    validate_target_inputs,
+)
 from utest.vistory_donor_harness import build_donor_run_manifest
+
+
+SONG_EVENT_ID = "vistory79_song_yuchen_s2_s8"
 
 
 @pytest.fixture(autouse=True)
@@ -52,6 +60,7 @@ def _target_events(inputs: Path) -> dict[str, dict]:
 def _completed_fixture(
     tmp_path: Path,
     *,
+    selected_target_ids: set[str] | None = None,
     memory_bank_mode: str | None = None,
     loose_candidate_story_type: bool = False,
     loose_donor_story_type: bool = False,
@@ -60,7 +69,13 @@ def _completed_fixture(
 ) -> tuple[Path, Path, Path, dict[str, dict]]:
     targets = _prepared_inputs(tmp_path / "targets")
     target_events = _target_events(targets)
-    selection_path = _selection(tmp_path / "donors")
+    if selected_target_ids is None:
+        selection_path = _selection(tmp_path / "donors")
+    else:
+        assert len(selected_target_ids) == 1
+        selection_path = _exploratory_selection(
+            tmp_path / "donors", next(iter(selected_target_ids))
+        )
     selection = _read(selection_path)
     selection["target_inputs_sha256"] = sha256_file(targets)
     for row in selection["events"]:
@@ -181,6 +196,127 @@ def _completed_fixture(
     return targets, selection_path, run_manifest, target_events
 
 
+def test_exploratory_bundle_keeps_complete_targets_but_publishes_only_song(
+    tmp_path: Path,
+) -> None:
+    targets, selection, run, target_events = _completed_fixture(
+        tmp_path,
+        selected_target_ids={SONG_EVENT_ID},
+    )
+
+    validated_targets = validate_target_inputs(targets)
+    assert {row["event_id"] for row in validated_targets["events"]} == set(
+        target_events
+    )
+    result = freeze_vistory_donor_map(
+        target_inputs_path=targets,
+        selection_path=selection,
+        donor_run_manifest_path=run,
+        output_root=tmp_path / "bundle",
+    )
+
+    assert result["protocol_scope"] == "exploratory_single_event"
+    assert result["target_event_ids"] == [SONG_EVENT_ID]
+    assert set(result["events"]) == {SONG_EVENT_ID}
+    pair = _read(Path(result["events"][SONG_EVENT_ID]["manifest"]))
+    assert pair["provenance"]["selection"] == {
+        "path": str(selection.resolve()),
+        "sha256": sha256_file(selection),
+    }
+    assert pair["provenance"]["donor_run_manifest"] == {
+        "path": str(run.resolve()),
+        "sha256": sha256_file(run),
+    }
+
+
+def test_bundle_rejects_run_scope_that_differs_from_validated_selection(
+    tmp_path: Path,
+) -> None:
+    target_path, selection_path, run_path, _ = _completed_fixture(
+        tmp_path,
+        selected_target_ids={SONG_EVENT_ID},
+    )
+    targets = validate_target_inputs(target_path)
+    selection = donor_harness.validate_frozen_selection(selection_path)
+    run = donor_harness.validate_completed_donor_run(run_path, selection)
+    run.update(
+        donor_run_manifest_path=str(run_path.resolve()),
+        donor_run_manifest_sha256=sha256_file(run_path),
+        target_event_ids=["vistory42_bella_s15_s21"],
+    )
+
+    with pytest.raises(ValueError, match="run scope"):
+        build_validated_event_donor_map(
+            targets,
+            selection,
+            run,
+            tmp_path / "bundle",
+        )
+
+
+def test_exploratory_bundle_rejects_selection_event_outside_declared_scope(
+    tmp_path: Path,
+) -> None:
+    targets, selection, run, _ = _completed_fixture(
+        tmp_path,
+        selected_target_ids={SONG_EVENT_ID},
+    )
+    value = _read(selection)
+    value["events"][0]["target_event_id"] = "vistory42_bella_s15_s21"
+    _write_json(selection, value)
+    output = tmp_path / "bundle"
+
+    with pytest.raises(ValueError, match="selection target event IDs"):
+        freeze_vistory_donor_map(
+            target_inputs_path=targets,
+            selection_path=selection,
+            donor_run_manifest_path=run,
+            output_root=output,
+        )
+
+    assert not output.exists()
+
+
+@pytest.mark.parametrize("mutation", ["missing", "extra", "cross_wired"])
+def test_exploratory_bundle_rejects_jobs_that_do_not_exactly_match_scope(
+    tmp_path: Path,
+    mutation: str,
+) -> None:
+    targets, selection, run_path, _ = _completed_fixture(
+        tmp_path,
+        selected_target_ids={SONG_EVENT_ID},
+    )
+    run = _read(run_path)
+    if mutation == "missing":
+        run["jobs"].clear()
+    elif mutation == "extra":
+        run["jobs"].append(dict(run["jobs"][0]))
+    else:
+        run["jobs"][0]["target_event_id"] = "vistory42_bella_s15_s21"
+    _write_json(run_path, run)
+    output = tmp_path / "bundle"
+
+    with pytest.raises(ValueError):
+        freeze_vistory_donor_map(
+            target_inputs_path=targets,
+            selection_path=selection,
+            donor_run_manifest_path=run_path,
+            output_root=output,
+        )
+
+    assert not output.exists()
+
+
+def test_target_inputs_remain_strictly_the_complete_frozen_three(tmp_path: Path) -> None:
+    targets = _prepared_inputs(tmp_path / "targets")
+    value = _read(targets)
+    value["events"].pop()
+    _write_json(targets, value)
+
+    with pytest.raises(ValueError, match="exactly three"):
+        validate_target_inputs(targets)
+
+
 def test_freeze_emits_exactly_three_valid_event_level_donor_pairs(tmp_path: Path) -> None:
     targets, selection, donor_run, target_events = _completed_fixture(tmp_path)
 
@@ -193,6 +329,8 @@ def test_freeze_emits_exactly_three_valid_event_level_donor_pairs(tmp_path: Path
 
     assert set(result["events"]) == set(target_events)
     assert len(result["events"]) == 3
+    assert "protocol_scope" not in result
+    assert "target_event_ids" not in result
     assert not any("seed" in key for key in result["events"])
     for event_id, entry in result["events"].items():
         assert set(entry) == {"payload", "manifest"}

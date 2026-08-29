@@ -25,7 +25,11 @@ from .vistory_donor_harness import (
     validate_completed_donor_run,
     validate_frozen_selection,
 )
-from .vistory_donors import TARGET_EVENT_IDS, _publish_directory_no_clobber
+from .vistory_donors import (
+    TARGET_EVENT_IDS,
+    _publish_directory_no_clobber,
+    donor_selection_event_ids,
+)
 
 
 def _read_object(path: Path, label: str) -> dict:
@@ -328,18 +332,38 @@ def build_validated_event_donor_map(
     target_by_id = {row["event_id"]: row for row in targets["events"]}
     selected_by_id = {row["target_event_id"]: row for row in selection["events"]}
     jobs_by_id = {job["target_event_id"]: job for job in donor_run["jobs"]}
-    if (
-        set(target_by_id) != TARGET_EVENT_IDS
-        or set(selected_by_id) != TARGET_EVENT_IDS
-        or set(jobs_by_id) != TARGET_EVENT_IDS
-        or len(donor_run["jobs"]) != 3
+    expected_ids = donor_selection_event_ids(selection)
+    expected_scope = (
+        {
+            "protocol_scope": selection["protocol_scope"],
+            "target_event_ids": sorted(expected_ids),
+        }
+        if expected_ids != TARGET_EVENT_IDS
+        else {}
+    )
+    run_scope = {
+        field: donor_run[field]
+        for field in ("protocol_scope", "target_event_ids")
+        if field in donor_run
+    }
+    if not _json_equal_strict(run_scope, expected_scope):
+        raise ValueError("donor run scope does not match selection scope")
+    if set(target_by_id) != TARGET_EVENT_IDS or len(targets["events"]) != len(
+        TARGET_EVENT_IDS
     ):
-        raise ValueError("target, selection, and completed donor jobs must be the exact frozen three")
+        raise ValueError("target inputs must contain exactly the frozen three events")
+    if (
+        set(selected_by_id) != expected_ids
+        or len(selection["events"]) != len(expected_ids)
+        or set(jobs_by_id) != expected_ids
+        or len(donor_run["jobs"]) != len(expected_ids)
+    ):
+        raise ValueError("selection and completed donor jobs do not match their scope")
 
     staging_root = Path(output_root)
     events = {}
     platform_hidden_dimension = None
-    for event_id in sorted(TARGET_EVENT_IDS):
+    for event_id in sorted(expected_ids):
         target = target_by_id[event_id]
         selected = selected_by_id[event_id]
         job = jobs_by_id[event_id]
@@ -393,6 +417,7 @@ def build_validated_event_donor_map(
         "schema_version": 1,
         "selection_sha256": sha256_file(Path(str(selection["selection_path"]))),
         "donor_run_manifest_sha256": donor_run["donor_run_manifest_sha256"],
+        **expected_scope,
         "events": events,
     }
 
@@ -404,7 +429,7 @@ def freeze_vistory_donor_map(
     donor_run_manifest_path: Path,
     output_root: Path,
 ) -> dict[str, object]:
-    """Validate three completed donor jobs and atomically publish one event-level map."""
+    """Validate completed scoped donor jobs and atomically publish one event-level map."""
     target_inputs_path = Path(target_inputs_path).resolve()
     selection_path = Path(selection_path).resolve()
     donor_run_manifest_path = Path(donor_run_manifest_path).resolve()
