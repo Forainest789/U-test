@@ -1,6 +1,6 @@
 # ViStoryBench Song-Only Exploratory Pilot Design
 
-Status: approved design; awaiting written-spec review
+Status: approved
 
 ## Goal
 

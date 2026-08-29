@@ -1063,6 +1063,311 @@ print("Q*:                         descriptive or unavailable", sorted(qstar))
 PY
 ```
 
+### Song Yuchen exploratory four-arm pilot
+
+This pilot reuses the complete frozen three-event target inputs and complete donor survey,
+but freezes and generates only `vistory79_song_yuchen_s2_s8` at target seed `0`. It is
+explicitly scoped as `exploratory_single_event`: it is not part of the primary three-event
+aggregate. Its SlotMem geometry remains layers `0..15`, 64 slots, and semantic top-8/64.
+Q* is `not_available`; stop after the four preflight arms and do not run `full`, `qstar`,
+or aggregate analysis. Run in the already-active `slotmem` environment; no environment
+activation or package installation is required.
+
+Start from the existing frozen data and configuration. The audited survey hash includes
+the absolute source paths frozen in the original Gate-B target tree, so locate that tree
+by its raw manifest hash and validate it in place. The whole gate below returns non-zero
+on any failed assertion; stop there and restore the original Gate-B inputs. Do not rebuild
+them under another directory or accept a changed survey hash. Use a separate fresh
+no-clobber output root for this pilot. If that root already exists, choose a new versioned
+name and preserve the old run:
+
+```bash
+cd /data/long_term_data/shixiao/videomem/U-test-vistory-8f0b728
+
+export VM_ROOT=/data/long_term_data/shixiao/videomem
+export VISTORY_REV=92f845531b67e97a67ae04b256ec5d8c020e8341
+export VISTORY_DATA="$VM_ROOT/datasets/ViStoryBench-full-$VISTORY_REV/ViStoryBench"
+export BASE_ARGS="$PWD/runs/vistorybench_reappearance_v1/config/base_inference_args.json"
+export PLATFORM_MANIFEST="$PWD/platform.manifest.json"
+export SONG_EVENT=vistory79_song_yuchen_s2_s8
+export SONG_ROOT="$PWD/runs/vistorybench_song_yuchen_exploratory_v1"
+
+TARGET_INPUTS="$(python - <<'PY'
+import hashlib
+import os
+from pathlib import Path
+
+from utest.vistory_donor_bundle import validate_target_inputs
+
+expected = "66c3f38c54924f06d375345637eaf8c5d36a081440ea7c55014bd5797010e89d"
+matches = []
+for path in sorted(Path("runs").rglob("manifest.json")):
+    try:
+        if hashlib.sha256(path.read_bytes()).hexdigest() != expected:
+            continue
+        validated = validate_target_inputs(path.resolve())
+    except (OSError, KeyError, TypeError, ValueError):
+        continue
+    matches.append((path.resolve(), validated))
+assert len(matches) == 1, (
+    "expected one validated Gate-B target manifest, found: "
+    f"{[path for path, _validated in matches]}"
+)
+matched_path, inputs = matches[0]
+actual_event_ids = {row["event_id"] for row in inputs["events"]}
+expected_event_ids = {
+    "vistory79_song_yuchen_s2_s8",
+    "vistory42_bella_s15_s21",
+    "vistory16_chen_father_s1_s10",
+}
+assert len(inputs["events"]) == 3
+assert actual_event_ids == expected_event_ids, (actual_event_ids, expected_event_ids)
+for name in ("VISTORY_DATA", "BASE_ARGS", "PLATFORM_MANIFEST"):
+    dependency = Path(os.environ[name])
+    assert dependency.exists(), f"missing {name}: {dependency}"
+root = Path(os.environ["SONG_ROOT"])
+assert not root.exists(), f"fresh output root required: {root}"
+print(matched_path)
+PY
+)" && export TARGET_INPUTS
+```
+
+Regenerate the complete survey from the validated original target tree and check its
+audited hash before using the checked-in three-row Song review:
+
+```bash
+mkdir -p "$SONG_ROOT"
+
+python tools/prepare_vistory_donors.py survey \
+  --data-root "$VISTORY_DATA" \
+  --targets "$TARGET_INPUTS" \
+  --output "$SONG_ROOT/survey.json"
+
+python - <<'PY'
+import hashlib
+import os
+from pathlib import Path
+
+path = Path(os.environ["SONG_ROOT"]) / "survey.json"
+actual = hashlib.sha256(path.read_bytes()).hexdigest()
+expected = "8d70b19a1b8c4c293495e5e2b853d54e4431ccd8bc9aa38c9f50d5c914baad57"
+assert actual == expected, (actual, expected)
+print("survey sha256:", actual)
+PY
+
+python tools/prepare_vistory_donors.py freeze \
+  --data-root "$VISTORY_DATA" \
+  --targets "$TARGET_INPUTS" \
+  --survey "$SONG_ROOT/survey.json" \
+  --review "$PWD/utest/events/vistorybench_song_yuchen_donor_review_v1.json" \
+  --output-root "$SONG_ROOT/selection" \
+  --exploratory-target-event-id "$SONG_EVENT"
+
+python - <<'PY'
+import json
+import os
+from pathlib import Path
+
+selection = json.loads(
+    (Path(os.environ["SONG_ROOT"]) / "selection/selection.json").read_text()
+)
+assert selection["protocol_scope"] == "exploratory_single_event"
+assert selection["target_event_ids"] == [os.environ["SONG_EVENT"]]
+assert len(selection["events"]) == 1
+assert selection["events"][0]["candidate_id"] == (
+    "ad04290d1a7ddd4691b8337c3a71afca0e8daee38a706be8c5a40f83bb725938"
+)
+print("frozen donor:", selection["events"][0]["donor_entity_uid"])
+PY
+```
+
+Build the existing donor manifest, verify that its exploratory scope contains one job,
+then use the combined `resume` driver to generate its prefix and payload:
+
+```bash
+python -m utest.vistory_donor_harness dry-run \
+  --selection "$SONG_ROOT/selection/selection.json" \
+  --output "$SONG_ROOT/donor_run" \
+  --base-inference-args "$BASE_ARGS" \
+  --platform-manifest "$PLATFORM_MANIFEST"
+
+python - <<'PY'
+import json
+import os
+from pathlib import Path
+
+run = json.loads(
+    (Path(os.environ["SONG_ROOT"]) / "donor_run/run_manifest.json").read_text()
+)
+assert run["protocol_scope"] == "exploratory_single_event"
+assert run["target_event_ids"] == [os.environ["SONG_EVENT"]]
+assert len(run["jobs"]) == 1
+assert run["jobs"][0]["target_event_id"] == os.environ["SONG_EVENT"]
+assert run["jobs"][0]["donor_seed"] == 0
+print("donor jobs: 1; donor seed: 0")
+PY
+
+CUDA_VISIBLE_DEVICES=0 \
+DUAL_EXPERT_LOAD_MODE=active \
+DUAL_EXPERT_MANAGE_AUX_MODELS=1 \
+python -m utest.vistory_donor_harness resume \
+  --manifest "$SONG_ROOT/donor_run/run_manifest.json"
+```
+
+Freeze the validated one-event donor map, then build the normal nine-block target
+manifest. The partial map makes all three Song seeds ready while Bella and Chen remain
+blocked; execution is narrowed later to Song seed `0`.
+
+```bash
+python tools/freeze_vistory_donor_map.py \
+  --targets "$TARGET_INPUTS" \
+  --selection "$SONG_ROOT/selection/selection.json" \
+  --donor-run-manifest "$SONG_ROOT/donor_run/run_manifest.json" \
+  --output-root "$SONG_ROOT/donor_bundle"
+
+python -m utest.subject_reappearance_harness dry-run \
+  --inputs "$TARGET_INPUTS" \
+  --output "$SONG_ROOT/target_run" \
+  --base-inference-args "$BASE_ARGS" \
+  --platform-manifest "$PLATFORM_MANIFEST" \
+  --donor-map "$SONG_ROOT/donor_bundle/donor_map.json"
+
+python - <<'PY'
+import json
+import os
+from pathlib import Path
+
+run = json.loads(
+    (Path(os.environ["SONG_ROOT"]) / "target_run/run_manifest.json").read_text()
+)
+blocks = run["blocks"]
+assert len(blocks) == 9
+ready = [
+    (row["event_id"], row["seed"])
+    for row in blocks
+    if row["commands"]["preflight"]["status"] == "deferred_until_prefix"
+]
+assert ready == [(os.environ["SONG_EVENT"], seed) for seed in (0, 1, 2)]
+selected = [
+    row
+    for row in blocks
+    if row["event_id"] == os.environ["SONG_EVENT"] and row["seed"] == 0
+]
+assert len(selected) == 1
+assert selected[0]["preflight_arms"] == [
+    "full_correct", "no_memory", "zero_path", "wrong_subject"
+]
+assert selected[0]["qstar"] == {
+    "status": "not_available", "reason": "independent_teacher_missing"
+}
+print("target blocks: 9; selected execution block: Song seed 0")
+PY
+```
+
+Generate only the selected prefix. Inspect the printed source video and publish the single
+qualification record only after confirming that Song Yuchen is visible, distinguishable,
+and unambiguous:
+
+```bash
+CUDA_VISIBLE_DEVICES=0 \
+DUAL_EXPERT_LOAD_MODE=active \
+DUAL_EXPERT_MANAGE_AUX_MODELS=1 \
+python -m utest.subject_reappearance_harness prefix \
+  --manifest "$SONG_ROOT/target_run/run_manifest.json" \
+  --event-id "$SONG_EVENT" \
+  --seed 0
+
+python - <<'PY'
+import json
+import os
+from pathlib import Path
+
+run = json.loads(
+    (Path(os.environ["SONG_ROOT"]) / "target_run/run_manifest.json").read_text()
+)
+row = next(
+    row for row in run["blocks"]
+    if row["event_id"] == os.environ["SONG_EVENT"] and row["seed"] == 0
+)
+event = json.loads(Path(row["event_json"]).read_text())
+source = (
+    Path(row["block_dir"])
+    / "prefix/prefix_generation"
+    / f"chunk_{int(event['source_chunk_idx']):03d}.mp4"
+)
+assert source.is_file(), source
+print("review source video:", source)
+print("qualification record:", row["source_qualification"])
+PY
+```
+
+After that visual review passes, publish the qualification and execute only the existing
+probe and four-arm preflight for Song seed `0`:
+
+```bash
+python - <<'PY'
+import json
+import os
+from pathlib import Path
+
+run = json.loads(
+    (Path(os.environ["SONG_ROOT"]) / "target_run/run_manifest.json").read_text()
+)
+row = next(
+    row for row in run["blocks"]
+    if row["event_id"] == os.environ["SONG_EVENT"] and row["seed"] == 0
+)
+path = Path(row["source_qualification"])
+path.parent.mkdir(parents=True, exist_ok=True)
+with path.open("x", encoding="utf-8") as handle:
+    json.dump({"status": "passed"}, handle)
+    handle.write("\n")
+print("published reviewed qualification:", path)
+PY
+
+python -m utest.subject_reappearance_harness probe \
+  --manifest "$SONG_ROOT/target_run/run_manifest.json" \
+  --event-id "$SONG_EVENT" \
+  --seed 0
+
+CUDA_VISIBLE_DEVICES=0 \
+DUAL_EXPERT_LOAD_MODE=active \
+DUAL_EXPERT_MANAGE_AUX_MODELS=1 \
+python -m utest.subject_reappearance_harness preflight \
+  --manifest "$SONG_ROOT/target_run/run_manifest.json" \
+  --event-id "$SONG_EVENT" \
+  --seed 0
+
+python - <<'PY'
+import json
+import os
+from pathlib import Path
+
+run = json.loads(
+    (Path(os.environ["SONG_ROOT"]) / "target_run/run_manifest.json").read_text()
+)
+row = next(
+    row for row in run["blocks"]
+    if row["event_id"] == os.environ["SONG_EVENT"] and row["seed"] == 0
+)
+root = Path(row["block_dir"]) / "preflight"
+report = json.loads((root / "validation.json").read_text())
+assert report["status"] == "passed"
+assert report["arms"] == [
+    "full_correct", "no_memory", "zero_path", "wrong_subject"
+]
+videos = sorted((root / "arms").rglob("*.mp4"))
+assert len(videos) == 4, videos
+print("validated four-arm pilot:", root / "validation.json")
+for video in videos:
+    print(video)
+PY
+```
+
+Stop here. Preserve the four videos and `validation.json` for human visual review. Do not
+invoke `full`, `qstar`, or `tools/analyze_subject_reappearance.py` for this exploratory
+run.
+
 ## Legacy development setup
 
 This is not part of the ViStoryBench workflow above, which reuses the active `slotmem`
