@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from collections.abc import Mapping
@@ -85,14 +86,40 @@ def _require_sha256(value: object, label: str, *, uppercase: bool) -> str:
     return value
 
 
-def _read_json_object(path: Path, label: str) -> dict:
+def _parse_json_object(text: str, path: Path, label: str) -> dict:
     try:
-        value = json.loads(Path(path).read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as error:
+        value = json.loads(text)
+    except json.JSONDecodeError as error:
         raise ValueError(f"invalid {label}: {path}: {error}") from error
     if not isinstance(value, dict):
         raise ValueError(f"{label} must be a JSON object")
     return value
+
+
+def _read_json_object(path: Path, label: str) -> dict:
+    try:
+        text = Path(path).read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as error:
+        raise ValueError(f"invalid {label}: {path}: {error}") from error
+    return _parse_json_object(text, path, label)
+
+
+def _read_checked_in_json_object(path: Path, label: str, expected_sha: str) -> dict:
+    try:
+        raw = Path(path).read_bytes()
+    except OSError as error:
+        raise ValueError(f"invalid checked-in {label}: {path}: {error}") from error
+    actual_sha = hashlib.sha256(raw).hexdigest()
+    if actual_sha != expected_sha:
+        raise ValueError(
+            f"checked-in {label} SHA-256 mismatch: "
+            f"expected {expected_sha}, got {actual_sha}"
+        )
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise ValueError(f"invalid checked-in {label}: {path}: {error}") from error
+    return _parse_json_object(text, path, f"checked-in {label}")
 
 
 def _load_checked_in_frozen_authority() -> tuple[dict, dict, dict]:
@@ -101,18 +128,10 @@ def _load_checked_in_frozen_authority() -> tuple[dict, dict, dict]:
         ("survey", FROZEN_SURVEY_PATH, FROZEN_SURVEY_SHA256),
         ("review", FROZEN_REVIEW_PATH, FROZEN_REVIEW_SHA256),
     )
-    loaded = []
-    for label, path, expected_sha in artifacts:
-        try:
-            actual_sha = sha256_file(path)
-        except OSError as error:
-            raise ValueError(f"invalid checked-in {label}: {path}: {error}") from error
-        if actual_sha != expected_sha:
-            raise ValueError(
-                f"checked-in {label} SHA-256 mismatch: "
-                f"expected {expected_sha}, got {actual_sha}"
-            )
-        loaded.append(_read_json_object(path, f"checked-in {label}"))
+    loaded = [
+        _read_checked_in_json_object(path, label, expected_sha)
+        for label, path, expected_sha in artifacts
+    ]
     selection, survey, review = loaded
     replacement = selection.get("replacement_selection")
     if not isinstance(replacement, Mapping):

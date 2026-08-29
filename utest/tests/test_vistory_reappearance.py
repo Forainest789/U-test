@@ -348,6 +348,45 @@ def test_default_authority_rejects_compact_rewritten_checked_in_bytes(
         load_frozen_selection()
 
 
+def test_default_authority_hashes_and_parses_the_same_byte_read(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    authority_root = Path(__file__).parents[1] / "events"
+    copied: dict[str, Path] = {}
+    for source_name, attribute in (
+        ("vistorybench_reappearance_v1.json", "FROZEN_SELECTION_PATH"),
+        ("vistorybench_replacement_target_survey_v1.json", "FROZEN_SURVEY_PATH"),
+        ("vistorybench_replacement_target_review_v1.json", "FROZEN_REVIEW_PATH"),
+    ):
+        target = tmp_path / source_name
+        shutil.copyfile(authority_root / source_name, target)
+        copied[attribute] = target
+        monkeypatch.setattr(reappearance_module, attribute, target)
+
+    selection_path = copied["FROZEN_SELECTION_PATH"]
+
+    def swap_after_hash(path: Path) -> str:
+        digest = sha256_file(path)
+        if Path(path) == selection_path:
+            forged = json.loads(selection_path.read_text(encoding="utf-8"))
+            forged["events"][1].update(
+                story_id="41",
+                event_id="vistory41_mallory_s15_s21",
+                character_name="Mallory",
+            )
+            forged["replacement_selection"]["selected_event_id"] = forged["events"][1][
+                "event_id"
+            ]
+            selection_path.write_text(json.dumps(forged), encoding="utf-8")
+        return digest
+
+    monkeypatch.setattr(reappearance_module, "sha256_file", swap_after_hash)
+
+    selection = load_frozen_selection()
+
+    assert selection["events"][1]["event_id"] == "vistory42_bella_s15_s21"
+
+
 def test_cli_prepares_dataset_from_explicit_selection(tmp_path, capsys) -> None:
     data_root = tmp_path / "data"
     story_path = data_root / "fixture" / "story.json"
