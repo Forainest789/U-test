@@ -491,19 +491,17 @@ untouched:
 ```bash
 export VISTORY_SNAPSHOT_ROOT="$VM_ROOT/datasets/ViStoryBench-full-$VISTORY_REV"
 
-python - <<'PY'
+python - <<'PY' &&
 import os
 from pathlib import Path
 
 root = Path(os.environ["VISTORY_SNAPSHOT_ROOT"])
 assert not root.exists(), f"refusing to overwrite existing snapshot root: {root}"
 PY
-
 hf download ViStoryBench/ViStoryBench \
   --repo-type dataset \
   --revision "$VISTORY_REV" \
-  --local-dir "$VISTORY_SNAPSHOT_ROOT"
-
+  --local-dir "$VISTORY_SNAPSHOT_ROOT" &&
 export VISTORY_DATA="$VISTORY_SNAPSHOT_ROOT/ViStoryBench"
 ```
 
@@ -614,12 +612,13 @@ PY
 
 Create the strict review skeleton once. It contains one row for every surveyed candidate
 and deliberately sets every `approved` value to `false`; this command never approves a
-donor. A human must replace the four `REVIEW_REQUIRED` presentation/colour values, set
-both visibility booleans from the official reference and prompts, and replace the
-reviewer placeholder with their non-empty name. Keep `tie_group` as JSON `null` for a
+donor. The four required presentation/colour strings and `reviewer` start blank so the
+strict validator cannot mistake placeholders for completed human review. A human must
+fill all five strings and set both visibility booleans from the official reference and
+prompts. Keep `tie_group` as JSON `null` for a
 single approval; multiple approvals for one target require the same explicitly reviewed,
 non-empty tie-group string. Approve exactly one candidate per target unless declaring
-that tie. The strict freeze rejects missing rows, placeholders that leave zero approvals,
+that tie. The strict freeze rejects missing rows, blank required strings,
 presentation/colour mismatches, invisible approved donors, or stale survey provenance.
 
 ```bash
@@ -640,28 +639,49 @@ review = {
         {
             "target_event_id": row["target_event_id"],
             "candidate_id": row["candidate_id"],
-            "target_presentation_class": "REVIEW_REQUIRED",
-            "donor_presentation_class": "REVIEW_REQUIRED",
-            "target_dominant_colour": "REVIEW_REQUIRED",
-            "donor_dominant_colour": "REVIEW_REQUIRED",
+            "target_presentation_class": "",
+            "donor_presentation_class": "",
+            "target_dominant_colour": "",
+            "donor_dominant_colour": "",
             "donor_source_visible": False,
             "donor_read_check_visible": False,
             "approved": False,
             "tie_group": None,
-            "reviewer": "REVIEW_REQUIRED",
+            "reviewer": "",
         }
         for row in survey["candidates"]
     ],
 }
+required_strings = (
+    "target_presentation_class",
+    "donor_presentation_class",
+    "target_dominant_colour",
+    "donor_dominant_colour",
+    "reviewer",
+)
 assert len(review["reviews"]) == len(survey["candidates"])
 assert all(row["approved"] is False for row in review["reviews"])
+assert all(row["donor_source_visible"] is False for row in review["reviews"])
+assert all(row["donor_read_check_visible"] is False for row in review["reviews"])
+assert all(row["tie_group"] is None for row in review["reviews"])
+assert all(
+    row[field] == "" for row in review["reviews"] for field in required_strings
+)
 path = root / "review.json"
 with path.open("x", encoding="utf-8") as handle:
     json.dump(review, handle, ensure_ascii=False, indent=2, sort_keys=True)
     handle.write("\n")
 print(path.resolve())
 PY
+```
 
+**STOP for manual donor review.** Inspect every candidate, fill every required string and
+visibility decision, and set approvals/tie groups according to the rules above. Do not
+paste or run the freeze command until the completed `review.json` has been inspected.
+
+After that manual review is complete, freeze the CPU-only donor selection:
+
+```bash
 python tools/prepare_vistory_donors.py freeze \
   --data-root "$VISTORY_DATA" \
   --targets "$EXP_ROOT/inputs/manifest.json" \
