@@ -496,7 +496,8 @@ import os
 from pathlib import Path
 
 root = Path(os.environ["VISTORY_SNAPSHOT_ROOT"])
-assert not root.exists(), f"refusing to overwrite existing snapshot root: {root}"
+if root.exists():
+    raise FileExistsError(f"refusing to overwrite existing snapshot root: {root}")
 PY
 hf download ViStoryBench/ViStoryBench \
   --repo-type dataset \
@@ -552,7 +553,8 @@ source = Path(os.environ["M0_BASE_ARGS_YAML"])
 root = Path(os.environ["EXP_ROOT"])
 target = Path(os.environ["BASE_ARGS_JSON"])
 assert source.is_file(), source
-assert not root.exists(), f"refusing to reuse formal output root: {root}"
+if root.exists():
+    raise FileExistsError(f"refusing to reuse formal output root: {root}")
 payload = yaml.safe_load(source.read_text(encoding="utf-8"))
 argv = payload["argv"]
 frozen_args = normalized_frozen_args(argv)
@@ -756,8 +758,10 @@ from pathlib import Path
 source = Path(os.environ["DONOR_RUN_ROOT"])
 stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S.%fZ")
 failed = source.with_name(f"{source.name}.failed-{stamp}")
-assert source.is_dir(), source
-assert not failed.exists(), failed
+if not source.is_dir():
+    raise NotADirectoryError(source)
+if failed.exists():
+    raise FileExistsError(failed)
 source.rename(failed)
 print("preserved partial donor run:", failed)
 PY
