@@ -471,7 +471,7 @@ export STAGE1_HIGH_CKPT_PATH="$CKPT_ROOT/ckpt/stage1/stage1_high.pt"
 export STAGE2_LOW_CKPT_PATH="$CKPT_ROOT/ckpt/stage2/stage2_low.pt"
 export STAGE2_HIGH_CKPT_PATH="$CKPT_ROOT/ckpt/stage2/stage2_high.pt"
 export PLATFORM_MANIFEST="$REPO_ROOT/platform.manifest.json"
-export VISTORY_DATASET_REVISION=92f845531b67e97a67ae04b256ec5d8c020e8341
+export VISTORY_REV=92f845531b67e97a67ae04b256ec5d8c020e8341
 ```
 
 After the final reviewed commit is pulled, refresh the platform manifest once without
@@ -489,7 +489,7 @@ but `--local-dir` itself must not exist before this command. Leave every older d
 untouched:
 
 ```bash
-export VISTORY_SNAPSHOT_ROOT="$VM_ROOT/datasets/ViStoryBench-92f845531b67e97a67ae04b256ec5d8c020e8341"
+export VISTORY_SNAPSHOT_ROOT="$VM_ROOT/datasets/ViStoryBench-full-$VISTORY_REV"
 
 python - <<'PY'
 import os
@@ -501,7 +501,7 @@ PY
 
 hf download ViStoryBench/ViStoryBench \
   --repo-type dataset \
-  --revision "$VISTORY_DATASET_REVISION" \
+  --revision "$VISTORY_REV" \
   --local-dir "$VISTORY_SNAPSHOT_ROOT"
 
 export VISTORY_DATA="$VISTORY_SNAPSHOT_ROOT/ViStoryBench"
@@ -524,45 +524,15 @@ print("complete frozen ViStoryBench tree:", root.resolve())
 PY
 ```
 
-**Current formal status: BLOCKED at the zero-GPU geometry gate.** The measured M0 argv
-uses 64 slots, while the frozen protocol requires MemoryEncoder layers `0..15` and 32
-slots. The following command is expected to reject the current server M0 artifact and
-does not launch inference:
+The measured M0 argv is the checkpoint-compatible base configuration. The zero-GPU gate
+below proves that its last-option-wins values are MemoryEncoder layers `0..15` and 64
+slots, and that the formal subject-subspace contract is top-8/64 with fraction `0.125`.
+It also publishes the exact argv as JSON under a fresh experiment root. Do not edit the
+recorded argv to manufacture a different geometry.
 
 ```bash
 export M0_BASE_ARGS_YAML="$REPO_ROOT/runs/m0a_slotmem_stage2/inference_args.yaml"
-
-python - <<'PY'
-import os
-from pathlib import Path
-import yaml
-
-from utest.prefix_contract import (
-    normalized_frozen_args,
-    validate_slotmem_memory_encoder_geometry,
-)
-
-payload = yaml.safe_load(
-    Path(os.environ["M0_BASE_ARGS_YAML"]).read_text(encoding="utf-8")
-)
-validate_slotmem_memory_encoder_geometry(normalized_frozen_args(payload["argv"]))
-PY
-```
-
-Do **not** edit only `--slotmem_memory_encoder_slots 64` to `32`. Variable-slot
-compatibility of the existing checkpoints has not been established. Every command below
-this point is conditional and must run only after an independently validated,
-32-slot-compatible config/checkpoint has been supplied. There is no fabricated 32-slot
-artifact in this repository.
-
-After that independent validation, point `SLOTMEM32_BASE_ARGS_YAML` at its real recorded
-argv. Use a new v2 root; the server's existing v1 evidence remains untouched. The checks
-below refuse both an empty/missing source and any pre-existing formal output root, validate
-last-option-wins geometry, and only then publish the JSON argv:
-
-```bash
-export EXP_ROOT="$REPO_ROOT/runs/vistorybench_reappearance_v2_32slot"
-export BASE_ARGS_YAML="$SLOTMEM32_BASE_ARGS_YAML"
+export EXP_ROOT="$REPO_ROOT/runs/vistorybench_reappearance_top8_64_v1"
 export BASE_ARGS_JSON="$EXP_ROOT/config/base_inference_args.json"
 
 python - <<'PY'
@@ -572,26 +542,39 @@ from pathlib import Path
 import yaml
 
 from utest.prefix_contract import (
+    FROZEN_MEMORY_ENCODER_LAYERS,
+    FROZEN_MEMORY_ENCODER_SLOTS,
+    FROZEN_SUBJECT_SUBSPACE_BUDGET,
+    FROZEN_SUBJECT_SUBSPACE_FRACTION,
     normalized_frozen_args,
     validate_slotmem_memory_encoder_geometry,
 )
 
-source_text = os.environ.get("BASE_ARGS_YAML", "")
-assert source_text, "SLOTMEM32_BASE_ARGS_YAML must name a real validated artifact"
-source = Path(source_text)
+source = Path(os.environ["M0_BASE_ARGS_YAML"])
 root = Path(os.environ["EXP_ROOT"])
 target = Path(os.environ["BASE_ARGS_JSON"])
 assert source.is_file(), source
 assert not root.exists(), f"refusing to reuse formal output root: {root}"
-assert not target.exists(), f"refusing to overwrite base argv: {target}"
 payload = yaml.safe_load(source.read_text(encoding="utf-8"))
 argv = payload["argv"]
-validate_slotmem_memory_encoder_geometry(normalized_frozen_args(argv))
+frozen_args = normalized_frozen_args(argv)
+layers, slots = validate_slotmem_memory_encoder_geometry(frozen_args)
+assert layers == FROZEN_MEMORY_ENCODER_LAYERS == tuple(range(16))
+assert slots == FROZEN_MEMORY_ENCODER_SLOTS == 64
+assert FROZEN_SUBJECT_SUBSPACE_BUDGET == 8
+assert FROZEN_SUBJECT_SUBSPACE_FRACTION == 0.125
 target.parent.mkdir(parents=True)
 with target.open("x", encoding="utf-8") as handle:
     json.dump({"argv": argv}, handle, indent=2)
     handle.write("\n")
-print(target.resolve())
+print("base argv:", target.resolve())
+print("MemoryEncoder layers:", layers)
+print("MemoryEncoder slots:", slots)
+print(
+    "subject-subspace budget/fraction:",
+    FROZEN_SUBJECT_SUBSPACE_BUDGET,
+    FROZEN_SUBJECT_SUBSPACE_FRACTION,
+)
 PY
 ```
 
@@ -629,10 +612,15 @@ for row in survey["candidates"]:
 PY
 ```
 
-Create the strict review skeleton once. A human must replace the placeholder classes,
-record both visibility decisions, review every eligible candidate, and approve exactly
-one candidate per target (or declare one common non-empty `tie_group` for an explicit
-tie). Do not set visibility to true without inspecting the official images/prompts.
+Create the strict review skeleton once. It contains one row for every surveyed candidate
+and deliberately sets every `approved` value to `false`; this command never approves a
+donor. A human must replace the four `REVIEW_REQUIRED` presentation/colour values, set
+both visibility booleans from the official reference and prompts, and replace the
+reviewer placeholder with their non-empty name. Keep `tie_group` as JSON `null` for a
+single approval; multiple approvals for one target require the same explicitly reviewed,
+non-empty tie-group string. Approve exactly one candidate per target unless declaring
+that tie. The strict freeze rejects missing rows, placeholders that leave zero approvals,
+presentation/colour mismatches, invisible approved donors, or stale survey provenance.
 
 ```bash
 python - <<'PY'
@@ -660,11 +648,13 @@ review = {
             "donor_read_check_visible": False,
             "approved": False,
             "tie_group": None,
-            "reviewer": "human-review-required",
+            "reviewer": "REVIEW_REQUIRED",
         }
         for row in survey["candidates"]
     ],
 }
+assert len(review["reviews"]) == len(survey["candidates"])
+assert all(row["approved"] is False for row in review["reviews"])
 path = root / "review.json"
 with path.open("x", encoding="utf-8") as handle:
     json.dump(review, handle, ensure_ascii=False, indent=2, sort_keys=True)
@@ -680,9 +670,14 @@ python tools/prepare_vistory_donors.py freeze \
   --output-root "$EXP_ROOT/donors/selection"
 ```
 
-Build the three-job donor manifest. This is the mandatory zero-GPU protocol gate; a
-missing option, layers other than `0..15`, or an effective slot count other than 32 stops
-here with the actual and expected values in the error:
+**STOP after this CPU-only freeze.** Inspect the complete review and all three frozen
+selection bundles, then obtain explicit user approval of the frozen donor selection.
+Do not build a donor run manifest and do not launch GPU donor generation before that
+approval. Everything below is post-approval only.
+
+After approval, build the three-job donor manifest. This mandatory zero-GPU protocol gate
+rejects a missing option, layers other than `0..15`, or an effective slot count other
+than 64 with the actual and expected values in the error:
 
 ```bash
 export DONOR_RUN_ROOT="$EXP_ROOT/donors/run"
@@ -783,13 +778,41 @@ python -m utest.subject_reappearance_harness dry-run \
   --base-inference-args "$BASE_ARGS_JSON" \
   --platform-manifest "$PLATFORM_MANIFEST" \
   --donor-map "$DONOR_MAP"
+
+python - <<'PY'
+import json
+import os
+from pathlib import Path
+
+run = json.loads(Path(os.environ["TARGET_RUN_MANIFEST"]).read_text(encoding="utf-8"))
+blocks = run["blocks"]
+assert len(blocks) == 9
+assert sorted({block["seed"] for block in blocks}) == [0, 1, 2]
+assert {block["commands"]["preflight"]["status"] for block in blocks} == {
+    "deferred_until_prefix"
+}
+assert {block["commands"]["full"]["status"] for block in blocks} == {
+    "deferred_until_prefix"
+}
+assert {block["qstar"]["status"] for block in blocks} == {"not_available"}
+assert {block["commands"]["qstar"]["status"] for block in blocks} == {
+    "not_available"
+}
+print("formal target blocks: 9; seeds: [0, 1, 2]")
+print("preflight/full: donor-ready and deferred until prefix")
+print("Q*: record-only, independent teacher not available")
+PY
 ```
 
 `--base-inference-args` accepts JSON argv only: either `["--flag","value"]` or
 `{"argv":["--flag","value"]}`. Shell command text is
-rejected. Dry-run records arm and Q* stages as deferred templates; after a validated
-prefix exists, the harness atomically freezes their real argv in each block's
-`stage_commands.json` and executes only that artifact.
+rejected. With the donor payloads and bundle already frozen, dry-run must produce nine
+blocks for seeds `[0, 1, 2]`; `preflight` and `full` are donor-ready but deferred until a
+prefix exists. Q* remains record-only: without an independently frozen teacher map its
+availability status is `not_available`, and it never enters donor selection, ranking,
+mask construction, or injection. After a validated prefix exists, the harness atomically
+freezes real stage argv in each block's `stage_commands.json` and executes only that
+artifact.
 
 Generate all nine target prefixes/captures. Then inspect each block's source chunk and
 write `source_qualification.json` only when the named subject is visible,
@@ -981,7 +1004,7 @@ for donor in donor_map["events"].values():
     pair = json.loads(Path(donor["manifest"]).read_text(encoding="utf-8"))["pairs"][0]
     shapes = pair["slot_shape"]
     assert set(shapes) == {str(layer) for layer in range(16)}
-    assert {shape[0] for shape in shapes.values()} == {32}
+    assert {shape[0] for shape in shapes.values()} == {64}
     assert pair["payload_key"].endswith("|0")
 
 for block in run["blocks"]:
@@ -997,7 +1020,9 @@ for block in run["blocks"]:
     assert {row["layer_group"] for row in mask["layers"]} == {
         "0-4", "5-10", "11-15"
     }
-    assert all(row["slot_count"] == 32 for row in mask["layers"])
+    assert all(row["slot_count"] == 64 for row in mask["layers"])
+    assert all(row["budget"] == 8 for row in mask["layers"])
+    assert all(row["budget_fraction"] == 0.125 for row in mask["layers"])
     assert all(len(row["semantic_top8"]) == 8 for row in mask["layers"])
 
 qstar = {block["qstar"]["status"] for block in run["blocks"]}
@@ -1008,7 +1033,7 @@ print("formal target blocks:       9")
 print("target seeds:               [0, 1, 2]")
 print("donor preflight statuses:   ready")
 print("semantic producer kind:     slotmem_source_semantic_token_scores")
-print("semantic mask cardinality:  8 / 32")
+print("semantic mask cardinality:  8 / 64 (0.125)")
 print("semantic layer groups:      0-4, 5-10, 11-15")
 print("Q*:                         descriptive or unavailable", sorted(qstar))
 PY
