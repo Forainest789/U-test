@@ -16,7 +16,13 @@ from .vistory_donors import (
     enumerate_official_recurrences,
     validate_frozen_vistory_tree,
 )
-from .vistory_reappearance import convert_event
+from .vistory_reappearance import (
+    FROZEN_REVIEW_SHA256,
+    FROZEN_SURVEY_SHA256,
+    _load_checked_in_frozen_authority,
+    convert_event,
+    validate_frozen_selection_payload,
+)
 
 
 EVALUATOR_COMMIT = "b44ec9108668cc2bcc8c5280886b235e9fb8bea9"
@@ -56,8 +62,6 @@ CANDIDATE_FIELDS = {
     "eligible_donor_count",
     "eligible_donor_ids",
 }
-FROZEN_SURVEY_SHA256 = "af44edabe4d70845869ca49fefb18a1c9199c37dd500cf276c37a9cc3c166562"
-FROZEN_REVIEW_SHA256 = "32ded0398440d4b582ecce4c126a6bea8b838a3376d76ddeaaf0ea9bbaecba65"
 
 
 def _read_json(path: Path, label: str) -> dict:
@@ -73,13 +77,6 @@ def _read_json(path: Path, label: str) -> dict:
 def _canonical_sha256(value: object) -> str:
     encoded = json.dumps(
         value, ensure_ascii=False, sort_keys=True, separators=(",", ":")
-    ).encode("utf-8")
-    return hashlib.sha256(encoded).hexdigest()
-
-
-def _artifact_sha256(value: object) -> str:
-    encoded = (
-        json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
     ).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
 
@@ -396,14 +393,16 @@ def validate_frozen_replacement_provenance(
     selection: Mapping, survey: Mapping, review: Mapping
 ) -> None:
     """Validate the reviewed evidence and its exact binding to the frozen replacement."""
+    validated_selection = validate_frozen_selection_payload(selection)
     candidates = _validate_survey(survey)
-    survey_sha = _artifact_sha256(survey)
-    review_sha = _artifact_sha256(review)
-    if survey_sha != FROZEN_SURVEY_SHA256:
+    reviewer = _validated_review_payload(review, FROZEN_SURVEY_SHA256, candidates)
+    checked_selection, checked_survey, checked_review = _load_checked_in_frozen_authority()
+    if validated_selection != checked_selection:
+        raise ValueError("frozen replacement selection does not match checked-in authority")
+    if survey != checked_survey:
         raise ValueError("frozen replacement survey SHA-256 mismatch")
-    if review_sha != FROZEN_REVIEW_SHA256:
+    if review != checked_review:
         raise ValueError("frozen replacement review SHA-256 mismatch")
-    reviewer = _validated_review_payload(review, survey_sha, candidates)
     if len(candidates) != 47:
         raise ValueError("frozen replacement survey must contain exactly 47 candidates")
     dispositions = {
@@ -421,39 +420,7 @@ def validate_frozen_replacement_provenance(
         ),
     )
 
-    if not isinstance(selection, Mapping):
-        raise ValueError("frozen target selection must be a JSON object")
-    if selection.get("schema_version") != 1 or type(selection.get("schema_version")) is not int:
-        raise ValueError("frozen target selection schema_version mismatch")
-    if selection.get("task_id") != TASK_ID:
-        raise ValueError("frozen target selection task_id mismatch")
-    if selection.get("dataset_commit") != VISTORY_DATASET_COMMIT:
-        raise ValueError("frozen target selection dataset_commit mismatch")
-    if selection.get("evaluator_commit") != EVALUATOR_COMMIT:
-        raise ValueError("frozen target selection evaluator_commit mismatch")
-    if selection.get("seeds") != [0, 1, 2] or any(
-        type(seed) is not int for seed in selection.get("seeds", ())
-    ):
-        raise ValueError("frozen target selection seeds mismatch")
-    events = selection.get("events")
-    if not isinstance(events, list) or len(events) != 3:
-        raise ValueError("frozen target selection must contain exactly three events")
-    if any(not isinstance(event, Mapping) for event in events):
-        raise ValueError("frozen target selection events must be JSON objects")
-    retained = (ORIGINAL_EVENTS[0], ORIGINAL_EVENTS[2])
-    for event, expected in zip((events[0], events[2]), retained):
-        event_id, story_id, character_name, source_shot, target_shot = expected
-        if (
-            event.get("event_id"),
-            event.get("story_id"),
-            event.get("character_name"),
-            event.get("source_shot"),
-            event.get("target_shot"),
-        ) != (event_id, story_id, character_name, source_shot, target_shot):
-            raise ValueError("retained frozen event binding mismatch")
-    excluded = {f"{story_id}::{name}" for _, story_id, name, _, _ in ORIGINAL_EVENTS}
-    if f'{events[1].get("story_id")}::{events[1].get("character_name")}' in excluded:
-        raise ValueError("frozen replacement uses an original target identity")
+    events = validated_selection["events"]
 
     expected_event = {
         "story_id": selected["story_id"],
@@ -472,12 +439,12 @@ def validate_frozen_replacement_provenance(
         "eligible_donor_count": selected["eligible_donor_count"],
         "horizon": selected["horizon"],
         "horizon_distance": abs(selected["horizon"] - 12),
-        "survey_sha256": survey_sha,
-        "review_sha256": review_sha,
+        "survey_sha256": FROZEN_SURVEY_SHA256,
+        "review_sha256": FROZEN_REVIEW_SHA256,
         "reviewer": reviewer,
         "dataset_commit": VISTORY_DATASET_COMMIT,
     }
-    if selection.get("replacement_selection") != expected_provenance:
+    if validated_selection.get("replacement_selection") != expected_provenance:
         raise ValueError("frozen replacement provenance mismatch")
 
 

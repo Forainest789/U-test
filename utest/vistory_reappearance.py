@@ -13,6 +13,15 @@ from .prefix_contract import sha256_file
 FROZEN_SELECTION_PATH = (
     Path(__file__).parent / "events" / "vistorybench_reappearance_v1.json"
 )
+FROZEN_SURVEY_PATH = (
+    Path(__file__).parent / "events" / "vistorybench_replacement_target_survey_v1.json"
+)
+FROZEN_REVIEW_PATH = (
+    Path(__file__).parent / "events" / "vistorybench_replacement_target_review_v1.json"
+)
+FROZEN_SELECTION_SHA256 = "1a02af4efe7bfd4f7cfcf096da1b41a2f8d591ac3eb4c683936e16049ab49d6c"
+FROZEN_SURVEY_SHA256 = "af44edabe4d70845869ca49fefb18a1c9199c37dd500cf276c37a9cc3c166562"
+FROZEN_REVIEW_SHA256 = "32ded0398440d4b582ecce4c126a6bea8b838a3376d76ddeaaf0ea9bbaecba65"
 VISTORY_DATASET_COMMIT = "92f845531b67e97a67ae04b256ec5d8c020e8341"
 VISTORY_EVALUATOR_COMMIT = "b44ec9108668cc2bcc8c5280886b235e9fb8bea9"
 VISTORY_TASK_ID = "vistorybench_subject_reappearance_v1"
@@ -76,14 +85,48 @@ def _require_sha256(value: object, label: str, *, uppercase: bool) -> str:
     return value
 
 
-def load_frozen_selection(path: Path | None = None) -> dict:
-    """Load and fail closed on the checked-in three-event authority."""
-    selection_path = FROZEN_SELECTION_PATH if path is None else Path(path)
+def _read_json_object(path: Path, label: str) -> dict:
     try:
-        selection = json.loads(selection_path.read_text(encoding="utf-8"))
+        value = json.loads(Path(path).read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as error:
-        raise ValueError(f"invalid frozen target selection: {selection_path}: {error}") from error
-    if not isinstance(selection, dict):
+        raise ValueError(f"invalid {label}: {path}: {error}") from error
+    if not isinstance(value, dict):
+        raise ValueError(f"{label} must be a JSON object")
+    return value
+
+
+def _load_checked_in_frozen_authority() -> tuple[dict, dict, dict]:
+    artifacts = (
+        ("selection", FROZEN_SELECTION_PATH, FROZEN_SELECTION_SHA256),
+        ("survey", FROZEN_SURVEY_PATH, FROZEN_SURVEY_SHA256),
+        ("review", FROZEN_REVIEW_PATH, FROZEN_REVIEW_SHA256),
+    )
+    loaded = []
+    for label, path, expected_sha in artifacts:
+        try:
+            actual_sha = sha256_file(path)
+        except OSError as error:
+            raise ValueError(f"invalid checked-in {label}: {path}: {error}") from error
+        if actual_sha != expected_sha:
+            raise ValueError(
+                f"checked-in {label} SHA-256 mismatch: "
+                f"expected {expected_sha}, got {actual_sha}"
+            )
+        loaded.append(_read_json_object(path, f"checked-in {label}"))
+    selection, survey, review = loaded
+    replacement = selection.get("replacement_selection")
+    if not isinstance(replacement, Mapping):
+        raise ValueError("checked-in selection replacement_selection must be a JSON object")
+    if replacement.get("survey_sha256") != FROZEN_SURVEY_SHA256:
+        raise ValueError("checked-in selection survey SHA-256 binding mismatch")
+    if replacement.get("review_sha256") != FROZEN_REVIEW_SHA256:
+        raise ValueError("checked-in selection review SHA-256 binding mismatch")
+    return selection, survey, review
+
+
+def validate_frozen_selection_payload(selection: Mapping) -> dict:
+    """Strictly validate one three-event selection payload."""
+    if not isinstance(selection, Mapping):
         raise ValueError("frozen target selection must be a JSON object")
     _require_exact_fields(
         selection,
@@ -164,7 +207,16 @@ def load_frozen_selection(path: Path | None = None) -> dict:
     horizon = events[1]["target_shot"] - events[1]["source_shot"]
     if replacement["horizon"] != horizon or replacement["horizon_distance"] != abs(horizon - 12):
         raise ValueError("replacement_selection horizon binding mismatch")
-    return selection
+    return dict(selection)
+
+
+def load_frozen_selection(path: Path | None = None) -> dict:
+    """Load the frozen authority, including raw-byte checks for the default paths."""
+    if path is None:
+        selection, _, _ = _load_checked_in_frozen_authority()
+    else:
+        selection = _read_json_object(Path(path), "frozen target selection")
+    return validate_frozen_selection_payload(selection)
 
 
 def frozen_target_event_ids(path: Path | None = None) -> frozenset[str]:

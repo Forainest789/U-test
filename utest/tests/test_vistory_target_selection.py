@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -8,6 +9,7 @@ from pathlib import Path
 import pytest
 
 import utest.vistory_target_selection as target_selection_module
+import utest.vistory_reappearance as reappearance_module
 from utest.prefix_contract import sha256_file
 from utest.vistory_target_selection import (
     build_replacement_target_survey,
@@ -84,7 +86,68 @@ def test_frozen_provenance_rejects_a_changed_selected_event() -> None:
     selection, survey, review = _checked_in_replacement_artifacts()
     selection["events"][1]["event_id"] = "forged"
 
-    with pytest.raises(ValueError, match="does not match reviewed winner"):
+    with pytest.raises(ValueError, match="selected event mismatch"):
+        validate_frozen_replacement_provenance(selection, survey, review)
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    [
+        (
+            lambda selection: selection["events"][2].__setitem__("source_shot", True),
+            "shots must be integers",
+        ),
+        (
+            lambda selection: selection["events"][0].__setitem__("story_sha256", "bad"),
+            "story_sha256 must be 64 uppercase hexadecimal digits",
+        ),
+        (
+            lambda selection: selection["events"][0].__setitem__("unexpected", True),
+            "schema mismatch",
+        ),
+    ],
+)
+def test_frozen_provenance_reuses_the_strict_selection_payload_gate(
+    mutation, message: str
+) -> None:
+    selection, survey, review = _checked_in_replacement_artifacts()
+    mutation(selection)
+
+    with pytest.raises(ValueError, match=message):
+        validate_frozen_replacement_provenance(selection, survey, review)
+
+
+@pytest.mark.parametrize(
+    "path_attribute",
+    [
+        "FROZEN_SELECTION_PATH",
+        "FROZEN_SURVEY_PATH",
+        "FROZEN_REVIEW_PATH",
+    ],
+)
+def test_frozen_provenance_rejects_compact_rewritten_authority_bytes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    path_attribute: str,
+) -> None:
+    selection, survey, review = _checked_in_replacement_artifacts()
+    copied: dict[str, Path] = {}
+    for source_name, attribute in (
+        ("vistorybench_reappearance_v1.json", "FROZEN_SELECTION_PATH"),
+        ("vistorybench_replacement_target_survey_v1.json", "FROZEN_SURVEY_PATH"),
+        ("vistorybench_replacement_target_review_v1.json", "FROZEN_REVIEW_PATH"),
+    ):
+        target = tmp_path / source_name
+        shutil.copyfile(EVENTS_ROOT / source_name, target)
+        copied[attribute] = target
+        monkeypatch.setattr(reappearance_module, attribute, target)
+    rewritten = copied[path_attribute]
+    rewritten.write_text(
+        json.dumps(json.loads(rewritten.read_text(encoding="utf-8")), separators=(",", ":")),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="checked-in .* SHA-256 mismatch"):
         validate_frozen_replacement_provenance(selection, survey, review)
 
 

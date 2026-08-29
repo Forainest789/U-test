@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
 
 import pytest
 
+import utest.vistory_reappearance as reappearance_module
 from tools.prepare_slotmem_vistory_reappearance import main
 from utest.prefix_contract import sha256_file
 from utest.vistory_reappearance import (
@@ -310,6 +312,40 @@ def test_frozen_selection_rejects_stale_replacement_binding(tmp_path: Path) -> N
 
     with pytest.raises(ValueError, match="selected event mismatch"):
         load_frozen_selection(_write_mutated_frozen_selection(tmp_path, selection))
+
+
+@pytest.mark.parametrize(
+    "path_attribute",
+    [
+        "FROZEN_SELECTION_PATH",
+        "FROZEN_SURVEY_PATH",
+        "FROZEN_REVIEW_PATH",
+    ],
+)
+def test_default_authority_rejects_compact_rewritten_checked_in_bytes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    path_attribute: str,
+) -> None:
+    authority_root = Path(__file__).parents[1] / "events"
+    copied: dict[str, Path] = {}
+    for source_name, attribute in (
+        ("vistorybench_reappearance_v1.json", "FROZEN_SELECTION_PATH"),
+        ("vistorybench_replacement_target_survey_v1.json", "FROZEN_SURVEY_PATH"),
+        ("vistorybench_replacement_target_review_v1.json", "FROZEN_REVIEW_PATH"),
+    ):
+        target = tmp_path / source_name
+        shutil.copyfile(authority_root / source_name, target)
+        copied[attribute] = target
+        monkeypatch.setattr(reappearance_module, attribute, target, raising=False)
+    rewritten = copied[path_attribute]
+    rewritten.write_text(
+        json.dumps(json.loads(rewritten.read_text(encoding="utf-8")), separators=(",", ":")),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="checked-in .* SHA-256 mismatch"):
+        load_frozen_selection()
 
 
 def test_cli_prepares_dataset_from_explicit_selection(tmp_path, capsys) -> None:
