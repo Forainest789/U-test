@@ -410,6 +410,147 @@ def _dry_run_manifest(tmp_path: Path) -> tuple[Path, dict]:
     return path, json.loads(path.read_text(encoding="utf-8"))
 
 
+def _song_only_donor_map(tmp_path: Path, inputs: Path) -> tuple[Path, str]:
+    selection = json.loads(inputs.read_text(encoding="utf-8"))
+    event_id = "vistory79_song_yuchen_s2_s8"
+    assert event_id in {row["event_id"] for row in selection["events"]}
+    event = json.loads(
+        (inputs.parent / event_id / "event.json").read_text(encoding="utf-8")
+    )
+    donor_layers = {str(layer): torch.zeros(64, 3) for layer in range(16)}
+    donor_path = tmp_path / "song_donor.pt"
+    torch.save(
+        {
+            "format": "slotmem_donor_payload_v2",
+            "event": {
+                "story_id": "donor",
+                "entity_uid": "donor::Colonel Cromarty",
+                "character_name": "Colonel Cromarty",
+            },
+            "payloads": {
+                "Colonel Cromarty|0": {
+                    "__layerwise__": True,
+                    LAYERS_KEY: donor_layers,
+                }
+            },
+        },
+        donor_path,
+    )
+    donor_manifest = tmp_path / "song_donor.json"
+    donor_manifest.write_text(
+        json.dumps(
+            {
+                "pairs": [
+                    {
+                        "target_story_id": event["story_id"],
+                        "target_entity_uid": event["entity_uid"],
+                        "donor_story_id": "donor",
+                        "donor_entity_uid": "donor::Colonel Cromarty",
+                        "payload_path": str(donor_path.resolve()),
+                        "payload_sha256": sha256_file(donor_path),
+                        "payload_key": "Colonel Cromarty|0",
+                        "coarse_class": "person",
+                        "colour": "black",
+                        "character_count": 1,
+                        "source_visible": True,
+                        "gap_bucket": "long",
+                        "slot_shape": {layer: [64, 3] for layer in donor_layers},
+                        "selection_seed": 0,
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    donor_map = tmp_path / "song_only_donor_map.json"
+    donor_map.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "protocol_scope": "exploratory_single_event",
+                "target_event_ids": [event_id],
+                "events": {
+                    event_id: {
+                        "payload": str(donor_path.resolve()),
+                        "manifest": str(donor_manifest.resolve()),
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    return donor_map, event_id
+
+
+def test_song_only_donor_keeps_nine_blocks_and_selects_only_song_seed_zero(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    inputs = _prepared_inputs(tmp_path)
+    donor_map, song_event_id = _song_only_donor_map(tmp_path, inputs)
+    base = tmp_path / "args.json"
+    base.write_text(json.dumps({"argv": VALID_BASE_ARGV}), encoding="utf-8")
+    platform = tmp_path / "platform.json"
+    platform.write_text("{}", encoding="utf-8")
+    output = tmp_path / "run"
+
+    assert main([
+        "dry-run", "--inputs", str(inputs), "--output", str(output),
+        "--base-inference-args", str(base), "--platform-manifest", str(platform),
+        "--donor-map", str(donor_map), "--python", "python",
+    ]) == 0
+
+    path = output / "run_manifest.json"
+    manifest = json.loads(path.read_text(encoding="utf-8"))
+    assert len(manifest["blocks"]) == 9
+    song_rows = [row for row in manifest["blocks"] if row["event_id"] == song_event_id]
+    blocked_rows = [row for row in manifest["blocks"] if row["event_id"] != song_event_id]
+    assert len(song_rows) == 3
+    assert len(blocked_rows) == 6
+    assert [row["seed"] for row in song_rows] == [0, 1, 2]
+    assert {row["event_id"] for row in blocked_rows} == {
+        "vistory42_bella_s15_s21",
+        "vistory16_chen_father_s1_s10",
+    }
+    for stage in ("preflight", "full"):
+        assert all(
+            row["commands"][stage]["status"] == "deferred_until_prefix"
+            for row in song_rows
+        )
+        assert all(
+            row["commands"][stage]["status"] == "blocked_missing_donor"
+            for row in blocked_rows
+        )
+    assert all(
+        row["qstar"]
+        == {"status": "not_available", "reason": "independent_teacher_missing"}
+        and row["commands"]["qstar"]["status"] == "not_available"
+        for row in manifest["blocks"]
+    )
+
+    selected = next(row for row in song_rows if row["seed"] == 0)
+    calls = []
+
+    def gpu_boundary(command, *_args, **_kwargs) -> None:
+        calls.append(command)
+
+    monkeypatch.setattr(
+        "utest.subject_reappearance_harness._run_logged", gpu_boundary
+    )
+    monkeypatch.setattr(
+        "utest.subject_reappearance_harness._validated_prefix_contract",
+        lambda row: {"snapshot": {"path": row["prefix_snapshot"]}},
+    )
+    monkeypatch.setattr(
+        "utest.subject_reappearance_harness._freeze_or_load_command_artifact",
+        lambda *_args: {},
+    )
+    assert main([
+        "prefix", "--manifest", str(path),
+        "--event-id", song_event_id, "--seed", "0",
+    ]) == 0
+    assert calls == [selected["commands"]["prefix"]]
+
+
 def _materialize_existing_prefix_contract(row: dict, *, slot_count: int = 64) -> Path:
     snapshot = Path(row["prefix_snapshot"])
     snapshot.parent.mkdir(parents=True)
