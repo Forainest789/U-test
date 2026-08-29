@@ -1,4 +1,4 @@
-"""Orchestrate the three frozen seed-zero ViStoryBench donor jobs."""
+"""Orchestrate frozen seed-zero ViStoryBench donor jobs for the declared scope."""
 
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ from .prefix_contract import (
     validate_slotmem_memory_encoder_geometry,
     write_json_no_clobber,
 )
-from .vistory_donors import TARGET_EVENT_IDS
+from .vistory_donors import TARGET_EVENT_IDS, donor_selection_event_ids
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -42,6 +42,16 @@ def _read_object(path: Path, label: str) -> dict:
 def _strict_zero(value: object, label: str) -> None:
     if type(value) is not int or value != 0:
         raise ValueError(f"{label} must be integer 0")
+
+
+def _selection_scope_fields(selection: Mapping) -> dict[str, object]:
+    event_ids = donor_selection_event_ids(selection)
+    if event_ids == TARGET_EVENT_IDS:
+        return {}
+    return {
+        "protocol_scope": selection["protocol_scope"],
+        "target_event_ids": sorted(event_ids),
+    }
 
 
 def _json_equal_strict(left: object, right: object) -> bool:
@@ -90,11 +100,15 @@ def validate_frozen_selection(selection_path: Path) -> dict:
         "event_paths_relative_to": "event_parent",
     }:
         raise ValueError("selection does not declare the frozen portable path contract")
+    expected_event_ids = donor_selection_event_ids(selection)
     events = selection.get("events")
-    if not isinstance(events, list) or len(events) != 3:
-        raise ValueError("selection must contain exactly three donor events")
-    if {row.get("target_event_id") for row in events if isinstance(row, Mapping)} != TARGET_EVENT_IDS:
-        raise ValueError("selection target event IDs do not match the frozen three")
+    if not isinstance(events, list) or len(events) != len(expected_event_ids):
+        raise ValueError("selection event count does not match its protocol scope")
+    if (
+        any(not isinstance(row, Mapping) for row in events)
+        or {row.get("target_event_id") for row in events} != expected_event_ids
+    ):
+        raise ValueError("selection target event IDs do not match its protocol scope")
 
     root = selection_path.parent
     resolved_events = []
@@ -270,7 +284,7 @@ def build_donor_run_manifest(
     platform_manifest_path: Path,
     python_executable: str,
 ) -> dict[str, object]:
-    """Build the immutable zero-GPU command plan for exactly three donors."""
+    """Build the immutable zero-GPU command plan for the frozen donor selection."""
     if str(python_executable) != sys.executable:
         raise ValueError("donor harness python must be the current sys.executable")
     selection_path = Path(selection_path).resolve()
@@ -287,6 +301,7 @@ def build_donor_run_manifest(
         offload_models,
     )
     commit, dirty = _git_state(REPO_ROOT)
+    scope = _selection_scope_fields(selection)
     return {
         "schema_version": 1,
         "task_id": "vistorybench_donor_generation_v1",
@@ -302,6 +317,7 @@ def build_donor_run_manifest(
         "runtime_environment": {"slotmem_offload_models": offload_models},
         "output_root": str(output_root),
         "jobs": jobs,
+        **scope,
     }
 
 
@@ -370,6 +386,7 @@ def validate_donor_run_manifest(manifest_path: Path) -> dict:
             platform_path,
             runtime_environment["slotmem_offload_models"],
         ),
+        **_selection_scope_fields(selection),
     }
     if not _json_equal_strict(run, expected):
         raise ValueError("donor run manifest does not match its canonical derivation")
@@ -629,7 +646,7 @@ def _validate_completion(job: Mapping, run: Mapping) -> dict:
 def validate_completed_donor_run(
     manifest_path: Path, selection: Mapping
 ) -> dict:
-    """Return a donor run only after all three frozen jobs validate."""
+    """Return a donor run only after every scoped frozen job validates."""
     run = validate_donor_run_manifest(manifest_path)
     validate_donor_run_paths(run)
     selection_path = Path(str(selection.get("selection_path", ""))).resolve()
@@ -637,13 +654,22 @@ def validate_completed_donor_run(
         "selection_sha256"
     ):
         raise ValueError("completed donor run selection provenance mismatch")
+    canonical_selection = validate_frozen_selection(selection_path)
+    if not _json_equal_strict(selection, canonical_selection):
+        raise ValueError("completed donor run requires the canonical selection")
+    expected_ids = donor_selection_event_ids(canonical_selection)
     selected_ids = {
         row.get("target_event_id")
-        for row in selection.get("events", ())
+        for row in canonical_selection.get("events", ())
         if isinstance(row, Mapping)
     }
-    if selected_ids != TARGET_EVENT_IDS:
-        raise ValueError("completed donor run selection does not contain the frozen three")
+    if selected_ids != expected_ids or len(canonical_selection["events"]) != len(
+        expected_ids
+    ):
+        raise ValueError("completed donor run selection does not match its protocol scope")
+    job_ids = {job.get("target_event_id") for job in run["jobs"]}
+    if job_ids != expected_ids or len(run["jobs"]) != len(expected_ids):
+        raise ValueError("completed donor run jobs do not match the selection scope")
     for job in run["jobs"]:
         _validate_completion(job, run)
     return run
@@ -766,7 +792,7 @@ def run_stage(stage: str, manifest_path: Path) -> dict[str, object]:
         results.append(result)
         if result["status"] != "completed":
             break
-    return {"stage": stage, "results": results}
+    return {"stage": stage, "expected_jobs": len(run["jobs"]), "results": results}
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -796,7 +822,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     result = run_stage(args.command, args.manifest)
     print(json.dumps(result, ensure_ascii=False))
     statuses = {row.get("status") for row in result["results"]}
-    return 0 if len(result["results"]) == 3 and statuses <= {"completed", "skipped_valid"} else 2
+    return (
+        0
+        if len(result["results"]) == result["expected_jobs"]
+        and statuses <= {"completed", "skipped_valid"}
+        else 2
+    )
 
 
 if __name__ == "__main__":

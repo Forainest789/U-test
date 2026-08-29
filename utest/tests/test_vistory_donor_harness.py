@@ -22,7 +22,7 @@ from utest.vistory_donor_harness import (
     validate_completed_donor_run,
     validate_frozen_selection,
 )
-from utest.vistory_donors import TARGET_EVENT_IDS
+from utest.vistory_donors import EXPLORATORY_SINGLE_EVENT_SCOPE, TARGET_EVENT_IDS
 
 
 TARGET_IDS = tuple(sorted(TARGET_EVENT_IDS))
@@ -133,6 +133,20 @@ def _selection(tmp_path: Path) -> Path:
             "events": events,
         },
     )
+    return selection
+
+
+def _exploratory_selection(tmp_path: Path, target_id: str = TARGET_IDS[0]) -> Path:
+    selection = _selection(tmp_path)
+    value = json.loads(selection.read_text(encoding="utf-8"))
+    value.update(
+        protocol_scope=EXPLORATORY_SINGLE_EVENT_SCOPE,
+        target_event_ids=[target_id],
+        events=[
+            event for event in value["events"] if event["target_event_id"] == target_id
+        ],
+    )
+    _write_json(selection, value)
     return selection
 
 
@@ -302,6 +316,8 @@ def test_dry_run_builds_exactly_three_seed_zero_event_harness_jobs(tmp_path: Pat
     assert run["platform_manifest_sha256"] == _sha256(platform)
     assert isinstance(run["repository"]["commit"], str) and run["repository"]["commit"]
     assert type(run["repository"]["dirty"]) is bool
+    assert "protocol_scope" not in run
+    assert "target_event_ids" not in run
     frozen = prefix_contract.normalized_frozen_args(
         run["jobs"][0]["prefix_inference_args"]
     )
@@ -315,6 +331,92 @@ def test_dry_run_builds_exactly_three_seed_zero_event_harness_jobs(tmp_path: Pat
         "slotmem_memory_encoder_layers": "0-15",
         "slotmem_memory_encoder_slots": "64",
     }
+
+
+def test_dry_run_builds_explicit_exploratory_single_event_job(tmp_path: Path) -> None:
+    selection = _exploratory_selection(tmp_path)
+    base, platform = _inputs(tmp_path)
+
+    run = build_donor_run_manifest(
+        selection_path=selection,
+        output_root=tmp_path / "run",
+        base_inference_args_path=base,
+        platform_manifest_path=platform,
+        python_executable=sys.executable,
+    )
+
+    assert run["protocol_scope"] == EXPLORATORY_SINGLE_EVENT_SCOPE
+    assert run["target_event_ids"] == [TARGET_IDS[0]]
+    assert [job["target_event_id"] for job in run["jobs"]] == [TARGET_IDS[0]]
+    manifest = tmp_path / "run" / "run_manifest.json"
+    _write_json(manifest, run)
+    assert donor_harness.validate_donor_run_manifest(manifest) == run
+
+
+def test_donor_run_rejects_exploratory_scope_tamper(tmp_path: Path) -> None:
+    selection = _exploratory_selection(tmp_path)
+    base, platform = _inputs(tmp_path)
+    run = build_donor_run_manifest(
+        selection_path=selection,
+        output_root=tmp_path / "run",
+        base_inference_args_path=base,
+        platform_manifest_path=platform,
+        python_executable=sys.executable,
+    )
+    run["protocol_scope"] = "formal"
+    manifest = tmp_path / "run" / "run_manifest.json"
+    _write_json(manifest, run)
+
+    with pytest.raises(ValueError, match="canonical derivation"):
+        donor_harness.validate_donor_run_manifest(manifest)
+
+
+@pytest.mark.parametrize(
+    "scope_fields,error",
+    [
+        ({"protocol_scope": None, "target_event_ids": None}, "unsupported"),
+        ({"protocol_scope": EXPLORATORY_SINGLE_EVENT_SCOPE}, "exactly one"),
+        ({"target_event_ids": [TARGET_IDS[0]]}, "unsupported"),
+        (
+            {"protocol_scope": "formal", "target_event_ids": [TARGET_IDS[0]]},
+            "unsupported",
+        ),
+    ],
+)
+def test_selection_scope_fields_fail_closed(
+    tmp_path: Path, scope_fields: dict, error: str,
+) -> None:
+    selection = _selection(tmp_path)
+    value = json.loads(selection.read_text(encoding="utf-8"))
+    value.update(scope_fields)
+    _write_json(selection, value)
+
+    with pytest.raises(ValueError, match=error):
+        validate_frozen_selection(selection)
+
+
+@pytest.mark.parametrize("job_change", ["missing", "extra"])
+def test_donor_run_rejects_jobs_outside_exploratory_scope(
+    tmp_path: Path, job_change: str,
+) -> None:
+    selection = _exploratory_selection(tmp_path)
+    base, platform = _inputs(tmp_path)
+    run = build_donor_run_manifest(
+        selection_path=selection,
+        output_root=tmp_path / "run",
+        base_inference_args_path=base,
+        platform_manifest_path=platform,
+        python_executable=sys.executable,
+    )
+    if job_change == "missing":
+        run["jobs"] = []
+    else:
+        run["jobs"].append(json.loads(json.dumps(run["jobs"][0])))
+    manifest = tmp_path / "run" / "run_manifest.json"
+    _write_json(manifest, run)
+
+    with pytest.raises(ValueError, match="canonical derivation"):
+        donor_harness.validate_donor_run_manifest(manifest)
 
 
 def test_dry_run_rejects_legacy_32_slot_base_config_before_gpu(
@@ -805,6 +907,69 @@ def test_completed_run_gate_returns_only_three_fully_valid_jobs(tmp_path: Path) 
     )
 
     assert [job["target_event_id"] for job in completed["jobs"]] == list(TARGET_IDS)
+
+
+def test_completed_run_accepts_one_fully_valid_exploratory_job(
+    tmp_path: Path, capsys,
+) -> None:
+    selection_path = _exploratory_selection(tmp_path)
+    base, platform = _inputs(tmp_path)
+    run = build_donor_run_manifest(
+        selection_path=selection_path,
+        output_root=tmp_path / "run",
+        base_inference_args_path=base,
+        platform_manifest_path=platform,
+        python_executable=sys.executable,
+    )
+    job = run["jobs"][0]
+    _materialize_prefix(job, platform)
+    _materialize_payload(job)
+    _materialize_completion(job, run)
+    manifest = tmp_path / "run" / "run_manifest.json"
+    _write_json(manifest, run)
+
+    completed = validate_completed_donor_run(
+        manifest, validate_frozen_selection(selection_path)
+    )
+
+    assert [row["target_event_id"] for row in completed["jobs"]] == [TARGET_IDS[0]]
+    assert main(["resume", "--manifest", str(manifest)]) == 0
+    result = json.loads(capsys.readouterr().out)
+    assert result["expected_jobs"] == 1
+    assert result["results"][0]["status"] == "skipped_valid"
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("candidate_id", "unreviewed-candidate"),
+        ("manifest_path", "unreviewed/manifest.json"),
+    ],
+)
+def test_completed_run_rejects_tampered_validated_selection_mapping(
+    tmp_path: Path, field: str, value: str,
+) -> None:
+    selection_path = _exploratory_selection(tmp_path)
+    base, platform = _inputs(tmp_path)
+    run = build_donor_run_manifest(
+        selection_path=selection_path,
+        output_root=tmp_path / "run",
+        base_inference_args_path=base,
+        platform_manifest_path=platform,
+        python_executable=sys.executable,
+    )
+    job = run["jobs"][0]
+    _materialize_prefix(job, platform)
+    _materialize_payload(job)
+    _materialize_completion(job, run)
+    manifest = tmp_path / "run" / "run_manifest.json"
+    _write_json(manifest, run)
+    selection = validate_frozen_selection(selection_path)
+    tampered = json.loads(json.dumps(selection))
+    tampered["events"][0][field] = value
+
+    with pytest.raises(ValueError, match="canonical selection"):
+        validate_completed_donor_run(manifest, tampered)
 
 
 def test_run_manifest_rejects_non_boolean_dirty_before_subprocess(
