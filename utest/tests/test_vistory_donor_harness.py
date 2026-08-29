@@ -22,7 +22,11 @@ from utest.vistory_donor_harness import (
     validate_completed_donor_run,
     validate_frozen_selection,
 )
-from utest.vistory_donors import EXPLORATORY_SINGLE_EVENT_SCOPE, TARGET_EVENT_IDS
+from utest.vistory_donors import (
+    EXPLORATORY_SINGLE_EVENT_SCOPE,
+    TARGET_EVENT_IDS,
+    donor_selection_scope_fields,
+)
 
 
 TARGET_IDS = tuple(sorted(TARGET_EVENT_IDS))
@@ -281,6 +285,7 @@ def _materialize_completion(job: dict, run: dict) -> None:
                 }
                 for stage in ("prefix", "dump")
             },
+            **donor_selection_scope_fields(run),
         },
     )
 
@@ -521,6 +526,7 @@ def test_prefix_failure_stops_later_jobs_and_preserves_complete_logs(
     result = run_stage("prefix", manifest)
 
     assert len(calls) == 1
+    assert set(result) == {"stage", "results"}
     assert result["results"] == [
         {
             "target_event_id": TARGET_IDS[0],
@@ -885,7 +891,9 @@ def test_selection_requires_task3_event_parent_path_contract(tmp_path: Path) -> 
         )
 
 
-def test_completed_run_gate_returns_only_three_fully_valid_jobs(tmp_path: Path) -> None:
+def test_completed_run_gate_returns_only_three_fully_valid_jobs(
+    tmp_path: Path, capsys,
+) -> None:
     selection_path = _selection(tmp_path)
     base, platform = _inputs(tmp_path)
     run = build_donor_run_manifest(
@@ -907,6 +915,25 @@ def test_completed_run_gate_returns_only_three_fully_valid_jobs(tmp_path: Path) 
     )
 
     assert [job["target_event_id"] for job in completed["jobs"]] == list(TARGET_IDS)
+    completion = json.loads(
+        Path(run["jobs"][0]["completion"]).read_text(encoding="utf-8")
+    )
+    assert set(completion) == {
+        "schema_version",
+        "target_event_id",
+        "donor_seed",
+        "prefix_snapshot",
+        "prefix_contract",
+        "donor_payload",
+        "donor_payload_info",
+        "donor_audit",
+        "repository",
+        "platform_manifest",
+        "dump_runtime_contract",
+        "execution",
+    }
+    assert main(["resume", "--manifest", str(manifest)]) == 0
+    assert set(json.loads(capsys.readouterr().out)) == {"stage", "results"}
 
 
 def test_completed_run_accepts_one_fully_valid_exploratory_job(
@@ -933,10 +960,49 @@ def test_completed_run_accepts_one_fully_valid_exploratory_job(
     )
 
     assert [row["target_event_id"] for row in completed["jobs"]] == [TARGET_IDS[0]]
+    completion = json.loads(Path(job["completion"]).read_text(encoding="utf-8"))
+    assert completion["protocol_scope"] == EXPLORATORY_SINGLE_EVENT_SCOPE
+    assert completion["target_event_ids"] == [TARGET_IDS[0]]
     assert main(["resume", "--manifest", str(manifest)]) == 0
     result = json.loads(capsys.readouterr().out)
-    assert result["expected_jobs"] == 1
+    assert set(result) == {"stage", "results"}
     assert result["results"][0]["status"] == "skipped_valid"
+
+
+@pytest.mark.parametrize("mutation", ["missing", "null", "wrong"])
+def test_exploratory_completion_scope_fails_closed(
+    tmp_path: Path, mutation: str,
+) -> None:
+    selection_path = _exploratory_selection(tmp_path)
+    base, platform = _inputs(tmp_path)
+    run = build_donor_run_manifest(
+        selection_path=selection_path,
+        output_root=tmp_path / "run",
+        base_inference_args_path=base,
+        platform_manifest_path=platform,
+        python_executable=sys.executable,
+    )
+    job = run["jobs"][0]
+    _materialize_prefix(job, platform)
+    _materialize_payload(job)
+    _materialize_completion(job, run)
+    completion_path = Path(job["completion"])
+    completion = json.loads(completion_path.read_text(encoding="utf-8"))
+    if mutation == "missing":
+        completion.pop("protocol_scope")
+        completion.pop("target_event_ids")
+    elif mutation == "null":
+        completion["protocol_scope"] = None
+    else:
+        completion["target_event_ids"] = [TARGET_IDS[1]]
+    _write_json(completion_path, completion)
+    manifest = tmp_path / "run" / "run_manifest.json"
+    _write_json(manifest, run)
+
+    with pytest.raises(ValueError, match="donor completion"):
+        validate_completed_donor_run(
+            manifest, validate_frozen_selection(selection_path)
+        )
 
 
 @pytest.mark.parametrize(

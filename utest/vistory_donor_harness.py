@@ -26,7 +26,7 @@ from .prefix_contract import (
     validate_slotmem_memory_encoder_geometry,
     write_json_no_clobber,
 )
-from .vistory_donors import TARGET_EVENT_IDS, donor_selection_event_ids
+from .vistory_donors import donor_selection_event_ids, donor_selection_scope_fields
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -42,16 +42,6 @@ def _read_object(path: Path, label: str) -> dict:
 def _strict_zero(value: object, label: str) -> None:
     if type(value) is not int or value != 0:
         raise ValueError(f"{label} must be integer 0")
-
-
-def _selection_scope_fields(selection: Mapping) -> dict[str, object]:
-    event_ids = donor_selection_event_ids(selection)
-    if event_ids == TARGET_EVENT_IDS:
-        return {}
-    return {
-        "protocol_scope": selection["protocol_scope"],
-        "target_event_ids": sorted(event_ids),
-    }
 
 
 def _json_equal_strict(left: object, right: object) -> bool:
@@ -301,7 +291,7 @@ def build_donor_run_manifest(
         offload_models,
     )
     commit, dirty = _git_state(REPO_ROOT)
-    scope = _selection_scope_fields(selection)
+    scope = donor_selection_scope_fields(selection)
     return {
         "schema_version": 1,
         "task_id": "vistorybench_donor_generation_v1",
@@ -386,7 +376,7 @@ def validate_donor_run_manifest(manifest_path: Path) -> dict:
             platform_path,
             runtime_environment["slotmem_offload_models"],
         ),
-        **_selection_scope_fields(selection),
+        **donor_selection_scope_fields(selection),
     }
     if not _json_equal_strict(run, expected):
         raise ValueError("donor run manifest does not match its canonical derivation")
@@ -620,6 +610,7 @@ def _completion_record(job: Mapping, run: Mapping) -> dict:
         "execution": {
             stage: _execution_record(job, stage) for stage in ("prefix", "dump")
         },
+        **donor_selection_scope_fields(run),
     }
 
 
@@ -657,19 +648,6 @@ def validate_completed_donor_run(
     canonical_selection = validate_frozen_selection(selection_path)
     if not _json_equal_strict(selection, canonical_selection):
         raise ValueError("completed donor run requires the canonical selection")
-    expected_ids = donor_selection_event_ids(canonical_selection)
-    selected_ids = {
-        row.get("target_event_id")
-        for row in canonical_selection.get("events", ())
-        if isinstance(row, Mapping)
-    }
-    if selected_ids != expected_ids or len(canonical_selection["events"]) != len(
-        expected_ids
-    ):
-        raise ValueError("completed donor run selection does not match its protocol scope")
-    job_ids = {job.get("target_event_id") for job in run["jobs"]}
-    if job_ids != expected_ids or len(run["jobs"]) != len(expected_ids):
-        raise ValueError("completed donor run jobs do not match the selection scope")
     for job in run["jobs"]:
         _validate_completion(job, run)
     return run
@@ -792,7 +770,7 @@ def run_stage(stage: str, manifest_path: Path) -> dict[str, object]:
         results.append(result)
         if result["status"] != "completed":
             break
-    return {"stage": stage, "expected_jobs": len(run["jobs"]), "results": results}
+    return {"stage": stage, "results": results}
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -819,12 +797,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         write_json_no_clobber(manifest_path, run)
         print(json.dumps({"jobs": len(run["jobs"]), "manifest": str(manifest_path)}))
         return 0
+    expected_jobs = len(validate_donor_run_manifest(args.manifest)["jobs"])
     result = run_stage(args.command, args.manifest)
     print(json.dumps(result, ensure_ascii=False))
     statuses = {row.get("status") for row in result["results"]}
     return (
         0
-        if len(result["results"]) == result["expected_jobs"]
+        if len(result["results"]) == expected_jobs
         and statuses <= {"completed", "skipped_valid"}
         else 2
     )

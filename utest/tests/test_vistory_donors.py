@@ -16,6 +16,7 @@ from utest.vistory_donors import (
     TARGET_EVENT_IDS,
     build_donor_candidate_survey,
     donor_selection_event_ids,
+    donor_selection_scope_fields,
     donor_rejection_reasons,
     enumerate_official_recurrences,
     freeze_donor_selection,
@@ -27,6 +28,19 @@ from utest.vistory_reappearance import frozen_target_event_ids, load_frozen_sele
 
 def test_target_event_ids_are_derived_from_the_frozen_selection() -> None:
     assert TARGET_EVENT_IDS == frozen_target_event_ids()
+
+
+def test_donor_selection_scope_fields_are_canonical() -> None:
+    assert donor_selection_scope_fields({}) == {}
+    assert donor_selection_scope_fields(
+        {
+            "protocol_scope": EXPLORATORY_SINGLE_EVENT_SCOPE,
+            "target_event_ids": [SONG_EVENT_ID],
+        }
+    ) == {
+        "protocol_scope": EXPLORATORY_SINGLE_EVENT_SCOPE,
+        "target_event_ids": [SONG_EVENT_ID],
+    }
 
 
 @pytest.mark.parametrize(

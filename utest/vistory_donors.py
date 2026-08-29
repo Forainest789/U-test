@@ -96,6 +96,16 @@ def donor_selection_event_ids(selection: Mapping) -> frozenset[str]:
     return frozenset(declared)
 
 
+def donor_selection_scope_fields(selection: Mapping) -> dict[str, object]:
+    event_ids = donor_selection_event_ids(selection)
+    if event_ids == TARGET_EVENT_IDS:
+        return {}
+    return {
+        "protocol_scope": EXPLORATORY_SINGLE_EVENT_SCOPE,
+        "target_event_ids": sorted(event_ids),
+    }
+
+
 def horizon_bucket(horizon: int) -> str:
     for lower, upper in ((5, 7), (8, 10), (11, 13)):
         if lower <= horizon <= upper:
@@ -882,7 +892,7 @@ def freeze_donor_selection(
     if not isinstance(review.get("reviews"), list):
         raise ValueError("review reviews must be a list")
 
-    scope_fields = (
+    scope_fields = donor_selection_scope_fields(
         {
             "protocol_scope": EXPLORATORY_SINGLE_EVENT_SCOPE,
             "target_event_ids": [exploratory_target_event_id],

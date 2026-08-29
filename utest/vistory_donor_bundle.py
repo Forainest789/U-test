@@ -29,6 +29,7 @@ from .vistory_donors import (
     TARGET_EVENT_IDS,
     _publish_directory_no_clobber,
     donor_selection_event_ids,
+    donor_selection_scope_fields,
 )
 
 
@@ -333,19 +334,8 @@ def build_validated_event_donor_map(
     selected_by_id = {row["target_event_id"]: row for row in selection["events"]}
     jobs_by_id = {job["target_event_id"]: job for job in donor_run["jobs"]}
     expected_ids = donor_selection_event_ids(selection)
-    expected_scope = (
-        {
-            "protocol_scope": selection["protocol_scope"],
-            "target_event_ids": sorted(expected_ids),
-        }
-        if expected_ids != TARGET_EVENT_IDS
-        else {}
-    )
-    run_scope = {
-        field: donor_run[field]
-        for field in ("protocol_scope", "target_event_ids")
-        if field in donor_run
-    }
+    expected_scope = donor_selection_scope_fields(selection)
+    run_scope = donor_selection_scope_fields(donor_run)
     if not _json_equal_strict(run_scope, expected_scope):
         raise ValueError("donor run scope does not match selection scope")
     if set(target_by_id) != TARGET_EVENT_IDS or len(targets["events"]) != len(
