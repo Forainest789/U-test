@@ -11,10 +11,8 @@ from pathlib import Path
 
 import torch
 
-from .content_audit import LAYERS_KEY, _is_layerwise
-from .input_contract import payload_slot_shapes, validate_donor_bundle
+from .input_contract import validate_donor_bundle, validate_layerwise_slot_payload
 from .prefix_contract import (
-    FROZEN_MEMORY_ENCODER_SLOTS,
     sha256_file,
     validate_slotmem_memory_encoder_geometry,
     write_json_no_clobber,
@@ -167,36 +165,14 @@ def _payload_metadata(job: Mapping) -> tuple[str, dict, dict, dict]:
         raise ValueError("frozen donor payload must contain exactly one target-character bank 0 key")
     key = bank_zero[0]
     payload = artifact["payloads"].get(key)
-    shapes = payload_slot_shapes(payload, key)
+    shapes = validate_layerwise_slot_payload(
+        payload,
+        expected_layers=expected_layers,
+        expected_slots=expected_slots,
+    )
     if not _json_equal_strict(info.get("payload_slot_shapes", {}).get(key), shapes):
         raise ValueError("donor payload shape differs from payload info")
-
-    if (
-        not _is_layerwise(payload)
-        or payload.get("__layerwise__") is not True
-        or not payload[LAYERS_KEY]
-    ):
-        raise ValueError("selected donor payload must contain non-empty layerwise tensors")
-    tensors = payload[LAYERS_KEY]
-    expected_layer_keys = {str(layer) for layer in expected_layers}
-    if (
-        any(type(layer) is not str or not layer for layer in tensors)
-        or set(tensors) != expected_layer_keys
-        or set(shapes) != expected_layer_keys
-        or any(
-            not isinstance(tensor, torch.Tensor)
-            or tensor.ndim != 2
-            or tensor.shape[0] != expected_slots
-            or not tensor.is_floating_point()
-            or not torch.isfinite(tensor).all()
-            for tensor in tensors.values()
-        )
-        or len({int(tensor.shape[1]) for tensor in tensors.values()}) != 1
-    ):
-        raise ValueError(
-            "selected donor payload must contain exactly layers 0-15 as finite floating "
-            f"{FROZEN_MEMORY_ENCODER_SLOTS}-slot 2D tensors with one hidden dimension"
-        )
+    tensors = payload["layers"]
     dtypes = {
         layer: str(tensor.dtype).removeprefix("torch.") for layer, tensor in tensors.items()
     }

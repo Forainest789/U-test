@@ -516,7 +516,7 @@ def test_empty_layerwise_payload_is_rejected_before_freeze(tmp_path: Path) -> No
     _write_json(info_path, info)
     _refresh_payload_bindings(run)
 
-    with pytest.raises(ValueError, match="non-empty layerwise"):
+    with pytest.raises(ValueError, match="layers must not be empty"):
         freeze_vistory_donor_map(
             target_inputs_path=targets,
             selection_path=selection,
@@ -576,7 +576,10 @@ def test_layerwise_payload_requires_complete_floating_tensor_layers(
         _write_json(info_path, info)
     _refresh_payload_bindings(run)
 
-    with pytest.raises(ValueError, match="layerwise|layers 0-15|64-slot|hidden dimension"):
+    with pytest.raises(
+        ValueError,
+        match="layerwise|layers|64-slot|hidden dimension|floating point",
+    ):
         freeze_vistory_donor_map(
             target_inputs_path=targets,
             selection_path=selection,
@@ -605,7 +608,7 @@ def test_multiple_payload_keys_are_rejected_as_a_single_bank_contract_violation(
     _write_json(info_path, info)
     _refresh_payload_bindings(run)
 
-    with pytest.raises(ValueError, match="single-bank"):
+    with pytest.raises(ValueError, match="target-character bank 0"):
         freeze_vistory_donor_map(
             target_inputs_path=targets,
             selection_path=selection,

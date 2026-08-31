@@ -198,11 +198,21 @@ def _materialize_prefix(job: dict, platform: Path) -> None:
 def _materialize_payload(job: dict) -> None:
     payload = Path(job["donor_payload"])
     payload.parent.mkdir(parents=True, exist_ok=True)
+    payload_key = f'{job["event"]["character_name"]}|0'
+    layer_shapes = {str(layer): [64, 3] for layer in range(16)}
     torch.save(
         {
             "format": "slotmem_donor_payload_v2",
             "event": job["event"],
-            "payloads": {"person": torch.zeros(2, 3)},
+            "payloads": {
+                payload_key: {
+                    "__layerwise__": True,
+                    "layers": {
+                        str(layer): torch.zeros((64, 3), dtype=torch.float16)
+                        for layer in range(16)
+                    },
+                }
+            },
         },
         payload,
     )
@@ -212,8 +222,8 @@ def _materialize_payload(job: dict) -> None:
             "format": "slotmem_donor_payload_v2",
             "payload_path": str(payload.resolve()),
             "payload_sha256": _sha256(payload),
-            "payload_keys": ["person"],
-            "payload_slot_shapes": {"person": {"person": [2, 3]}},
+            "payload_keys": [payload_key],
+            "payload_slot_shapes": {payload_key: layer_shapes},
             "event": job["event"],
         },
     )
@@ -936,6 +946,80 @@ def test_completed_run_gate_returns_only_three_fully_valid_jobs(
     assert set(json.loads(capsys.readouterr().out)) == {"stage", "results"}
 
 
+def test_completion_rejects_flat_payload_before_record_is_written(
+    tmp_path: Path,
+) -> None:
+    selection_path = _exploratory_selection(tmp_path)
+    base, platform = _inputs(tmp_path)
+    run = build_donor_run_manifest(
+        selection_path=selection_path,
+        output_root=tmp_path / "run",
+        base_inference_args_path=base,
+        platform_manifest_path=platform,
+        python_executable=sys.executable,
+    )
+    job = run["jobs"][0]
+    _materialize_prefix(job, platform)
+    _materialize_payload(job)
+    payload_path = Path(job["donor_payload"])
+    artifact = torch.load(payload_path, map_location="cpu", weights_only=True)
+    payload_key = next(iter(artifact["payloads"]))
+    artifact["payloads"][payload_key] = torch.zeros(
+        (64, 3), dtype=torch.float16
+    )
+    torch.save(artifact, payload_path)
+    info_path = Path(job["donor_payload_info"])
+    info = json.loads(info_path.read_text(encoding="utf-8"))
+    info["payload_sha256"] = _sha256(payload_path)
+    info["payload_slot_shapes"][payload_key] = {"0": [64, 3]}
+    _write_json(info_path, info)
+    audit_path = Path(job["donor_audit"])
+    audit = json.loads(audit_path.read_text(encoding="utf-8"))
+    audit["donor_sha256"] = _sha256(payload_path)
+    _write_json(audit_path, audit)
+
+    with pytest.raises(ValueError, match="layerwise"):
+        donor_harness._write_completion(job, run)
+
+    assert not Path(job["completion"]).exists()
+
+
+def test_completion_rejects_missing_layer_before_record_is_written(
+    tmp_path: Path,
+) -> None:
+    selection_path = _exploratory_selection(tmp_path)
+    base, platform = _inputs(tmp_path)
+    run = build_donor_run_manifest(
+        selection_path=selection_path,
+        output_root=tmp_path / "run",
+        base_inference_args_path=base,
+        platform_manifest_path=platform,
+        python_executable=sys.executable,
+    )
+    job = run["jobs"][0]
+    _materialize_prefix(job, platform)
+    _materialize_payload(job)
+    payload_path = Path(job["donor_payload"])
+    artifact = torch.load(payload_path, map_location="cpu", weights_only=True)
+    payload_key = next(iter(artifact["payloads"]))
+    del artifact["payloads"][payload_key]["layers"]["15"]
+    torch.save(artifact, payload_path)
+    info_path = Path(job["donor_payload_info"])
+    info = json.loads(info_path.read_text(encoding="utf-8"))
+    info["payload_sha256"] = _sha256(payload_path)
+    del info["payload_slot_shapes"][payload_key]["15"]
+    _write_json(info_path, info)
+    audit_path = Path(job["donor_audit"])
+    audit = json.loads(audit_path.read_text(encoding="utf-8"))
+    audit["donor_sha256"] = _sha256(payload_path)
+    _write_json(audit_path, audit)
+
+    with pytest.raises(ValueError, match="layers"):
+        donor_harness._write_completion(job, run)
+
+    assert not Path(job["completion"]).exists()
+
+
 def test_completed_run_accepts_one_fully_valid_exploratory_job(
     tmp_path: Path, capsys,
 ) -> None:
@@ -1485,7 +1569,8 @@ def test_completed_run_rejects_sidecar_shape_tamper_with_updated_completion_hash
     first = run["jobs"][0]
     info_path = Path(first["donor_payload_info"])
     info = json.loads(info_path.read_text(encoding="utf-8"))
-    info["payload_slot_shapes"]["person"]["person"] = [99, 99]
+    payload_key = info["payload_keys"][0]
+    info["payload_slot_shapes"][payload_key]["0"] = [99, 99]
     _write_json(info_path, info)
     completion_path = Path(first["completion"])
     completion = json.loads(completion_path.read_text(encoding="utf-8"))
@@ -1558,7 +1643,8 @@ def test_completed_run_rejects_float_payload_shape_dimensions(tmp_path: Path) ->
     first = run["jobs"][0]
     info_path = Path(first["donor_payload_info"])
     info = json.loads(info_path.read_text(encoding="utf-8"))
-    info["payload_slot_shapes"]["person"]["person"] = [2.0, 3.0]
+    payload_key = info["payload_keys"][0]
+    info["payload_slot_shapes"][payload_key]["0"] = [64.0, 3.0]
     _write_json(info_path, info)
     completion_path = Path(first["completion"])
     completion = json.loads(completion_path.read_text(encoding="utf-8"))

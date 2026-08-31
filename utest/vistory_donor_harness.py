@@ -17,6 +17,7 @@ from .event_harness import (
     load_event,
     offload_models_from_environment,
 )
+from .input_contract import validate_layerwise_slot_payload
 from .prefix_contract import (
     _git_state,
     build_runtime_contract,
@@ -451,7 +452,6 @@ def _validate_payload(job: Mapping) -> dict:
     if info.get("payload_sha256") != sha256_file(payload_path):
         raise ValueError("donor payload SHA-256 mismatch")
     import torch
-    from .input_contract import payload_slot_shapes
 
     try:
         artifact = torch.load(payload_path, map_location="cpu", weights_only=True)
@@ -464,33 +464,39 @@ def _validate_payload(job: Mapping) -> dict:
         or not isinstance(artifact.get("payloads"), Mapping)
     ):
         raise ValueError("donor payload artifact is not the frozen v2 event payload")
-    keys = info.get("payload_keys")
-    shapes = info.get("payload_slot_shapes")
-    if (
-        not isinstance(keys, list)
-        or not keys
-        or not all(isinstance(key, str) and key for key in keys)
-        or len(keys) != len(set(keys))
-        or not isinstance(shapes, Mapping)
-        or set(shapes) != set(keys)
-    ):
-        raise ValueError("donor payload keys/shapes are invalid")
     if not _json_equal_strict(info.get("event"), job.get("event")):
         raise ValueError("donor payload event does not match its frozen job")
+    event = job.get("event")
+    if not isinstance(event, Mapping):
+        raise ValueError("donor job event is missing")
+    expected_key = f'{event.get("character_name", "")}|0'
+    keys = info.get("payload_keys")
     payloads = artifact["payloads"]
-    if set(payloads) != set(keys):
-        raise ValueError("donor payload keys do not match payload info")
-    actual_shapes = {
-        key: payload_slot_shapes(payloads[key], key)
-        for key in keys
-    }
-    if not _json_equal_strict(actual_shapes, shapes):
+    if keys != [expected_key] or set(payloads) != {expected_key}:
+        raise ValueError(
+            "donor payload must contain exactly the target-character bank 0 key"
+        )
+    runtime = job.get("dump_runtime_contract")
+    frozen_args = runtime.get("frozen_args") if isinstance(runtime, Mapping) else None
+    if not isinstance(frozen_args, Mapping):
+        raise ValueError("donor dump runtime is missing frozen args")
+    expected_layers, expected_slots = validate_slotmem_memory_encoder_geometry(
+        frozen_args
+    )
+    actual_shapes = validate_layerwise_slot_payload(
+        payloads[expected_key],
+        expected_layers=expected_layers,
+        expected_slots=expected_slots,
+    )
+    shapes = info.get("payload_slot_shapes")
+    if not isinstance(shapes, Mapping) or set(shapes) != {expected_key}:
+        raise ValueError("donor payload keys/shapes are invalid")
+    if not _json_equal_strict(shapes[expected_key], actual_shapes):
         raise ValueError("donor payload slot shapes do not match payload info")
     audit_path = Path(str(job["donor_audit"])).resolve()
     if not audit_path.is_file():
         raise FileNotFoundError(f"donor audit is missing: {audit_path}")
     audit = _read_object(audit_path, "donor audit")
-    event = job["event"]
     if not _json_equal_strict(
         audit.get("runtime_contract"), job.get("dump_runtime_contract")
     ):
