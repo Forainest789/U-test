@@ -1083,7 +1083,8 @@ section. Copy only its portable frozen selection into a fresh v2 root; never cop
 
 The following commands deliberately fail if the v2 root already exists. They copy the
 whole selection directory and verify every copied file byte-for-byte by SHA-256 before
-creating a new donor manifest:
+creating a new donor manifest. Each no-clobber guard uses `exit 1`, so an existing target
+terminates the current shell; reconnect and choose a fresh versioned root before retrying.
 
 ```bash
 cd /data/long_term_data/shixiao/videomem/U-test-vistory-8f0b728
@@ -1099,7 +1100,10 @@ test -f "$SONG_V1/selection/selection.json"
 test -f "$BASE_ARGS"
 test -f "$PLATFORM_MANIFEST"
 test -f "$TARGET_INPUTS"
-test ! -e "$SONG_ROOT"
+if [ -e "$SONG_ROOT" ]; then
+  echo "ERROR: fresh v2 root required: $SONG_ROOT" >&2
+  exit 1
+fi
 mkdir -- "$SONG_ROOT"
 cp -a -- "$SONG_V1/selection" "$SONG_ROOT/selection"
 
@@ -1133,7 +1137,10 @@ print("selection files copied with matching sha256:", len(source_hashes))
 print("target manifest sha256:", target_sha)
 PY
 
-test ! -e "$SONG_ROOT/donor_run"
+if [ -e "$SONG_ROOT/donor_run" ]; then
+  echo "ERROR: fresh donor run required: $SONG_ROOT/donor_run" >&2
+  exit 1
+fi
 python -m utest.vistory_donor_harness dry-run \
   --selection "$SONG_ROOT/selection/selection.json" \
   --output "$SONG_ROOT/donor_run" \
@@ -1193,14 +1200,21 @@ continue. These outputs are also no-clobber: stop and choose another versioned r
 either path already exists.
 
 ```bash
-test ! -e "$SONG_ROOT/donor_bundle"
-test ! -e "$SONG_ROOT/target_run"
+if [ -e "$SONG_ROOT/donor_bundle" ]; then
+  echo "ERROR: fresh donor bundle required: $SONG_ROOT/donor_bundle" >&2
+  exit 1
+fi
 
 python tools/freeze_vistory_donor_map.py \
   --targets "$TARGET_INPUTS" \
   --selection "$SONG_ROOT/selection/selection.json" \
   --donor-run-manifest "$SONG_ROOT/donor_run/run_manifest.json" \
   --output-root "$SONG_ROOT/donor_bundle"
+
+if [ -e "$SONG_ROOT/target_run" ]; then
+  echo "ERROR: fresh target run required: $SONG_ROOT/target_run" >&2
+  exit 1
+fi
 
 python -m utest.subject_reappearance_harness dry-run \
   --inputs "$TARGET_INPUTS" \
