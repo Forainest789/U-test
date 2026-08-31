@@ -14,6 +14,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+from collections.abc import Mapping, Sequence
 from collections import defaultdict, deque
 
 import numpy as np
@@ -179,6 +180,36 @@ class AttentionOutputFeatureTap:
             self.hook.remove()
             self.hook = None
         self.tokens = None
+
+
+def _partition_layerwise_feature_capture(
+    captured_by_layer: Mapping[object, torch.Tensor],
+    *,
+    memory_layers: Sequence[int],
+    query_layer: int,
+    layerwise_memory: bool,
+) -> tuple[torch.Tensor, torch.Tensor | dict]:
+    query_key = str(int(query_layer))
+    memory_keys = tuple(str(int(layer)) for layer in memory_layers)
+    captured = {str(layer): tensor for layer, tensor in captured_by_layer.items()}
+    if query_key not in captured:
+        raise ValueError(f"missing shared query layer capture: {query_key}")
+    expected_keys = set(memory_keys) | {query_key}
+    if set(captured) != expected_keys:
+        raise ValueError(
+            f"feature capture layers mismatch: expected={sorted(expected_keys)} "
+            f"actual={sorted(captured)}"
+        )
+    for layer, tensor in captured.items():
+        if not isinstance(tensor, torch.Tensor) or tensor.ndim != 2:
+            raise ValueError(f"feature capture layer {layer} must be a 2D tensor")
+    query_tokens = captured[query_key]
+    if not layerwise_memory:
+        return query_tokens, query_tokens
+    return query_tokens, {
+        "__layerwise__": True,
+        "layers": {layer: captured[layer] for layer in memory_keys},
+    }
 
 
 class AttentionMapExtractorV8:
@@ -1175,7 +1206,7 @@ class ReferenceInferenceRuntime:
                 active_query_role_boxes = cached_query_role_boxes
                 active_query_feature_payload = cached_query_feature_payload
                 probe_extractor = None
-                probe_feature_tap = None
+                probe_feature_taps = []
                 probe_ordered_roles = []
                 probe_role_to_maps = None
                 probe_layer_tokens = None
@@ -1256,14 +1287,24 @@ class ReferenceInferenceRuntime:
                             )
                             probe_extractor.register_hooks()
                             if str(getattr(self, 'sparse_role_memory_feature_source', 'attn_out')).strip().lower() in ('attn_out', 'self_attn_out'):
-                                probe_feature_tap = AttentionOutputFeatureTap(
-                                    dit_model=self.pipe.denoising_model(),
-                                    layer_idx=int(getattr(self, 'sparse_role_memory_layer_idx', 7)),
-                                    keep_device='cpu',
-                                    keep_dtype=torch.bfloat16,
-                                    source=str(getattr(self, 'sparse_role_memory_feature_source', 'attn_out')),
+                                query_layer = int(getattr(self, 'sparse_role_memory_layer_idx', 7))
+                                layerwise_memory = bool(getattr(self, 'jigsaw_extra_encoder_enabled', False))
+                                memory_capture_layers = (
+                                    tuple(int(layer) for layer in getattr(self, 'jigsaw_extra_encoder_layers', ()))
+                                    if layerwise_memory
+                                    else (query_layer,)
                                 )
-                                probe_feature_tap.register()
+                                capture_layers = tuple(sorted(set(memory_capture_layers) | {query_layer}))
+                                for tap_layer in capture_layers:
+                                    feature_tap = AttentionOutputFeatureTap(
+                                        dit_model=self.pipe.denoising_model(),
+                                        layer_idx=tap_layer,
+                                        keep_device='cpu',
+                                        keep_dtype=torch.bfloat16,
+                                        source=str(getattr(self, 'sparse_role_memory_feature_source', 'attn_out')),
+                                    )
+                                    feature_tap.register()
+                                    probe_feature_taps.append(feature_tap)
 
                 query_override = (
                     teacher_query_indices_by_role
@@ -1349,11 +1390,23 @@ class ReferenceInferenceRuntime:
                         per_char_step_maps = probe_extractor.get_attention_maps_per_character()
                     finally:
                         probe_extractor.remove_hooks()
-                    captured_layer_tokens = None
-                    if probe_feature_tap is not None:
-                        captured_layer_tokens = probe_feature_tap.pop_tokens()
-                        probe_feature_tap.remove()
-                    probe_layer_tokens = captured_layer_tokens
+                    query_layer_tokens = None
+                    if probe_feature_taps:
+                        captured_by_layer = {}
+                        try:
+                            for feature_tap in probe_feature_taps:
+                                layer_tokens = feature_tap.pop_tokens()
+                                if layer_tokens is not None:
+                                    captured_by_layer[str(feature_tap.layer_idx)] = layer_tokens
+                        finally:
+                            for feature_tap in probe_feature_taps:
+                                feature_tap.remove()
+                        query_layer_tokens, probe_layer_tokens = _partition_layerwise_feature_capture(
+                            captured_by_layer,
+                            memory_layers=memory_capture_layers,
+                            query_layer=query_layer,
+                            layerwise_memory=layerwise_memory,
+                        )
                     if isinstance(per_char_step_maps, list) and len(per_char_step_maps) > 0 and isinstance(probe_ordered_roles, list):
                         probe_role_to_maps = {}
                         for rid, maps in zip(probe_ordered_roles, per_char_step_maps):
@@ -1369,7 +1422,7 @@ class ReferenceInferenceRuntime:
                         ordered_roles=probe_ordered_roles,
                         h_patch=h_patch,
                         w_patch=w_patch,
-                        layer_tokens=captured_layer_tokens,
+                        layer_tokens=query_layer_tokens,
                     )
                     if isinstance(next_query_role_boxes, dict) and len(next_query_role_boxes) > 0:
                         prev_step_role_boxes = dict(next_query_role_boxes)

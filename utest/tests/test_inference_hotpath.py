@@ -125,6 +125,140 @@ def _load(module_name, attr):
     return getattr(module, attr)
 
 
+def test_base_capture_keeps_shared_query_and_all_layerwise_memory() -> None:
+    torch = pytest.importorskip("torch")
+    partition = _load(
+        "reference_inference_runtime", "_partition_layerwise_feature_capture"
+    )
+    captured = {
+        str(layer): torch.full((5, 3), float(layer), dtype=torch.float32)
+        for layer in range(16)
+    }
+
+    query, memory = partition(
+        captured,
+        memory_layers=range(16),
+        query_layer=3,
+        layerwise_memory=True,
+    )
+
+    assert query is captured["3"]
+    assert memory["__layerwise__"] is True
+    assert list(memory["layers"]) == [str(layer) for layer in range(16)]
+    assert all(
+        memory["layers"][str(layer)] is captured[str(layer)]
+        for layer in range(16)
+    )
+
+
+def test_base_capture_allows_query_layer_outside_memory_layers_without_publishing_it() -> None:
+    torch = pytest.importorskip("torch")
+    partition = _load(
+        "reference_inference_runtime", "_partition_layerwise_feature_capture"
+    )
+    captured = {
+        str(layer): torch.zeros((5, 3))
+        for layer in (3, 11, 12, 13, 14, 15)
+    }
+
+    query, memory = partition(
+        captured,
+        memory_layers=range(11, 16),
+        query_layer=3,
+        layerwise_memory=True,
+    )
+
+    assert query is captured["3"]
+    assert set(memory["layers"]) == {"11", "12", "13", "14", "15"}
+
+
+def test_base_capture_fails_closed_when_query_layer_is_missing() -> None:
+    torch = pytest.importorskip("torch")
+    partition = _load(
+        "reference_inference_runtime", "_partition_layerwise_feature_capture"
+    )
+    captured = {
+        str(layer): torch.zeros((5, 3))
+        for layer in range(16)
+        if layer != 3
+    }
+
+    with pytest.raises(ValueError, match="query layer"):
+        partition(
+            captured,
+            memory_layers=range(16),
+            query_layer=3,
+            layerwise_memory=True,
+        )
+
+
+def test_base_capture_fails_closed_when_memory_layer_is_missing() -> None:
+    torch = pytest.importorskip("torch")
+    partition = _load(
+        "reference_inference_runtime", "_partition_layerwise_feature_capture"
+    )
+    captured = {
+        str(layer): torch.zeros((5, 3))
+        for layer in range(16)
+        if layer != 15
+    }
+
+    with pytest.raises(ValueError, match="capture layers"):
+        partition(
+            captured,
+            memory_layers=range(16),
+            query_layer=3,
+            layerwise_memory=True,
+        )
+
+
+def test_base_capture_rejects_non_2d_layer_tokens() -> None:
+    torch = pytest.importorskip("torch")
+    partition = _load(
+        "reference_inference_runtime", "_partition_layerwise_feature_capture"
+    )
+    captured = {
+        str(layer): torch.zeros((5, 3))
+        for layer in range(16)
+    }
+    captured[8] = torch.zeros((1, 5, 3))
+
+    with pytest.raises(ValueError, match="2D tensor"):
+        partition(
+            captured,
+            memory_layers=range(16),
+            query_layer=3,
+            layerwise_memory=True,
+        )
+
+
+def test_normal_base_path_partitions_query_and_memory_from_one_forward() -> None:
+    source = (
+        Path(__file__).resolve().parents[2] / "reference_inference_runtime.py"
+    ).read_text(encoding="utf-8")
+    start = source.index("                probe_feature_taps = []")
+    end = source.index("                if conditional_only:", start)
+    body = source[start:end]
+
+    assert (
+        "capture_layers = tuple(sorted(set(memory_capture_layers) | {query_layer}))"
+        in body
+    )
+    assert "for tap_layer in capture_layers:" in body
+    assert body.count("noise_pred_cond =") == 2
+    assert "_partition_layerwise_feature_capture(" in body
+    assert "layer_tokens=query_layer_tokens" in body
+    assert (
+        "finally:\n"
+        "                            for feature_tap in probe_feature_taps:\n"
+        "                                feature_tap.remove()"
+    ) in body
+    assert "token_source_override=probe_layer_tokens" not in body
+
+    writer = source[source.index("                if collect_chars and", end):]
+    assert "token_source_override=probe_layer_tokens" in writer
+
+
 def test_residency_guard_reads_parameters_not_cached_device_attr() -> None:
     torch = pytest.importorskip("torch")
     is_on = _load("wan22_train_runtime", "_module_is_on")
