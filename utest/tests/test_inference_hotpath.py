@@ -232,6 +232,42 @@ def test_base_capture_rejects_non_2d_layer_tokens() -> None:
         )
 
 
+@pytest.mark.parametrize("failure_point", ["conditional_forward", "attention_maps"])
+def test_registered_feature_taps_are_removed_when_capture_path_raises(
+    failure_point: str,
+) -> None:
+    registered_feature_taps = _load(
+        "reference_inference_runtime", "_registered_feature_taps"
+    )
+
+    class FakeTap:
+        def __init__(self) -> None:
+            self.active = False
+            self.remove_calls = 0
+
+        def register(self) -> None:
+            self.active = True
+
+        def remove(self) -> None:
+            self.active = False
+            self.remove_calls += 1
+
+    taps = [FakeTap(), FakeTap()]
+    removed_before_map_read = False
+
+    with pytest.raises(RuntimeError, match=failure_point):
+        with registered_feature_taps(taps):
+            if failure_point == "conditional_forward":
+                raise RuntimeError(failure_point)
+        removed_before_map_read = all(not tap.active for tap in taps)
+        raise RuntimeError(failure_point)
+
+    assert all(not tap.active for tap in taps)
+    assert all(tap.remove_calls == 1 for tap in taps)
+    if failure_point == "attention_maps":
+        assert removed_before_map_read is True
+
+
 def test_normal_base_path_partitions_query_and_memory_from_one_forward() -> None:
     source = (
         Path(__file__).resolve().parents[2] / "reference_inference_runtime.py"
@@ -248,12 +284,20 @@ def test_normal_base_path_partitions_query_and_memory_from_one_forward() -> None
     assert body.count("noise_pred_cond =") == 2
     assert "_partition_layerwise_feature_capture(" in body
     assert "layer_tokens=query_layer_tokens" in body
-    assert (
-        "finally:\n"
-        "                            for feature_tap in probe_feature_taps:\n"
-        "                                feature_tap.remove()"
-    ) in body
     assert "token_source_override=probe_layer_tokens" not in body
+
+    setup_end = body.index("                query_override =")
+    registration = body.index(
+        "                with _registered_feature_taps(probe_feature_taps):"
+    )
+    conditional_forward = body.index("                if use_memory_path:", registration)
+    token_pop = body.index("feature_tap.pop_tokens()", conditional_forward)
+    attention_map_read = body.index(
+        "per_char_step_maps = probe_extractor.get_attention_maps_per_character()",
+        token_pop,
+    )
+    assert "feature_tap.register()" not in body[:setup_end]
+    assert registration < conditional_forward < token_pop < attention_map_read
 
     writer = source[source.index("                if collect_chars and", end):]
     assert "token_source_override=probe_layer_tokens" in writer

@@ -16,6 +16,7 @@ import subprocess
 import tempfile
 from collections.abc import Mapping, Sequence
 from collections import defaultdict, deque
+from contextlib import contextmanager
 
 import numpy as np
 import torch
@@ -180,6 +181,17 @@ class AttentionOutputFeatureTap:
             self.hook.remove()
             self.hook = None
         self.tokens = None
+
+
+@contextmanager
+def _registered_feature_taps(feature_taps: Sequence[AttentionOutputFeatureTap]):
+    try:
+        for feature_tap in feature_taps:
+            feature_tap.register()
+        yield
+    finally:
+        for feature_tap in feature_taps:
+            feature_tap.remove()
 
 
 def _partition_layerwise_feature_capture(
@@ -1303,7 +1315,6 @@ class ReferenceInferenceRuntime:
                                         keep_dtype=torch.bfloat16,
                                         source=str(getattr(self, 'sparse_role_memory_feature_source', 'attn_out')),
                                     )
-                                    feature_tap.register()
                                     probe_feature_taps.append(feature_tap)
 
                 query_override = (
@@ -1345,33 +1356,39 @@ class ReferenceInferenceRuntime:
                         "attention_implementation": str(ATTENTION_IMPLEMENTATION),
                     }
 
-                if use_memory_path:
-                    mapping_recorder = {} if i in selected_feature_steps else None
-                    emb_kwargs = dict(image_emb)
-                    if memory_token_lengths_per_character is not None:
-                        emb_kwargs['memory_token_lengths_per_character'] = memory_token_lengths_per_character
-                    if isinstance(active_query_role_boxes, dict) and len(active_query_role_boxes) > 0:
-                        emb_kwargs['query_role_boxes'] = active_query_role_boxes
-                    if isinstance(active_query_feature_payload, dict) and len(active_query_feature_payload) > 0:
-                        emb_kwargs['query_feature_payload'] = active_query_feature_payload
-                    if capture_sparse_token_diagnostics:
-                        emb_kwargs['capture_sparse_token_diagnostics'] = True
-                    if mapping_recorder is not None:
-                        emb_kwargs['feature_mapping_recorder'] = mapping_recorder
-                    noise_pred_cond = self._memory_aware_dit_forward(
-                        x=denoising_latents, t=t, context=prompt_emb['context'],
-                        memory_tokens=memory_tokens,
-                        memory_bank_tokens=memory_bank_tokens,
-                        memory_bank_percents=memory_bank_percents,
-                        memory_bank_token_meta=memory_bank_token_meta,
-                        **emb_kwargs, **extra_input
-                    )
-                else:
-                    mapping_recorder = None
-                    noise_pred_cond = self.pipe.denoising_model()(
-                        denoising_latents, t, context=prompt_emb['context'],
-                        **image_emb_for_denoising, **extra_input
-                    )
+                captured_by_layer = {}
+                with _registered_feature_taps(probe_feature_taps):
+                    if use_memory_path:
+                        mapping_recorder = {} if i in selected_feature_steps else None
+                        emb_kwargs = dict(image_emb)
+                        if memory_token_lengths_per_character is not None:
+                            emb_kwargs['memory_token_lengths_per_character'] = memory_token_lengths_per_character
+                        if isinstance(active_query_role_boxes, dict) and len(active_query_role_boxes) > 0:
+                            emb_kwargs['query_role_boxes'] = active_query_role_boxes
+                        if isinstance(active_query_feature_payload, dict) and len(active_query_feature_payload) > 0:
+                            emb_kwargs['query_feature_payload'] = active_query_feature_payload
+                        if capture_sparse_token_diagnostics:
+                            emb_kwargs['capture_sparse_token_diagnostics'] = True
+                        if mapping_recorder is not None:
+                            emb_kwargs['feature_mapping_recorder'] = mapping_recorder
+                        noise_pred_cond = self._memory_aware_dit_forward(
+                            x=denoising_latents, t=t, context=prompt_emb['context'],
+                            memory_tokens=memory_tokens,
+                            memory_bank_tokens=memory_bank_tokens,
+                            memory_bank_percents=memory_bank_percents,
+                            memory_bank_token_meta=memory_bank_token_meta,
+                            **emb_kwargs, **extra_input
+                        )
+                    else:
+                        mapping_recorder = None
+                        noise_pred_cond = self.pipe.denoising_model()(
+                            denoising_latents, t, context=prompt_emb['context'],
+                            **image_emb_for_denoising, **extra_input
+                        )
+                    for feature_tap in probe_feature_taps:
+                        layer_tokens = feature_tap.pop_tokens()
+                        if layer_tokens is not None:
+                            captured_by_layer[str(feature_tap.layer_idx)] = layer_tokens
                 conditional_sparse_stats = dict(
                     getattr(self, "_last_sparse_role_memory_stats", {})
                 )
@@ -1392,15 +1409,6 @@ class ReferenceInferenceRuntime:
                         probe_extractor.remove_hooks()
                     query_layer_tokens = None
                     if probe_feature_taps:
-                        captured_by_layer = {}
-                        try:
-                            for feature_tap in probe_feature_taps:
-                                layer_tokens = feature_tap.pop_tokens()
-                                if layer_tokens is not None:
-                                    captured_by_layer[str(feature_tap.layer_idx)] = layer_tokens
-                        finally:
-                            for feature_tap in probe_feature_taps:
-                                feature_tap.remove()
                         query_layer_tokens, probe_layer_tokens = _partition_layerwise_feature_capture(
                             captured_by_layer,
                             memory_layers=memory_capture_layers,
