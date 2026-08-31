@@ -244,6 +244,53 @@ def _materialize_payload(job: dict) -> None:
     _materialize_execution(job, "dump")
 
 
+def _mutate_payload_geometry(job: dict, malformation: str) -> None:
+    payload_path = Path(job["donor_payload"])
+    artifact = torch.load(payload_path, map_location="cpu", weights_only=True)
+    payload_key = next(iter(artifact["payloads"]))
+    payload = artifact["payloads"][payload_key]
+    if malformation == "flat":
+        payload = torch.zeros((64, 3), dtype=torch.float16)
+    else:
+        layers = payload["layers"]
+        if malformation == "empty":
+            layers.clear()
+        elif malformation == "missing":
+            layers.pop("15")
+        elif malformation == "extra":
+            layers["16"] = torch.zeros((64, 3), dtype=torch.float16)
+        elif malformation == "wrong_slots":
+            layers["0"] = torch.zeros((63, 3), dtype=torch.float16)
+        elif malformation == "integer_tensor":
+            layers["0"] = torch.zeros((64, 3), dtype=torch.int64)
+        elif malformation == "nonfinite":
+            layers["0"][0, 0] = float("nan")
+        elif malformation == "hidden_dim":
+            layers["15"] = torch.zeros((64, 4), dtype=torch.float16)
+        else:
+            raise ValueError(f"unsupported payload malformation: {malformation}")
+    artifact["payloads"][payload_key] = payload
+    torch.save(artifact, payload_path)
+
+    if isinstance(payload, torch.Tensor):
+        shapes = {"0": [int(value) for value in payload.shape]}
+    else:
+        shapes = {
+            layer: [int(value) for value in tensor.shape]
+            for layer, tensor in payload["layers"].items()
+        }
+    info_path = Path(job["donor_payload_info"])
+    info = json.loads(info_path.read_text(encoding="utf-8"))
+    info["payload_sha256"] = _sha256(payload_path)
+    info["payload_slot_shapes"] = {payload_key: shapes}
+    _write_json(info_path, info)
+
+    audit_path = Path(job["donor_audit"])
+    audit = json.loads(audit_path.read_text(encoding="utf-8"))
+    audit["donor_sha256"] = _sha256(payload_path)
+    _write_json(audit_path, audit)
+
+
 def _read_runtime_contract(job: dict) -> dict:
     path = Path(job["prefix_contract"])
     if not path.is_file():
@@ -869,6 +916,42 @@ def test_resume_rejects_invalid_existing_payload_without_subprocess(
     assert calls == []
 
 
+def test_resume_rejects_stale_completion_with_wrong_slot_geometry_without_subprocess(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    selection = _exploratory_selection(tmp_path)
+    base, platform = _inputs(tmp_path)
+    run = build_donor_run_manifest(
+        selection_path=selection,
+        output_root=tmp_path / "run",
+        base_inference_args_path=base,
+        platform_manifest_path=platform,
+        python_executable=sys.executable,
+    )
+    job = run["jobs"][0]
+    _materialize_prefix(job, platform)
+    _materialize_payload(job)
+    _materialize_completion(job, run)
+    _mutate_payload_geometry(job, "wrong_slots")
+    completion_path = Path(job["completion"])
+    completion = json.loads(completion_path.read_text(encoding="utf-8"))
+    for field in ("donor_payload", "donor_payload_info", "donor_audit"):
+        completion[field]["sha256"] = _sha256(Path(job[field]))
+    _write_json(completion_path, completion)
+    manifest = tmp_path / "run" / "run_manifest.json"
+    _write_json(manifest, run)
+    calls = []
+    monkeypatch.setattr(
+        "utest.vistory_donor_harness.subprocess.run",
+        lambda *args, **kwargs: calls.append(args),
+    )
+
+    with pytest.raises(ValueError, match="64-slot"):
+        run_stage("resume", manifest)
+
+    assert calls == []
+
+
 def test_selection_requires_task3_event_parent_path_contract(tmp_path: Path) -> None:
     selection_path = _selection(tmp_path)
     selection = json.loads(selection_path.read_text(encoding="utf-8"))
@@ -946,8 +1029,21 @@ def test_completed_run_gate_returns_only_three_fully_valid_jobs(
     assert set(json.loads(capsys.readouterr().out)) == {"stage", "results"}
 
 
-def test_completion_rejects_flat_payload_before_record_is_written(
-    tmp_path: Path,
+@pytest.mark.parametrize(
+    ("malformation", "message"),
+    [
+        ("flat", "layerwise"),
+        ("empty", "layers must not be empty"),
+        ("missing", "layers"),
+        ("extra", "layers"),
+        ("wrong_slots", "64-slot"),
+        ("integer_tensor", "floating point"),
+        ("nonfinite", "finite"),
+        ("hidden_dim", "hidden dimension"),
+    ],
+)
+def test_completion_rejects_invalid_geometry_before_record_is_written(
+    tmp_path: Path, malformation: str, message: str,
 ) -> None:
     selection_path = _exploratory_selection(tmp_path)
     base, platform = _inputs(tmp_path)
@@ -961,60 +1057,9 @@ def test_completion_rejects_flat_payload_before_record_is_written(
     job = run["jobs"][0]
     _materialize_prefix(job, platform)
     _materialize_payload(job)
-    payload_path = Path(job["donor_payload"])
-    artifact = torch.load(payload_path, map_location="cpu", weights_only=True)
-    payload_key = next(iter(artifact["payloads"]))
-    artifact["payloads"][payload_key] = torch.zeros(
-        (64, 3), dtype=torch.float16
-    )
-    torch.save(artifact, payload_path)
-    info_path = Path(job["donor_payload_info"])
-    info = json.loads(info_path.read_text(encoding="utf-8"))
-    info["payload_sha256"] = _sha256(payload_path)
-    info["payload_slot_shapes"][payload_key] = {"0": [64, 3]}
-    _write_json(info_path, info)
-    audit_path = Path(job["donor_audit"])
-    audit = json.loads(audit_path.read_text(encoding="utf-8"))
-    audit["donor_sha256"] = _sha256(payload_path)
-    _write_json(audit_path, audit)
+    _mutate_payload_geometry(job, malformation)
 
-    with pytest.raises(ValueError, match="layerwise"):
-        donor_harness._write_completion(job, run)
-
-    assert not Path(job["completion"]).exists()
-
-
-def test_completion_rejects_missing_layer_before_record_is_written(
-    tmp_path: Path,
-) -> None:
-    selection_path = _exploratory_selection(tmp_path)
-    base, platform = _inputs(tmp_path)
-    run = build_donor_run_manifest(
-        selection_path=selection_path,
-        output_root=tmp_path / "run",
-        base_inference_args_path=base,
-        platform_manifest_path=platform,
-        python_executable=sys.executable,
-    )
-    job = run["jobs"][0]
-    _materialize_prefix(job, platform)
-    _materialize_payload(job)
-    payload_path = Path(job["donor_payload"])
-    artifact = torch.load(payload_path, map_location="cpu", weights_only=True)
-    payload_key = next(iter(artifact["payloads"]))
-    del artifact["payloads"][payload_key]["layers"]["15"]
-    torch.save(artifact, payload_path)
-    info_path = Path(job["donor_payload_info"])
-    info = json.loads(info_path.read_text(encoding="utf-8"))
-    info["payload_sha256"] = _sha256(payload_path)
-    del info["payload_slot_shapes"][payload_key]["15"]
-    _write_json(info_path, info)
-    audit_path = Path(job["donor_audit"])
-    audit = json.loads(audit_path.read_text(encoding="utf-8"))
-    audit["donor_sha256"] = _sha256(payload_path)
-    _write_json(audit_path, audit)
-
-    with pytest.raises(ValueError, match="layers"):
+    with pytest.raises(ValueError, match=message):
         donor_harness._write_completion(job, run)
 
     assert not Path(job["completion"]).exists()
