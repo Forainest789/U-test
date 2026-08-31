@@ -1204,17 +1204,16 @@ if [ -e "$SONG_ROOT/donor_bundle" ]; then
   echo "ERROR: fresh donor bundle required: $SONG_ROOT/donor_bundle" >&2
   exit 1
 fi
+if [ -e "$SONG_ROOT/target_run" ]; then
+  echo "ERROR: fresh target run required: $SONG_ROOT/target_run" >&2
+  exit 1
+fi
 
 python tools/freeze_vistory_donor_map.py \
   --targets "$TARGET_INPUTS" \
   --selection "$SONG_ROOT/selection/selection.json" \
   --donor-run-manifest "$SONG_ROOT/donor_run/run_manifest.json" \
   --output-root "$SONG_ROOT/donor_bundle"
-
-if [ -e "$SONG_ROOT/target_run" ]; then
-  echo "ERROR: fresh target run required: $SONG_ROOT/target_run" >&2
-  exit 1
-fi
 
 python -m utest.subject_reappearance_harness dry-run \
   --inputs "$TARGET_INPUTS" \
