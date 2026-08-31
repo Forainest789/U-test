@@ -873,4 +873,3 @@ Then run `freeze_vistory_donor_map.py`, build `target_run/run_manifest.json`, an
 - [ ] A valid artifact passes donor completion, bundle freeze, and target-harness compatibility.
 - [ ] Song v1 is untouched and Song v2 passes the A100 geometry gate.
 - [ ] No new dependency, CLI option, extra forward, or Song-specific runtime behavior exists.
-
