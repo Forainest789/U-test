@@ -5,8 +5,81 @@ import json
 from pathlib import Path
 
 import pytest
+import torch
 
-from utest.input_contract import validate_donor_bundle, validate_teacher_bundle
+from utest.input_contract import (
+    validate_donor_bundle,
+    validate_layerwise_slot_payload,
+    validate_teacher_bundle,
+)
+
+
+def _layerwise_payload() -> dict:
+    return {
+        "__layerwise__": True,
+        "layers": {
+            str(layer): torch.zeros((64, 3), dtype=torch.float16)
+            for layer in range(16)
+        },
+    }
+
+
+def test_layerwise_slot_payload_accepts_exact_frozen_geometry() -> None:
+    shapes = validate_layerwise_slot_payload(
+        _layerwise_payload(), expected_layers=range(16), expected_slots=64
+    )
+
+    assert shapes == {str(layer): [64, 3] for layer in range(16)}
+
+
+@pytest.mark.parametrize(
+    ("malformation", "message"),
+    [
+        ("flat", "layerwise"),
+        ("marker_int", "layerwise"),
+        ("empty", "layers"),
+        ("integer_key", "layers"),
+        ("missing", "layers"),
+        ("extra", "layers"),
+        ("wrong_slots", "64-slot"),
+        ("rank", "2D"),
+        ("integer_tensor", "floating"),
+        ("nonfinite", "finite"),
+        ("hidden_dim", "hidden dimension"),
+    ],
+)
+def test_layerwise_slot_payload_rejects_malformed_geometry(
+    malformation: str, message: str
+) -> None:
+    payload = _layerwise_payload()
+    layers = payload["layers"]
+    if malformation == "flat":
+        payload = torch.zeros((64, 3), dtype=torch.float16)
+    elif malformation == "marker_int":
+        payload["__layerwise__"] = 1
+    elif malformation == "empty":
+        layers.clear()
+    elif malformation == "integer_key":
+        layers[0] = layers.pop("0")
+    elif malformation == "missing":
+        layers.pop("15")
+    elif malformation == "extra":
+        layers["16"] = torch.zeros((64, 3), dtype=torch.float16)
+    elif malformation == "wrong_slots":
+        layers["0"] = torch.zeros((63, 3), dtype=torch.float16)
+    elif malformation == "rank":
+        layers["0"] = torch.zeros((64, 1, 3), dtype=torch.float16)
+    elif malformation == "integer_tensor":
+        layers["0"] = torch.zeros((64, 3), dtype=torch.int64)
+    elif malformation == "nonfinite":
+        layers["0"][0, 0] = float("nan")
+    else:
+        layers["15"] = torch.zeros((64, 4), dtype=torch.float16)
+
+    with pytest.raises(ValueError, match=message):
+        validate_layerwise_slot_payload(
+            payload, expected_layers=range(16), expected_slots=64
+        )
 
 
 def _sha(path: Path) -> str:

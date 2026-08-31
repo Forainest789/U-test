@@ -5,7 +5,7 @@ import argparse
 import hashlib
 import json
 from pathlib import Path
-from typing import Callable, Mapping
+from typing import Callable, Mapping, Sequence
 
 
 def sha256_file(path: Path) -> str:
@@ -73,6 +73,48 @@ def payload_slot_shapes(tokens, payload_key: str) -> dict[str, list[int]]:
             if hasattr(tensor, "shape")
         }
     raise ValueError("selected donor payload has no tensor slot shape")
+
+
+def validate_layerwise_slot_payload(
+    payload: object,
+    *,
+    expected_layers: Sequence[int],
+    expected_slots: int,
+) -> dict[str, list[int]]:
+    import torch
+
+    expected_keys = tuple(str(int(layer)) for layer in expected_layers)
+    if not isinstance(payload, Mapping) or payload.get("__layerwise__") is not True:
+        raise ValueError("selected donor payload must be a layerwise tensor payload")
+    layers = payload.get("layers")
+    if not isinstance(layers, Mapping) or not layers:
+        raise ValueError("selected donor payload layers must not be empty")
+    if any(type(layer) is not str or not layer for layer in layers):
+        raise ValueError("selected donor payload layers must use non-empty string keys")
+    if set(layers) != set(expected_keys):
+        raise ValueError(f"selected donor payload layers must be exactly {list(expected_keys)}")
+
+    shapes: dict[str, list[int]] = {}
+    hidden_dims: set[int] = set()
+    for layer in expected_keys:
+        tensor = layers[layer]
+        if not isinstance(tensor, torch.Tensor):
+            raise ValueError(f"selected donor payload layer {layer} must be a tensor")
+        if tensor.ndim != 2:
+            raise ValueError(f"selected donor payload layer {layer} must be a 2D tensor")
+        if int(tensor.shape[0]) != int(expected_slots):
+            raise ValueError(
+                f"selected donor payload layer {layer} must be a {expected_slots}-slot tensor"
+            )
+        if not tensor.is_floating_point():
+            raise ValueError(f"selected donor payload layer {layer} must be floating point")
+        if not bool(torch.isfinite(tensor).all().item()):
+            raise ValueError(f"selected donor payload layer {layer} must be finite")
+        shapes[layer] = [int(value) for value in tensor.shape]
+        hidden_dims.add(int(tensor.shape[1]))
+    if len(hidden_dims) != 1:
+        raise ValueError("selected donor payload layers must share one hidden dimension")
+    return shapes
 
 
 def validate_donor_bundle(
