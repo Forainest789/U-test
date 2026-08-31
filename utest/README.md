@@ -1073,6 +1073,178 @@ Q* is `not_available`; stop after the four preflight arms and do not run `full`,
 or aggregate analysis. Run in the already-active `slotmem` environment; no environment
 activation or package installation is required.
 
+#### Recovery after the layerwise base-inference repair
+
+If `vistorybench_song_yuchen_exploratory_v1` already contains the flat one-layer donor,
+retain that entire root as failed evidence. This is an alternative entry point for an
+existing v1 run: do not rerun the v1 survey, selection, or donor commands later in this
+section. Copy only its portable frozen selection into a fresh v2 root; never copy
+`donor_run`, `donor_bundle`, or `target_run` from v1.
+
+The following commands deliberately fail if the v2 root already exists. They copy the
+whole selection directory and verify every copied file byte-for-byte by SHA-256 before
+creating a new donor manifest:
+
+```bash
+cd /data/long_term_data/shixiao/videomem/U-test-vistory-8f0b728
+
+export BASE_ARGS="$PWD/runs/vistorybench_reappearance_v1/config/base_inference_args.json"
+export PLATFORM_MANIFEST="$PWD/platform.manifest.json"
+export TARGET_INPUTS="$PWD/runs/vistorybench_reappearance_top8_64_v1/inputs/manifest.json"
+export SONG_EVENT=vistory79_song_yuchen_s2_s8
+export SONG_V1="$PWD/runs/vistorybench_song_yuchen_exploratory_v1"
+export SONG_ROOT="$PWD/runs/vistorybench_song_yuchen_exploratory_v2"
+
+test -f "$SONG_V1/selection/selection.json"
+test -f "$BASE_ARGS"
+test -f "$PLATFORM_MANIFEST"
+test -f "$TARGET_INPUTS"
+test ! -e "$SONG_ROOT"
+mkdir -- "$SONG_ROOT"
+cp -a -- "$SONG_V1/selection" "$SONG_ROOT/selection"
+
+python - <<'PY'
+import hashlib
+import os
+from pathlib import Path
+
+source = Path(os.environ["SONG_V1"]) / "selection"
+copied = Path(os.environ["SONG_ROOT"]) / "selection"
+
+def file_hashes(root: Path) -> dict[str, str]:
+    return {
+        str(path.relative_to(root)): hashlib.sha256(path.read_bytes()).hexdigest()
+        for path in sorted(root.rglob("*"))
+        if path.is_file()
+    }
+
+source_hashes = file_hashes(source)
+copied_hashes = file_hashes(copied)
+assert source_hashes, f"empty selection directory: {source}"
+assert copied_hashes == source_hashes, (copied_hashes, source_hashes)
+
+target = Path(os.environ["TARGET_INPUTS"])
+target_sha = hashlib.sha256(target.read_bytes()).hexdigest()
+expected_target_sha = (
+    "66c3f38c54924f06d375345637eaf8c5d36a081440ea7c55014bd5797010e89d"
+)
+assert target_sha == expected_target_sha, (target_sha, expected_target_sha)
+print("selection files copied with matching sha256:", len(source_hashes))
+print("target manifest sha256:", target_sha)
+PY
+
+test ! -e "$SONG_ROOT/donor_run"
+python -m utest.vistory_donor_harness dry-run \
+  --selection "$SONG_ROOT/selection/selection.json" \
+  --output "$SONG_ROOT/donor_run" \
+  --base-inference-args "$BASE_ARGS" \
+  --platform-manifest "$PLATFORM_MANIFEST"
+
+CUDA_VISIBLE_DEVICES=0 \
+DUAL_EXPERT_LOAD_MODE=active \
+DUAL_EXPERT_MANAGE_AUX_MODELS=1 \
+python -m utest.vistory_donor_harness resume \
+  --manifest "$SONG_ROOT/donor_run/run_manifest.json"
+```
+
+Before freezing the donor map, require the repaired artifact to contain exactly the
+target-character bank-0 payload, layers `0..15`, and 64 finite floating slots per layer.
+This gate also requires the strengthened donor completion record:
+
+```bash
+python - <<'PY'
+import json
+import os
+from pathlib import Path
+
+import torch
+
+root = Path(os.environ["SONG_ROOT"])
+run = json.loads((root / "donor_run/run_manifest.json").read_text())
+assert run["protocol_scope"] == "exploratory_single_event"
+assert run["target_event_ids"] == [os.environ["SONG_EVENT"]]
+assert len(run["jobs"]) == 1
+job = run["jobs"][0]
+assert job["target_event_id"] == os.environ["SONG_EVENT"]
+artifact = torch.load(job["donor_payload"], map_location="cpu", weights_only=True)
+assert artifact["format"] == "slotmem_donor_payload_v2"
+key = f'{job["event"]["character_name"]}|0'
+assert list(artifact["payloads"]) == [key]
+payload = artifact["payloads"][key]
+assert payload.get("__layerwise__") is True
+layers = payload.get("layers")
+assert isinstance(layers, dict)
+assert set(layers) == {str(layer) for layer in range(16)}
+hidden_dims = set()
+for layer in range(16):
+    tensor = layers[str(layer)]
+    assert isinstance(tensor, torch.Tensor)
+    assert tensor.ndim == 2 and tensor.shape[0] == 64 and tensor.shape[1] > 0
+    assert tensor.is_floating_point() and torch.isfinite(tensor).all().item()
+    hidden_dims.add(int(tensor.shape[1]))
+assert len(hidden_dims) == 1
+assert Path(job["completion"]).is_file()
+print("READY: one bank, layers 0-15, 64 finite slots per layer")
+PY
+```
+
+Only after that gate prints `READY` may the existing donor-map and target workflow
+continue. These outputs are also no-clobber: stop and choose another versioned root if
+either path already exists.
+
+```bash
+test ! -e "$SONG_ROOT/donor_bundle"
+test ! -e "$SONG_ROOT/target_run"
+
+python tools/freeze_vistory_donor_map.py \
+  --targets "$TARGET_INPUTS" \
+  --selection "$SONG_ROOT/selection/selection.json" \
+  --donor-run-manifest "$SONG_ROOT/donor_run/run_manifest.json" \
+  --output-root "$SONG_ROOT/donor_bundle"
+
+python -m utest.subject_reappearance_harness dry-run \
+  --inputs "$TARGET_INPUTS" \
+  --output "$SONG_ROOT/target_run" \
+  --base-inference-args "$BASE_ARGS" \
+  --platform-manifest "$PLATFORM_MANIFEST" \
+  --donor-map "$SONG_ROOT/donor_bundle/donor_map.json"
+
+python - <<'PY'
+import json
+import os
+from pathlib import Path
+
+run = json.loads(
+    (Path(os.environ["SONG_ROOT"]) / "target_run/run_manifest.json").read_text()
+)
+blocks = run["blocks"]
+assert len(blocks) == 9
+ready = [
+    (row["event_id"], row["seed"])
+    for row in blocks
+    if row["commands"]["preflight"]["status"] == "deferred_until_prefix"
+]
+assert ready == [(os.environ["SONG_EVENT"], seed) for seed in (0, 1, 2)]
+selected = [
+    row
+    for row in blocks
+    if row["event_id"] == os.environ["SONG_EVENT"] and row["seed"] == 0
+]
+assert len(selected) == 1
+assert selected[0]["preflight_arms"] == [
+    "full_correct", "no_memory", "zero_path", "wrong_subject"
+]
+assert selected[0]["qstar"] == {
+    "status": "not_available", "reason": "independent_teacher_missing"
+}
+print("target blocks: 9; selected execution block: Song seed 0")
+PY
+```
+
+Then continue at “Generate only the selected prefix” below and run the Song seed-0
+prefix, qualification, probe, and four-arm preflight with this v2 `SONG_ROOT`. Do not
+rerun any command in the original-from-scratch path between these two points.
+
 Start from the existing frozen data and configuration. The audited survey hash includes
 the absolute source paths frozen in the original Gate-B target tree, so locate that tree
 by its raw manifest hash and validate it in place. The whole gate below returns non-zero
