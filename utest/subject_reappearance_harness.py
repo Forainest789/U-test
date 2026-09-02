@@ -32,6 +32,7 @@ from .prefix_contract import (
 from .subject_subspace import canonical_json_sha256, capture_tensor_sha256
 from .subject_subspace_audit import SUBSPACE_ARMS
 from .subject_subspace_audit import validate_subject_subspace_manifest
+from .subject_reappearance_target_runner import run_target_preflight
 from .source_semantic_scores import validate_source_semantic_scores_file
 from .qstar import SEVEN_RUNS, classify_qstar, qstar_deltas
 from .vistory_reappearance import load_frozen_selection
@@ -1432,6 +1433,177 @@ def _resume_completed_arm(block: Mapping, arm: str, arm_dir: Path) -> bool:
         return False
 
 
+def _build_target_preflight_context(
+    row: Mapping,
+    contract: Mapping,
+    commands: Mapping[str, Sequence[str]],
+    *,
+    arms: Sequence[str],
+) -> dict:
+    """Load validated CPU inputs for the single-process target runner."""
+    import torch
+    import infer_slotmem
+    from .input_contract import select_donor_entry
+
+    if tuple(commands) != PREFLIGHT_ARMS:
+        raise ValueError("target-preflight command artifact arm order is invalid")
+    command = list(commands["full_correct"])
+    if "--" not in command:
+        raise ValueError("target-preflight command is missing the inference argv separator")
+    inference_argv = command[command.index("--") + 1 :]
+    output_root = Path(row["block_dir"]) / "preflight"
+    inference_argv = _set_option(inference_argv, "--output_path", str(output_root.resolve()))
+    event_path = Path(row["event_json"])
+    manifest_path = Path(row["subject_subspace_manifest"])
+    event = _read_json(event_path)
+    mask_manifest = _read_json(manifest_path)
+    if not isinstance(event, Mapping) or not isinstance(mask_manifest, Mapping):
+        raise ValueError("target-preflight event and mask must be JSON objects")
+    validate_subject_subspace_manifest(
+        mask_manifest, event, seed=int(row["target_seed"])
+    )
+    story = _read_json(Path(event["source_json_path"]))
+    chunks = story.get("chunks", story) if isinstance(story, Mapping) else story
+    target_idx = int(event["target_chunk_idx"])
+    if not isinstance(chunks, list) or target_idx < 0 or target_idx >= len(chunks):
+        raise ValueError("target_chunk_idx outside source story")
+    snapshot = Path(contract["snapshot"]["path"])
+    state = torch.load(snapshot, map_location="cpu", weights_only=False)
+    donor = row.get("donor")
+    donor_path = donor_entry = donor_artifact = donor_provenance = None
+    if isinstance(donor, Mapping):
+        donor_path = Path(donor["payload_path"])
+        donor_manifest_path = Path(donor["manifest_path"])
+        donor_manifest = _read_json(donor_manifest_path)
+        donor_entry = select_donor_entry(donor_manifest, event)
+        donor_artifact = torch.load(donor_path, map_location="cpu", weights_only=False)
+        donor_provenance = {
+            "donor_payload_sha256": sha256_file(donor_path),
+            "donor_manifest_sha256": sha256_file(donor_manifest_path),
+            "donor_payload_key": str(donor_entry["payload_key"]),
+        }
+    return {
+        "infer_slotmem": infer_slotmem,
+        "inference_argv": inference_argv,
+        "state": state,
+        "story": story,
+        "target_chunk": chunks[target_idx],
+        "event": event,
+        "target_seed": int(row["target_seed"]),
+        "mask_manifest": mask_manifest,
+        "runtime_contract": contract["runtime_contract"],
+        "event_file_sha256": sha256_file(event_path),
+        "manifest_file_sha256": sha256_file(manifest_path),
+        "output_root": output_root,
+        "snapshot_path": snapshot,
+        "snapshot_sha256": str(contract["snapshot"]["sha256"]),
+        "donor_path": donor_path,
+        "donor_entry": donor_entry,
+        "donor_artifact": donor_artifact,
+        "donor_provenance": donor_provenance,
+        "arms": tuple(arms),
+    }
+
+
+def _execute_target_preflight(
+    manifest: Mapping,
+    *,
+    event_id: str | None,
+    seed: int | None,
+    resume: bool,
+) -> None:
+    rows = _selected_blocks(manifest, event_id, seed)
+    if len(rows) != 1:
+        raise ValueError("target-preflight requires exactly one event/seed block")
+    row = rows[0]
+    phase = row["commands"]["preflight"]
+    if phase["status"] != "deferred_until_prefix" or tuple(
+        phase["arm_order"]
+    ) != PREFLIGHT_ARMS:
+        raise ValueError("target-preflight requires the frozen preflight arm contract")
+    qualification = _read_json(Path(row["source_qualification"]))
+    if qualification.get("status") != "passed":
+        raise ValueError("source qualification is not passed")
+    contract = _validated_prefix_contract(row)
+    _validate_donor_target_compatibility(row)
+    commands = _freeze_or_load_command_artifact(row, contract)["preflight"]
+    block_dir = Path(row["block_dir"])
+    output_root = block_dir / "preflight"
+    validation_path = output_root / "validation.json"
+    event = _read_json(Path(row["event_json"]))
+    target_idx = int(event["target_chunk_idx"])
+    validation_block = {
+        "event": event,
+        "event_json": Path(row["event_json"]),
+        "subject_subspace_manifest": Path(row["subject_subspace_manifest"]),
+        "output": output_root,
+        "target_seed": int(row["target_seed"]),
+        "contract": contract,
+        "source_capture": row["source_capture"],
+        "donor": row.get("donor"),
+        "source_qualification": row["source_qualification"],
+        "arms_root": output_root / "arms",
+    }
+    if resume and validation_path.is_file():
+        try:
+            previous = _read_json(validation_path)
+            report = validate_block(validation_block, arms=PREFLIGHT_ARMS)
+            if previous.get("execution_mode") != "single_process_target_only":
+                raise ValueError("validation was not produced by target-preflight")
+            if {key: previous.get(key) for key in report} != report:
+                raise ValueError("target-preflight validation is stale")
+            return
+        except (FileNotFoundError, KeyError, TypeError, ValueError):
+            _archive_path(validation_path)
+    pending = []
+    for arm in PREFLIGHT_ARMS:
+        arm_dir = output_root / "arms" / arm
+        if not resume or not arm_dir.exists():
+            pending.append(arm)
+            continue
+        try:
+            metadata = _read_json(arm_dir / f"chunk_{target_idx:03d}.metadata.json")
+            if (
+                metadata.get("execution_mode") != "single_process_target_only"
+                or (arm_dir / f"chunk_{target_idx + 1:03d}.mp4").exists()
+            ):
+                raise ValueError("arm was not produced by target-preflight")
+            validate_block(
+                validation_block,
+                arms=(arm,),
+                decoded_gate=False,
+                require_measured=False,
+            )
+        except (FileNotFoundError, KeyError, TypeError, ValueError):
+            _archive_path(arm_dir)
+            pending.append(arm)
+    execution = {
+        "execution_mode": "single_process_target_only",
+        "engine_initialization_count": 0,
+        "target_chunk_idx": target_idx,
+        "target_plus_one_generated": False,
+        "arm_order": [],
+    }
+    if pending:
+        context = _build_target_preflight_context(
+            row, contract, commands, arms=pending
+        )
+        execution = run_target_preflight(context)
+    report = validate_block(validation_block, arms=PREFLIGHT_ARMS)
+    _write_json_exclusive(
+        validation_path,
+        {
+            **report,
+            "execution_mode": execution["execution_mode"],
+            "engine_initialization_count": execution["engine_initialization_count"],
+            "target_chunk_idx": target_idx,
+            "target_plus_one_generated": False,
+            "frozen_arm_order": list(PREFLIGHT_ARMS),
+            "generated_arms_this_invocation": list(execution["arm_order"]),
+        },
+    )
+
+
 def _execute_stage(
     manifest: Mapping,
     stage: str,
@@ -1440,6 +1612,11 @@ def _execute_stage(
     seed: int | None = None,
     resume: bool = False,
 ) -> None:
+    if stage == "target-preflight":
+        _execute_target_preflight(
+            manifest, event_id=event_id, seed=seed, resume=resume
+        )
+        return
     rows = _selected_blocks(manifest, event_id, seed)
     if stage == "qstar" and resume:
         rows = [row for row in rows if row["commands"][stage]["status"] != "not_available"]
@@ -1643,6 +1820,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         stage.add_argument("--manifest", type=Path, required=True)
         stage.add_argument("--event-id")
         stage.add_argument("--seed", type=int, choices=(0, 1, 2))
+    target = sub.add_parser("target-preflight")
+    target.add_argument("--manifest", type=Path, required=True)
+    target.add_argument("--event-id")
+    target.add_argument("--seed", type=int, choices=(0, 1, 2))
+    target.add_argument("--resume", action="store_true")
     args = parser.parse_args(argv)
     if args.command != "dry-run":
         manifest = _load_run_manifest(args.manifest.resolve())
@@ -1653,7 +1835,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 stage,
                 event_id=args.event_id,
                 seed=args.seed,
-                resume=args.command == "resume",
+                resume=args.command == "resume" or bool(getattr(args, "resume", False)),
             )
         return 0
     if (args.output / "run_manifest.json").exists():

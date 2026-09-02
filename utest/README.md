@@ -1518,7 +1518,7 @@ python -m utest.subject_reappearance_harness probe \
 CUDA_VISIBLE_DEVICES=0 \
 DUAL_EXPERT_LOAD_MODE=active \
 DUAL_EXPERT_MANAGE_AUX_MODELS=1 \
-python -m utest.subject_reappearance_harness preflight \
+python -m utest.subject_reappearance_harness target-preflight \
   --manifest "$SONG_ROOT/target_run/run_manifest.json" \
   --event-id "$SONG_EVENT" \
   --seed 0
@@ -1538,6 +1538,9 @@ row = next(
 root = Path(row["block_dir"]) / "preflight"
 report = json.loads((root / "validation.json").read_text())
 assert report["status"] == "passed"
+assert report["execution_mode"] == "single_process_target_only"
+assert report["engine_initialization_count"] == 1
+assert report["target_plus_one_generated"] is False
 assert report["arms"] == [
     "full_correct", "no_memory", "zero_path", "wrong_subject"
 ]
@@ -1548,6 +1551,10 @@ for video in videos:
     print(video)
 PY
 ```
+
+`target-preflight` loads SlotMem once, disables whole-model offload, and reuses that
+engine for the four target-only generations. The existing `preflight` command remains
+available for the original four-process, target-plus-one protocol.
 
 Stop here. Preserve the four videos and `validation.json` for human visual review. Do not
 invoke `full`, `qstar`, or `tools/analyze_subject_reappearance.py` for this exploratory

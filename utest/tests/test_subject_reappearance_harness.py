@@ -1678,6 +1678,102 @@ def _preflight_execution_row(tmp_path: Path) -> tuple[dict, Path]:
     return row, block_dir
 
 
+def test_target_preflight_cli_routes_one_resumable_block(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = []
+    monkeypatch.setattr(
+        "utest.subject_reappearance_harness._load_run_manifest", lambda _path: {"blocks": []}
+    )
+    monkeypatch.setattr(
+        "utest.subject_reappearance_harness._execute_stage",
+        lambda manifest, stage, **kwargs: calls.append((manifest, stage, kwargs)),
+    )
+
+    assert main(
+        [
+            "target-preflight",
+            "--manifest",
+            str(tmp_path / "run_manifest.json"),
+            "--event-id",
+            "e79",
+            "--seed",
+            "0",
+            "--resume",
+        ]
+    ) == 0
+    assert calls == [
+        (
+            {"blocks": []},
+            "target-preflight",
+            {"event_id": "e79", "seed": 0, "resume": True},
+        )
+    ]
+
+
+def test_target_preflight_validates_then_delegates_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    row, block_dir = _preflight_execution_row(tmp_path)
+    contract = {
+        "snapshot": {"path": str(block_dir / "prefix.pt"), "sha256": "a" * 64},
+        "runtime_contract": {},
+    }
+    order = []
+    monkeypatch.setattr(
+        "utest.subject_reappearance_harness._validated_prefix_contract",
+        lambda _row: order.append("prefix") or contract,
+    )
+    monkeypatch.setattr(
+        "utest.subject_reappearance_harness._validate_donor_target_compatibility",
+        lambda _row: order.append("donor"),
+    )
+    monkeypatch.setattr(
+        "utest.subject_reappearance_harness._freeze_or_load_command_artifact",
+        lambda _row, _contract: {"preflight": {arm: [arm, "--", "inference"] for arm in PREFLIGHT_ARMS}},
+    )
+    monkeypatch.setattr(
+        "utest.subject_reappearance_harness._build_target_preflight_context",
+        lambda _row, _contract, _commands, *, arms: order.append("context")
+        or {"arms": tuple(arms)},
+    )
+    runner_calls = []
+    monkeypatch.setattr(
+        "utest.subject_reappearance_harness.run_target_preflight",
+        lambda context: runner_calls.append(context)
+        or {
+            "execution_mode": "single_process_target_only",
+            "engine_initialization_count": 1,
+            "target_chunk_idx": 6,
+            "target_plus_one_generated": False,
+            "arm_order": list(PREFLIGHT_ARMS),
+        },
+    )
+    monkeypatch.setattr(
+        "utest.subject_reappearance_harness.validate_block",
+        lambda _block, **_kwargs: order.append("validate") or {"status": "passed"},
+    )
+
+    _execute_stage({"blocks": [row]}, "target-preflight")
+
+    assert order == ["prefix", "donor", "context", "validate"]
+    assert runner_calls == [{"arms": PREFLIGHT_ARMS}]
+    report = json.loads(
+        (block_dir / "preflight" / "validation.json").read_text(encoding="utf-8")
+    )
+    assert report["status"] == "passed"
+    assert report["execution_mode"] == "single_process_target_only"
+
+
+def test_target_preflight_rejects_more_than_one_selected_block(tmp_path: Path) -> None:
+    first, _ = _preflight_execution_row(tmp_path / "first")
+    second, _ = _preflight_execution_row(tmp_path / "second")
+    second["event_id"] = "other"
+
+    with pytest.raises(ValueError, match="exactly one"):
+        _execute_stage({"blocks": [first, second]}, "target-preflight")
+
+
 def _rewrite_execution_donor(
     row: dict,
     *,

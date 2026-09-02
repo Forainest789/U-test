@@ -13,6 +13,13 @@ from typing import Callable, Mapping, Sequence
 TARGET_ARMS = ("full_correct", "no_memory", "zero_path", "wrong_subject")
 
 
+def _validated_arms(arms: Sequence[str]) -> tuple[str, ...]:
+    requested = tuple(str(arm) for arm in arms)
+    if not requested or requested != tuple(arm for arm in TARGET_ARMS if arm in requested):
+        raise ValueError(f"target arms must follow {TARGET_ARMS}")
+    return requested
+
+
 def build_target_arm_bundles(
     infer_slotmem,
     engine,
@@ -31,6 +38,7 @@ def build_target_arm_bundles(
     donor_entry: Mapping | None = None,
     donor_artifact: Mapping | None = None,
     donor_provenance: Mapping | None = None,
+    arms: Sequence[str] = TARGET_ARMS,
 ) -> dict[str, dict]:
     """Reload one frozen prefix and materialize the exact target payload per arm."""
     import torch
@@ -54,8 +62,9 @@ def build_target_arm_bundles(
         percents = engine._single_online_memory_bank_percents()
         bank_indices = [0]
 
+    requested = _validated_arms(arms)
     result = {}
-    for arm in TARGET_ARMS:
+    for arm in requested:
         manager = infer_slotmem.RoleWiseSlotMemoryBank()
         manager.memory_bank = state.get("memory_bank", {}) or {}
         manager.memory_meta_bank = state.get("memory_meta_bank", {}) or {}
@@ -210,11 +219,10 @@ def run_target_arm_loop(
     after_arm: Callable[[str, Mapping], None] | None = None,
 ) -> dict[str, dict]:
     """Generate exactly one target video for each frozen arm, sequentially."""
-    if tuple(bundles) != TARGET_ARMS:
-        raise ValueError(f"target arms must be exactly {TARGET_ARMS}")
+    requested = _validated_arms(tuple(bundles))
     output_root = Path(output_root)
     records = {}
-    for arm in TARGET_ARMS:
+    for arm in requested:
         _reset_engine_diagnostics(engine)
         kwargs = {
             "memory_tokens": None,
@@ -285,9 +293,55 @@ def run_target_preflight(
     runtime_args = infer_slotmem.parse_args(argv)
     if bool(getattr(runtime_args, "offload_models", True)):
         raise ValueError("target-preflight requires offload_models=false")
+    output_root = Path(context["output_root"])
+    target_idx = int(context["event"]["target_chunk_idx"])
+    if "reference_frames" in context:
+        reference_frames = context["reference_frames"]
+        random_reference = context["fixed_reference"]
+        reference_conditioning = context["reference_conditioning"]
+    else:
+        from PIL import Image
+        from .reference_scope import (
+            build_reference_conditioning_audit,
+            choose_random_reference,
+            validate_reference_resume,
+        )
+
+        story = context["story"]
+        reference_path = infer_slotmem.resolve_reference_image_path(
+            runtime_args.ref_image_path, runtime_args.json_path, story
+        )
+        initial_fixed_reference = (
+            Image.open(reference_path).convert("RGB") if reference_path else None
+        )
+        reference_frames = infer_slotmem._decode_pil_frames_from_state(
+            context["state"].get("prev_frames_png", [])
+        )
+        validate_reference_resume(
+            runtime_args.fixed_reference_scope,
+            start_chunk_idx=target_idx,
+            has_fixed_reference=initial_fixed_reference is not None,
+            restored_previous_frames=bool(reference_frames),
+            resume_next_chunk_idx=context["state"].get("next_chunk_idx"),
+        )
+        if target_idx == 0 and not reference_frames and initial_fixed_reference is not None:
+            reference_frames = [initial_fixed_reference]
+        random_reference = choose_random_reference(
+            runtime_args.fixed_reference_scope,
+            target_idx,
+            initial_fixed_reference,
+            reference_frames,
+        )
+        reference_conditioning = build_reference_conditioning_audit(
+            scope=runtime_args.fixed_reference_scope,
+            chunk_idx=target_idx,
+            fixed_reference=initial_fixed_reference,
+            previous_frames=reference_frames,
+            random_reference=random_reference,
+        )
     factory = engine_factory or infer_slotmem.SlotMemInferenceEngine
     engine = factory(runtime_args)
-    output_root = Path(context["output_root"])
+    requested = _validated_arms(context.get("arms", TARGET_ARMS))
     bundles = build_target_arm_bundles(
         infer_slotmem,
         engine,
@@ -305,9 +359,8 @@ def run_target_preflight(
         donor_entry=context.get("donor_entry"),
         donor_artifact=context.get("donor_artifact"),
         donor_provenance=context.get("donor_provenance"),
+        arms=requested,
     )
-
-    target_idx = int(context["event"]["target_chunk_idx"])
 
     def finish_arm(arm: str, record: Mapping) -> None:
         arm_dir = output_root / "arms" / arm
@@ -315,7 +368,8 @@ def run_target_preflight(
             arm_dir / f"chunk_{target_idx:03d}.metadata.json",
             {
                 "chunk_idx": target_idx,
-                "reference_conditioning": dict(context["reference_conditioning"]),
+                "execution_mode": "single_process_target_only",
+                "reference_conditioning": dict(reference_conditioning),
             },
         )
         _write_json_exclusive(
@@ -329,8 +383,8 @@ def run_target_preflight(
         bundles,
         prompt=str(context["target_chunk"].get("content") or context["target_chunk"].get("caption") or ""),
         seed=int(context["target_seed"]),
-        reference_frames=context["reference_frames"],
-        fixed_reference=context["fixed_reference"],
+        reference_frames=reference_frames,
+        fixed_reference=random_reference,
         output_root=output_root,
         target_chunk_idx=target_idx,
         save_video_fn=save_video_fn,
@@ -341,7 +395,7 @@ def run_target_preflight(
         "engine_initialization_count": 1,
         "target_chunk_idx": target_idx,
         "target_plus_one_generated": False,
-        "arm_order": list(TARGET_ARMS),
+        "arm_order": list(requested),
         "snapshot_sha256": snapshot_sha256,
         "arms": records,
     }
