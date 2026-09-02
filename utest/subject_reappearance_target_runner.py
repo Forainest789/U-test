@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import time
 from collections import defaultdict
+import hashlib
+import json
 from pathlib import Path
 from typing import Callable, Mapping, Sequence
 
@@ -174,6 +176,26 @@ def _reset_engine_diagnostics(engine) -> None:
     engine._last_jigsaw_stage2_writer_stats = {}
 
 
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with Path(path).open("rb") as handle:
+        for block in iter(lambda: handle.read(1 << 20), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def _verify_snapshot(path: Path, expected_sha256: str) -> None:
+    if _sha256_file(path) != expected_sha256:
+        raise ValueError("snapshot_sha256_mismatch")
+
+
+def _write_json_exclusive(path: Path, payload: Mapping) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("x", encoding="utf-8") as handle:
+        json.dump(payload, handle, ensure_ascii=False, indent=2, sort_keys=True)
+        handle.write("\n")
+
+
 def run_target_arm_loop(
     engine,
     bundles: Mapping[str, Mapping],
@@ -185,6 +207,7 @@ def run_target_arm_loop(
     output_root: Path,
     target_chunk_idx: int,
     save_video_fn: Callable,
+    after_arm: Callable[[str, Mapping], None] | None = None,
 ) -> dict[str, dict]:
     """Generate exactly one target video for each frozen arm, sequentially."""
     if tuple(bundles) != TARGET_ARMS:
@@ -232,4 +255,93 @@ def run_target_arm_loop(
                 getattr(engine, "_last_jigsaw_stage2_writer_stats", {})
             ),
         }
+        if video.is_file():
+            records[arm]["video_sha256"] = _sha256_file(video)
+        if after_arm is not None:
+            after_arm(arm, records[arm])
     return records
+
+
+def run_target_preflight(
+    context: Mapping,
+    *,
+    engine_factory: Callable | None = None,
+    save_video_fn: Callable | None = None,
+    snapshot_verifier: Callable[[Path, str], None] = _verify_snapshot,
+) -> dict:
+    """Load SlotMem once and generate exactly the four frozen target arms."""
+    from .event_harness import _set_option
+
+    infer_slotmem = context["infer_slotmem"]
+    if save_video_fn is None:
+        from diffsynth.utils.data import save_video as save_video_fn
+
+    snapshot = Path(context["snapshot_path"])
+    snapshot_sha256 = str(context["snapshot_sha256"])
+    snapshot_verifier(snapshot, snapshot_sha256)
+    argv = _set_option(context["inference_argv"], "--offload_models", None)
+    argv = _set_option(argv, "--no-offload_models", None)
+    argv.append("--no-offload_models")
+    runtime_args = infer_slotmem.parse_args(argv)
+    if bool(getattr(runtime_args, "offload_models", True)):
+        raise ValueError("target-preflight requires offload_models=false")
+    factory = engine_factory or infer_slotmem.SlotMemInferenceEngine
+    engine = factory(runtime_args)
+    output_root = Path(context["output_root"])
+    bundles = build_target_arm_bundles(
+        infer_slotmem,
+        engine,
+        state=context["state"],
+        target_chunk=context["target_chunk"],
+        event=context["event"],
+        seed=int(context["target_seed"]),
+        mask_manifest=context["mask_manifest"],
+        runtime_contract=context["runtime_contract"],
+        event_file_sha256=str(context["event_file_sha256"]),
+        manifest_file_sha256=str(context["manifest_file_sha256"]),
+        report_root=output_root,
+        audit_installer=context.get("audit_installer"),
+        donor_path=context.get("donor_path"),
+        donor_entry=context.get("donor_entry"),
+        donor_artifact=context.get("donor_artifact"),
+        donor_provenance=context.get("donor_provenance"),
+    )
+
+    target_idx = int(context["event"]["target_chunk_idx"])
+
+    def finish_arm(arm: str, record: Mapping) -> None:
+        arm_dir = output_root / "arms" / arm
+        _write_json_exclusive(
+            arm_dir / f"chunk_{target_idx:03d}.metadata.json",
+            {
+                "chunk_idx": target_idx,
+                "reference_conditioning": dict(context["reference_conditioning"]),
+            },
+        )
+        _write_json_exclusive(
+            arm_dir / "efficiency.json",
+            {"chunks": [{**dict(record), "chunk_idx": target_idx}]},
+        )
+        snapshot_verifier(snapshot, snapshot_sha256)
+
+    records = run_target_arm_loop(
+        engine,
+        bundles,
+        prompt=str(context["target_chunk"].get("content") or context["target_chunk"].get("caption") or ""),
+        seed=int(context["target_seed"]),
+        reference_frames=context["reference_frames"],
+        fixed_reference=context["fixed_reference"],
+        output_root=output_root,
+        target_chunk_idx=target_idx,
+        save_video_fn=save_video_fn,
+        after_arm=finish_arm,
+    )
+    return {
+        "execution_mode": "single_process_target_only",
+        "engine_initialization_count": 1,
+        "target_chunk_idx": target_idx,
+        "target_plus_one_generated": False,
+        "arm_order": list(TARGET_ARMS),
+        "snapshot_sha256": snapshot_sha256,
+        "arms": records,
+    }
