@@ -1445,8 +1445,8 @@ def _build_target_preflight_context(
     import infer_slotmem
     from .input_contract import select_donor_entry
 
-    if tuple(commands) != PREFLIGHT_ARMS:
-        raise ValueError("target-preflight command artifact arm order is invalid")
+    if set(commands) != set(PREFLIGHT_ARMS):
+        raise ValueError("target-preflight command artifact arms are invalid")
     command = list(commands["full_correct"])
     if "--" not in command:
         raise ValueError("target-preflight command is missing the inference argv separator")

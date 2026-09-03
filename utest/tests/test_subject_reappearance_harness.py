@@ -5,6 +5,7 @@ from pathlib import Path
 import json
 import hashlib
 import sys
+from types import SimpleNamespace
 import pytest
 import torch
 
@@ -21,6 +22,7 @@ from utest.subject_reappearance_harness import (
     _execute_stage,
     _expected_rows,
     _command_artifact_payload,
+    _build_target_preflight_context,
     _validate_qstar_report,
     main,
     validate_block,
@@ -1763,6 +1765,55 @@ def test_target_preflight_validates_then_delegates_once(
     )
     assert report["status"] == "passed"
     assert report["execution_mode"] == "single_process_target_only"
+
+
+def test_target_preflight_accepts_json_sorted_command_keys(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    story = tmp_path / "story.json"
+    story.write_text(
+        json.dumps({"chunks": [{"content": "target", "character_list": ["Target"]}]}),
+        encoding="utf-8",
+    )
+    event = {
+        "event_id": "event",
+        "character_name": "Target",
+        "target_chunk_idx": 0,
+        "source_json_path": str(story),
+    }
+    event_path = tmp_path / "event.json"
+    event_path.write_text(json.dumps(event), encoding="utf-8")
+    mask_path = tmp_path / "mask.json"
+    mask_path.write_text("{}", encoding="utf-8")
+    snapshot = tmp_path / "prefix.pt"
+    snapshot.write_bytes(b"prefix")
+    commands = {
+        arm: ["python", "--", "--json_path", str(story)]
+        for arm in sorted(PREFLIGHT_ARMS)
+    }
+    monkeypatch.setitem(sys.modules, "infer_slotmem", SimpleNamespace())
+    monkeypatch.setattr(torch, "load", lambda *_args, **_kwargs: {})
+    monkeypatch.setattr(
+        "utest.subject_reappearance_harness.validate_subject_subspace_manifest",
+        lambda *_args, **_kwargs: {},
+    )
+
+    context = _build_target_preflight_context(
+        {
+            "block_dir": str(tmp_path),
+            "event_json": str(event_path),
+            "subject_subspace_manifest": str(mask_path),
+            "target_seed": 0,
+        },
+        {
+            "snapshot": {"path": str(snapshot), "sha256": "a" * 64},
+            "runtime_contract": {},
+        },
+        commands,
+        arms=PREFLIGHT_ARMS,
+    )
+
+    assert context["arms"] == PREFLIGHT_ARMS
 
 
 def test_target_preflight_rejects_more_than_one_selected_block(tmp_path: Path) -> None:
